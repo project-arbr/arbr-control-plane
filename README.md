@@ -1,5 +1,9 @@
 # Arbr Control Plane
 
+[![npm](https://img.shields.io/npm/v/arbr-client?label=arbr-client&color=698200)](https://www.npmjs.com/package/arbr-client)
+[![License: MIT](https://img.shields.io/badge/license-MIT-698200)](LICENSE)
+[![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-262626)](package.json)
+
 > See it, recommend it, then route it — cost & usage visibility, optimisation
 > recommendations, and controlled model routing on **explicit human approval**.
 
@@ -26,7 +30,7 @@ work out of the box. Adding a provider key unlocks live gateway calls.
 ### Option A — Docker (one command)
 
 ```sh
-git clone <repo> && cd control-plane
+git clone https://github.com/shubham-gyde/arbr-ai-control-plane.git && cd arbr-ai-control-plane
 cp .env.example .env          # ready to run; no keys needed for the demo
 docker compose up             # Mongo + seeded app, dashboard at http://localhost:4100
 ```
@@ -66,10 +70,16 @@ Two ways, and you can mix them:
 Point any application at one of two endpoints instead of a provider SDK directly.
 Make sure at least one provider is live (dashboard or `.env`).
 
-**Official client packages** (both named `arbr-client`, zero-dependency, with
-retries/timeouts/typed errors and LangChain adapters):
-[`clients/js`](clients/js) for Node ≥ 18, and [`clients/python`](clients/python) for
-Python ≥ 3.11. See each README for the full API.
+**Official client packages** — zero-dependency, with retries/timeouts/typed errors and LangChain adapters:
+
+```sh
+npm install arbr-client        # JavaScript / Node ≥ 18
+pip install arbr-client        # Python ≥ 3.11
+```
+
+[![npm](https://img.shields.io/npm/v/arbr-client?label=npm&color=698200)](https://www.npmjs.com/package/arbr-client)
+
+Full API reference: [`clients/js`](clients/js) · [`clients/python`](clients/python)
 
 ### Arbr native endpoint (`POST /v1/chat`)
 
