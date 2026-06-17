@@ -68,6 +68,7 @@ export default defineConfig({
           { text: 'API reference', link: '/api-reference' },
           { text: 'Configuration', link: '/configuration' },
           { text: 'Deployment', link: '/deployment' },
+          { text: 'Deploy on GCP', link: '/deployment-gcp' },
         ]
       },
     ],
