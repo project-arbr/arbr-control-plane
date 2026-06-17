@@ -1,0 +1,300 @@
+// The path of a single request: ingress → match → invoke → return, with logging /
+// cost / classification done after the response is on its way.
+//
+// Routing precedence (the developer's explicit choice is honored):
+//   1. Explicit available model → use it as-is, skip ALL policies (rules + auto)
+//   2. Otherwise (model "auto", absent, or the requested provider isn't connected)
+//      → the router decides: cache → rules → automated routing → default
+//   + fallback to another live provider on a provider error.
+const { v4: uuidv4 } = require("uuid");
+const { getRouter } = require("../providers/router");
+const { config } = require("../config");
+const pricing = require("../pricing/registry");
+const { classifyTask } = require("../classify/classifier");
+const ruleEngine = require("../routing/ruleEngine");
+const autoRouter = require("../routing/autoRouter");
+const policyEngine = require("../routing/policy");
+const aiPolicy = require("../routing/aiPolicy");
+const capEngine = require("../routing/capEngine");
+const responseCache = require("../routing/responseCache");
+const logger = require("../logging/logger");
+
+// An explicit, honorable model pin → { provider, model, knownPricing } to use
+// as-is, or null to defer to the router. Defers when the model is "auto"/absent
+// or the resolved provider is not connected (live).
+// Pass-through: an explicit provider + any non-empty model ID is accepted even
+// when the model is not in the registry — costs are logged as $0 until it's added.
+function resolveExplicit(body, eff) {
+  const rawModel = (body.model || "").trim();
+  const rawProvider = (body.provider || "").trim();
+  if (!rawModel || rawModel.toLowerCase() === "auto") return null;
+  const known = pricing.getModel(rawModel);
+  const provider = (rawProvider && rawProvider.toLowerCase() !== "auto" ? rawProvider : null)
+    || (known ? known.provider : null);
+  if (!provider || !eff.liveIds.includes(provider)) return null;
+  return { provider, model: rawModel, knownPricing: !!known };
+}
+
+// The router's base model for auto mode: honor a live provider hint if given,
+// else the configured default provider. The chosen default model (eff.defaultModel)
+// applies to the default provider; other providers use their built-in default.
+function resolveDefault(body, eff) {
+  const rawProvider = (body.provider || "").trim();
+  const hinted =
+    rawProvider && rawProvider.toLowerCase() !== "auto" && eff.liveIds.includes(rawProvider)
+      ? rawProvider
+      : null;
+  const provider = hinted || eff.defaultProvider;
+  const model =
+    provider === eff.defaultProvider
+      ? eff.defaultModel || config.defaultModels[provider]
+      : config.defaultModels[provider] || eff.defaultModel;
+  return { provider, model };
+}
+
+// Try the chosen provider; on failure, retry the remaining live providers
+// (their default model). Returns { result, usedFallback }.
+async function invokeWithFallback(router, eff, { provider, model, messages, temperature, maxTokens }) {
+  const order = [provider, ...eff.liveIds.filter((p) => p !== provider)];
+  let lastErr;
+  for (let i = 0; i < order.length; i++) {
+    const p = order[i];
+    const m = i === 0 ? model : config.defaultModels[p];
+    try {
+      const result = await router.complete({
+        messages,
+        providerOverride: p,
+        modelOverride: m,
+        temperature,
+        maxTokens,
+      });
+      return { result, usedFallback: i > 0 };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("all providers failed");
+}
+
+// Shared routing resolution: classify task + decide served {provider, model}.
+// Returns { served, routingDecision, taskType, classifiedBy, cls }.
+// Callers are responsible for budget enforcement (it may short-circuit the response).
+async function resolveRoute(body, { router, eff, application, workflow }) {
+  const routingMode = await ruleEngine.getRoutingMode();
+  const explicit = resolveExplicit(body, eff);
+  const autoMode = !explicit;
+  const providedTaskType = !!(body.taskType && String(body.taskType).trim());
+
+  const cls = await classifyTask({
+    taskType: body.taskType,
+    messages: body.messages,
+    router, eff,
+    useLLM: routingMode === "ai" && autoMode && !providedTaskType,
+  });
+  const taskType = cls.taskType;
+  const classifiedBy = cls.method;
+
+  let served, routingDecision;
+  if (explicit) {
+    served = explicit;
+    routingDecision = "explicit";
+  } else {
+    served = resolveDefault(body, eff);
+    routingDecision = "passthrough";
+    const route = await ruleEngine.findRoute({ taskType, application, workflow });
+    if (route) {
+      served = { provider: route.provider, model: route.model };
+      routingDecision = "rule";
+    } else if (routingMode === "ai") {
+      const aiMap = await aiPolicy.getEffective();
+      const hit = aiPolicy.lookup(aiMap, taskType);
+      if (hit && eff.liveIds.includes(hit.provider)) {
+        served = { provider: hit.provider, model: hit.model };
+        routingDecision = "ai";
+      }
+    } else if (routingMode === "guardrail") {
+      const policy = await policyEngine.getEffective();
+      const auto = autoRouter.selectAutoRoute({ taskType, requested: served }, policy);
+      if (auto) {
+        served = { provider: auto.provider, model: auto.model };
+        routingDecision = "auto";
+      }
+    }
+  }
+
+  return { served, routingDecision, taskType, classifiedBy, cls };
+}
+
+async function handleChat(req, res) {
+  const body = req.body || {};
+
+  // 1 · INGRESS — validate, capture metadata, stamp id + time.
+  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    return res.status(400).json({ error: "messages array is required" });
+  }
+  const { router, eff } = await getRouter();
+  if (!router) {
+    return res.status(503).json({
+      error: "demo_mode",
+      message:
+        "No provider keys configured — the live gateway is disabled. Add a key in the " +
+        "dashboard (Settings → Connections) or set OPENAI_API_KEY / ANTHROPIC_API_KEY / " +
+        "GEMINI_API_KEY in .env. Dashboards, analytics, recommendations and rules work without keys.",
+    });
+  }
+
+  const requestId = uuidv4();
+  const timestamp = new Date();
+  const meta = {
+    // A gateway API key binds attribution — it overrides what the body claims.
+    application: req.apiKey?.application || body.application || "unknown",
+    workflow: body.workflow || "unknown",
+    userId: body.userId || null,
+    department: body.department || "unknown",
+  };
+
+  // The developer's literal model intent, for the log ("auto" when deferred).
+  const rawModel = (body.model || "").trim();
+  const modelRequested = rawModel && rawModel.toLowerCase() !== "auto" ? rawModel : "auto";
+
+  // 2 · MATCH
+  const { served: servedInit, routingDecision: rdInit, taskType, classifiedBy, cls } =
+    await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow });
+  let served = servedInit;
+  let routingDecision = rdInit;
+
+  if (cls.llm) {
+    setImmediate(() =>
+      logger.write({
+        requestId: uuidv4(), timestamp: new Date(),
+        application: "arbr-internal", workflow: "auto-classifier",
+        userId: null, department: "arbr",
+        provider: cls.llm.provider, model: cls.llm.model, modelRequested: cls.llm.model,
+        taskType: "classification",
+        promptTokens: cls.llm.usage?.inputTokens || 0,
+        completionTokens: cls.llm.usage?.outputTokens || 0,
+        totalTokens: cls.llm.usage?.totalTokens || 0,
+        latencyMs: cls.llm.latencyMs || 0, status: "success",
+        routingDecision: "passthrough", cacheHit: false,
+      })
+    );
+  }
+
+  // Budget enforcement — a breached enforcing cap outranks everything, including
+  // explicit pins (that is the point of enforcement). block → 429; downgrade →
+  // force the provider's light model while the window is breached.
+  const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
+  if (enf) {
+    if (enf.action === "block") {
+      setImmediate(() =>
+        logger.write({
+          requestId, timestamp, ...meta,
+          provider: served.provider, model: served.model, modelRequested,
+          taskType, classifiedBy, latencyMs: 0, status: "blocked",
+          routingDecision: "budget", cacheHit: false,
+        })
+      );
+      return res.status(429).json({
+        error: "budget_exceeded",
+        message: `Budget exceeded: ${capEngine.describeScope(enf.cap)} is over its ${enf.cap.period === "day" ? "daily" : "monthly"} limit ($${enf.cap.limit}).`,
+      });
+    }
+    // downgrade
+    const target = pricing.suggestLightTarget(served.model);
+    if (target) {
+      served = { provider: target.provider, model: target.model };
+      routingDecision = "budget";
+    }
+  }
+
+  // Response cache, keyed by the decided served model.
+  {
+    const cached = responseCache.get(served.model, body.messages);
+    if (cached) {
+      res.json({
+        requestId,
+        model: cached.model,
+        modelRequested,
+        provider: cached.provider,
+        routingDecision: "cache",
+        classifiedBy,
+        cacheHit: true,
+        text: cached.text,
+        usage: cached.usage,
+      });
+      setImmediate(() =>
+        logger.write({
+          requestId, timestamp, ...meta,
+          provider: cached.provider, model: cached.model, modelRequested,
+          taskType, classifiedBy,
+          promptTokens: cached.usage?.inputTokens || 0,
+          completionTokens: cached.usage?.outputTokens || 0,
+          totalTokens: cached.usage?.totalTokens || 0,
+          latencyMs: 0, status: "success",
+          routingDecision: "cache", cacheHit: true,
+        })
+      );
+      return;
+    }
+  }
+
+  // 3 · INVOKE — provider call, fallback on failure.
+  let invocation;
+  try {
+    invocation = await invokeWithFallback(router, eff, {
+      provider: served.provider,
+      model: served.model,
+      messages: body.messages,
+      temperature: body.temperature,
+      maxTokens: body.maxTokens,
+    });
+  } catch (err) {
+    setImmediate(() =>
+      logger.write({
+        requestId, timestamp, ...meta,
+        provider: served.provider, model: served.model, modelRequested,
+        taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision,
+      })
+    );
+    return res.status(502).json({ error: "provider_error", message: String(err.message || err) });
+  }
+
+  const { result, usedFallback } = invocation;
+  if (usedFallback) routingDecision = "fallback";
+
+  // 4 · RETURN — response on its way back immediately.
+  res.json({
+    requestId,
+    model: result.modelId,
+    modelRequested,
+    provider: result.providerId,
+    routingDecision,
+    classifiedBy,
+    cacheHit: false,
+    text: result.text,
+    usage: result.usage,
+  });
+
+  // 5 · AFTER THE RESPONSE — cache + log (cost computed in the logger).
+  setImmediate(() => {
+    responseCache.set(served.model, body.messages, {
+      model: result.modelId,
+      provider: result.providerId,
+      text: result.text,
+      usage: result.usage,
+    });
+    logger.write({
+      requestId, timestamp, ...meta,
+      provider: result.providerId, model: result.modelId, modelRequested,
+      taskType, classifiedBy,
+      promptTokens: result.usage?.inputTokens || 0,
+      completionTokens: result.usage?.outputTokens || 0,
+      totalTokens: result.usage?.totalTokens || 0,
+      latencyMs: result.latencyMs, status: "success",
+      routingDecision, cacheHit: false,
+      knownPricing: served.knownPricing,
+    });
+  });
+}
+
+module.exports = { handleChat, resolveRoute, invokeWithFallback };

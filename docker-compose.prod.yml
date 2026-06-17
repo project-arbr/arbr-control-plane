@@ -1,0 +1,18 @@
+# Production overrides — use alongside the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Changes from the base:
+#   - Port bound to loopback (127.0.0.1) so 4100 is only reachable from a
+#     same-host reverse proxy (nginx/Caddy). Never directly internet-reachable.
+#   - SEED_ON_BOOT forced to false (seeding WIPES request records).
+#
+# Required env vars in your .env before running this:
+#   ARBR_ADMIN_KEY=<random 32-byte hex>    — locks the dashboard/admin API
+#   ARBR_ENCRYPTION_KEY=<random 32-byte hex> — encrypts stored provider keys
+services:
+  app:
+    ports:
+      - "127.0.0.1:4100:4100"
+    environment:
+      SEED_ON_BOOT: "false"

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arbr-client"
+version = "0.1.0"
+description = "Official Python client for the Arbr AI control-plane gateway — one function to route, observe, and govern every LLM call."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gyde" }]
+keywords = [
+  "llm", "ai", "gateway", "routing", "control-plane",
+  "openai", "anthropic", "gemini", "bedrock", "cost",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+# Zero runtime dependencies — stdlib only (urllib + asyncio).
+dependencies = []
+
+[project.optional-dependencies]
+# Optional LangChain integration (arbr_client.langchain.ArbrChatModel).
+langchain = ["langchain-core>=0.2"]
+dev = ["pytest>=8.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

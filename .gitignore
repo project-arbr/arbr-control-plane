@@ -1,0 +1,13 @@
+node_modules/
+.env
+.DS_Store
+dist/
+*.log
+web/dist/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+clients/python/dist/
+clients/python/src/*.egg-info/
+clients/python/**/__pycache__/
+clients/python/**/*.pyc
+clients/js/*.tgz

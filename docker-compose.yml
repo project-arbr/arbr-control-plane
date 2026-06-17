@@ -1,0 +1,59 @@
+# One command to a populated, clickable dashboard:
+#
+#   cp .env.example .env && docker compose up
+#
+# Brings up MongoDB + the control plane (dashboard + API + gateway on one port).
+# This file is the DEMO/EVAL profile: it seeds synthetic data on boot. For a
+# production deployment (no seeding, admin auth, reverse proxy) see DEPLOYMENT.md.
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - arbr_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Not published to the host by default; the app talks to it over the compose network.
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: 4100
+      MONGO_URI: mongodb://mongo:27017/arbr-control-plane
+      # Demo profile: seed synthetic data on boot (WIPES request records — never in prod).
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
+      # Admin auth for the dashboard/admin API. Unset = open (local demo only).
+      ARBR_ADMIN_KEY: ${ARBR_ADMIN_KEY:-}
+      # Encrypts dashboard-stored provider keys at rest. REQUIRED for production.
+      ARBR_ENCRYPTION_KEY: ${ARBR_ENCRYPTION_KEY:-}
+      # Provider keys (optional) — pass through from your .env if set.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Redirect the OpenAI-compatible provider at a proxy/LiteLLM endpoint (e.g. Gyde LiteLLM).
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      DEFAULT_PROVIDER: ${DEFAULT_PROVIDER:-}
+      # CORS is moot in single-port mode (same origin), but harmless.
+      CORS_ORIGIN: http://localhost:4100
+    ports:
+      # Behind a same-host reverse proxy (nginx), bind to loopback instead:
+      #   - "127.0.0.1:4100:4100"
+      - "4100:4100"
+
+volumes:
+  arbr_mongo_data:

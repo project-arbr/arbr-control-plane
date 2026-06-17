@@ -1,0 +1,41 @@
+{
+  "name": "arbr-control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arbr Control Plane — an enterprise AI control plane. A single REST gateway that logs every AI request, makes spend legible, recommends optimisations, and applies human-approved routing rules. Phase 1.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "server": "node server/src/index.js",
+    "server:dev": "node --watch server/src/index.js",
+    "web": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "seed": "node server/src/seed/seed.js",
+    "seed:models": "node server/src/seed/seedModels.js",
+    "setup": "npm install && npm --prefix web install && npm run seed:models && npm run seed",
+    "dev": "concurrently -n server,web -c blue,green \"npm run server:dev\" \"npm run web\"",
+    "smoke:router": "node server/scripts/smoke-router.js",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "^0.3.0",
+    "@langchain/aws": "^0.1.0",
+    "@langchain/core": "^0.3.0",
+    "@langchain/google-genai": "^0.1.0",
+    "@langchain/openai": "^0.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "mongoose": "^8.4.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "vitepress": "^1.6.4"
+  }
+}

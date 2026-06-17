@@ -1,0 +1,45 @@
+{
+  "name": "arbr-client",
+  "version": "0.1.0",
+  "description": "Official JS client for the Arbr AI control-plane gateway — one function to route, observe, and govern every LLM call.",
+  "license": "MIT",
+  "main": "./src/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./src/index.js",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/client.test.js",
+    "smoke": "node test/live.smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "gateway",
+    "routing",
+    "control-plane",
+    "openai",
+    "anthropic",
+    "gemini",
+    "bedrock",
+    "cost"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gyde-ai/arbr.git",
+    "directory": "clients/js"
+  }
+}
