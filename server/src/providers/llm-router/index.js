@@ -1,6 +1,6 @@
 // Vendored LLM router — a thin LangChain factory unifying providers.
 //
-// ORIGIN: copied from @gyde/llm-router (Karya/packages/llm-router/js) and made
+// ORIGIN: copied from @gyde/llm-router (Arbr/packages/llm-router/js) and made
 // standalone for the Arbr Control Plane so this service has no monorepo
 // dependency. Change from the original: added a direct "anthropic" (Claude)
 // adapter alongside gemini / bedrock-nova / openai; added generic OpenAI-compat

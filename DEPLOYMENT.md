@@ -5,7 +5,7 @@ MLflow tracking server: **one standalone instance per org (or per environment)**
 application points at, with the dashboard on the same port.
 
 ```
-                      https://karya.yourco.com (TLS at the proxy)
+                      https://arbr.yourco.com (TLS at the proxy)
                                    │
                   nginx / AWS ALB ─┤  443 → 127.0.0.1:4100
                                    │
@@ -65,9 +65,9 @@ Bind the app to loopback in `docker-compose.yml` (`127.0.0.1:4100:4100`), then:
 ```nginx
 server {
     listen 443 ssl;
-    server_name karya.yourco.com;
-    ssl_certificate     /etc/letsencrypt/live/karya.yourco.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/karya.yourco.com/privkey.pem;
+    server_name arbr.yourco.com;
+    ssl_certificate     /etc/letsencrypt/live/arbr.yourco.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/arbr.yourco.com/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:4100;
@@ -79,13 +79,13 @@ server {
 }
 ```
 
-`certbot --nginx -d karya.yourco.com` handles the cert. Only 443 (and 80 for the ACME
+`certbot --nginx -d arbr.yourco.com` handles the cert. Only 443 (and 80 for the ACME
 challenge) need to be open in the security group; 4100 stays loopback-only.
 
 ### Option B — AWS ALB (subdomain on your existing load balancer)
 
-1. DNS: `karya.yourco.com` → your ALB. Add the hostname to the ACM cert (SAN or wildcard).
-2. ALB listener 443: host-header rule `karya.yourco.com` → target group → instance:4100.
+1. DNS: `arbr.yourco.com` → your ALB. Add the hostname to the ACM cert (SAN or wildcard).
+2. ALB listener 443: host-header rule `arbr.yourco.com` → target group → instance:4100.
 3. Security groups: ALB SG allows 443 from your network; **instance SG allows 4100 from the
    ALB SG only** — 4100 is never internet-reachable directly.
 4. Optional: ALB **OIDC/Cognito authentication** on that rule gives you SSO in front of the

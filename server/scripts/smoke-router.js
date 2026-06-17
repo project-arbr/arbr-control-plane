@@ -1,5 +1,5 @@
 // Standalone smoke test for the vendored router + Anthropic adapter.
-// Proves the service has no dependency on the rest of Karya/.
+// Proves the service has no dependency on the rest of Arbr/.
 //
 //   ANTHROPIC_API_KEY=sk-ant-... node server/scripts/smoke-router.js
 //
