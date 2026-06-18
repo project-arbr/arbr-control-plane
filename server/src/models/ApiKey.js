@@ -13,6 +13,10 @@ const apiKeySchema = new mongoose.Schema(
     enabled: { type: Boolean, default: true },
     // Requests per minute (null = unlimited). Enforced in-memory at the gateway.
     rpm: { type: Number, default: null },
+    // Per-app model restrictions. [] = unrestricted (inherit global routing).
+    allowedModels: { type: [String], default: [] },
+    // Override the global default model when this key sends model:"auto". null = use global.
+    defaultModel: { type: String, default: null },
     createdAt: { type: Date, default: Date.now },
     lastUsedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },

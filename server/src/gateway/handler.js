@@ -79,7 +79,7 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
 // Shared routing resolution: classify task + decide served {provider, model}.
 // Returns { served, routingDecision, taskType, classifiedBy, cls }.
 // Callers are responsible for budget enforcement (it may short-circuit the response).
-async function resolveRoute(body, { router, eff, application, workflow }) {
+async function resolveRoute(body, { router, eff, application, workflow, appConfig = {} }) {
   const routingMode = await ruleEngine.getRoutingMode();
   const explicit = resolveExplicit(body, eff);
   const autoMode = !explicit;
@@ -101,6 +101,13 @@ async function resolveRoute(body, { router, eff, application, workflow }) {
   } else {
     served = resolveDefault(body, eff);
     routingDecision = "passthrough";
+    // Per-app default: override the global default model when the key specifies one.
+    if (appConfig.defaultModel) {
+      const known = pricing.getModel(appConfig.defaultModel);
+      if (known && eff.liveIds.includes(known.provider)) {
+        served = { provider: known.provider, model: appConfig.defaultModel, knownPricing: true };
+      }
+    }
     const route = await ruleEngine.findRoute({ taskType, application, workflow });
     if (route) {
       served = { provider: route.provider, model: route.model };
@@ -119,6 +126,21 @@ async function resolveRoute(body, { router, eff, application, workflow }) {
         served = { provider: auto.provider, model: auto.model };
         routingDecision = "auto";
       }
+    }
+  }
+
+  // Per-app allowed-model enforcement: if the key restricts which models it can reach
+  // and routing landed outside that set, fall back to the key's default or reject.
+  if (appConfig.allowedModels?.length > 0 && !appConfig.allowedModels.includes(served.model)) {
+    const fallbackKnown = appConfig.defaultModel ? pricing.getModel(appConfig.defaultModel) : null;
+    if (fallbackKnown && eff.liveIds.includes(fallbackKnown.provider)) {
+      served = { provider: fallbackKnown.provider, model: appConfig.defaultModel, knownPricing: true };
+      routingDecision = "passthrough";
+    } else {
+      throw Object.assign(
+        new Error(`Model "${served.model}" is not in the allowed set for this API key.`),
+        { code: "model_not_allowed", status: 403 }
+      );
     }
   }
 
@@ -158,10 +180,20 @@ async function handleChat(req, res) {
   const modelRequested = rawModel && rawModel.toLowerCase() !== "auto" ? rawModel : "auto";
 
   // 2 · MATCH
-  const { served: servedInit, routingDecision: rdInit, taskType, classifiedBy, cls } =
-    await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow });
-  let served = servedInit;
-  let routingDecision = rdInit;
+  const appConfig = {
+    allowedModels: req.apiKey?.allowedModels || [],
+    defaultModel: req.apiKey?.defaultModel || null,
+  };
+  let served, routingDecision, taskType, classifiedBy, cls;
+  try {
+    ({ served, routingDecision, taskType, classifiedBy, cls } =
+      await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, appConfig }));
+  } catch (err) {
+    if (err.code === "model_not_allowed") {
+      return res.status(403).json({ error: err.message, code: "model_not_allowed" });
+    }
+    throw err;
+  }
 
   if (cls.llm) {
     setImmediate(() =>

@@ -191,10 +191,20 @@ async function handleOpenAICompat(req, res) {
   const normalized = { ...body, maxTokens: body.max_tokens };
   const modelRequested = (body.model || "auto").trim();
 
-  const { served: servedInit, routingDecision: rdInit, taskType, classifiedBy } =
-    await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow });
-  let served = servedInit;
-  let routingDecision = rdInit;
+  const appConfig = {
+    allowedModels: req.apiKey?.allowedModels || [],
+    defaultModel: req.apiKey?.defaultModel || null,
+  };
+  let served, routingDecision, taskType, classifiedBy;
+  try {
+    ({ served, routingDecision, taskType, classifiedBy } =
+      await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, appConfig }));
+  } catch (err) {
+    if (err.code === "model_not_allowed") {
+      return res.status(403).json({ error: { message: err.message, type: "invalid_request_error", code: "model_not_allowed" } });
+    }
+    throw err;
+  }
 
   // Budget enforcement.
   const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
@@ -212,6 +222,29 @@ async function handleOpenAICompat(req, res) {
   // body so tools/tool_calls/vision/response_format/streaming survive intact. Native providers
   // (anthropic/gemini/bedrock) fall through to the LangChain path below.
   const compatBaseURL = openAICompatBaseURL(served.provider);
+
+  // Detect tools / vision before falling through to the LangChain path, which strips both.
+  // Surface a clear 501 instead of silently degrading the response.
+  if (!compatBaseURL) {
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+    const hasVision = body.messages.some(
+      (m) => Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
+    );
+    if (hasTools || hasVision) {
+      const features = [hasTools && "tools", hasVision && "vision"].filter(Boolean).join(" and ");
+      return res.status(501).json({
+        error: {
+          message:
+            `Provider "${served.provider}" does not support ${features} on /v1/chat/completions. ` +
+            `Route to an OpenAI-compatible provider (openai, deepseek, moonshot, xai, groq), or ` +
+            `front Bedrock/Gemini with a LiteLLM proxy and configure it as the "openai" provider.`,
+          type: "not_implemented_error",
+          code: "capability_not_supported",
+        },
+      });
+    }
+  }
+
   if (compatBaseURL) {
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,

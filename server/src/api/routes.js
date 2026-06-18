@@ -121,6 +121,7 @@ function keyView(d) {
   return {
     _id: d._id, name: d.name, application: d.application, prefix: d.prefix,
     enabled: d.enabled, rpm: d.rpm, createdAt: d.createdAt, lastUsedAt: d.lastUsedAt,
+    allowedModels: d.allowedModels || [], defaultModel: d.defaultModel || null,
   };
 }
 
@@ -133,7 +134,7 @@ router.get("/keys", async (_req, res, next) => {
 
 router.post("/keys", async (req, res, next) => {
   try {
-    const { name, application, rpm } = req.body || {};
+    const { name, application, rpm, allowedModels, defaultModel } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: "name is required" });
     if (!application || !String(application).trim()) return res.status(400).json({ error: "application is required" });
     const secret = "ab_" + crypto.randomBytes(16).toString("hex");
@@ -143,6 +144,8 @@ router.post("/keys", async (req, res, next) => {
       keyHash: auth.hashKey(secret),
       prefix: `ab_…${secret.slice(-4)}`,
       rpm: Number(rpm) > 0 ? Number(rpm) : null,
+      allowedModels: Array.isArray(allowedModels) ? allowedModels.filter(Boolean) : [],
+      defaultModel: defaultModel ? String(defaultModel).trim() || null : null,
     });
     auth.invalidate();
     // The ONLY time the full secret is ever returned.
@@ -155,6 +158,8 @@ router.patch("/keys/:id", async (req, res, next) => {
     const update = {};
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
     if (req.body.rpm === null || Number(req.body.rpm) > 0) update.rpm = req.body.rpm === null ? null : Number(req.body.rpm);
+    if (Array.isArray(req.body.allowedModels)) update.allowedModels = req.body.allowedModels.filter(Boolean);
+    if ("defaultModel" in req.body) update.defaultModel = req.body.defaultModel ? String(req.body.defaultModel).trim() || null : null;
     const doc = await ApiKey.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
     auth.invalidate();
     res.json(doc ? keyView(doc) : { error: "not found" });

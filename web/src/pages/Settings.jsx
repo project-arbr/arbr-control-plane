@@ -320,6 +320,8 @@ function ApiKeys({ onChange }) {
   const [name, setName] = useState("");
   const [application, setApplication] = useState("");
   const [rpm, setRpm] = useState("");
+  const [defaultModel, setDefaultModel] = useState("");
+  const [allowedModels, setAllowedModels] = useState("");
   const [created, setCreated] = useState(null); // { key, name } — shown once
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -336,9 +338,16 @@ function ApiKeys({ onChange }) {
     if (!name.trim() || !application.trim()) return setErr("Name and application are required.");
     setBusy(true);
     try {
-      const res = await api.createKey({ name: name.trim(), application: application.trim(), rpm: rpm ? Number(rpm) : null });
+      const parsedAllowed = allowedModels.split(",").map((s) => s.trim()).filter(Boolean);
+      const res = await api.createKey({
+        name: name.trim(),
+        application: application.trim(),
+        rpm: rpm ? Number(rpm) : null,
+        defaultModel: defaultModel.trim() || null,
+        allowedModels: parsedAllowed,
+      });
       setCreated({ key: res.key, name: res.name, application: res.application });
-      setName(""); setApplication(""); setRpm("");
+      setName(""); setApplication(""); setRpm(""); setDefaultModel(""); setAllowedModels("");
       await load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
@@ -421,6 +430,14 @@ function ApiKeys({ onChange }) {
           <div className="label mb-1">Rate limit (req/min, optional)</div>
           <input className="input w-40" type="number" min="1" placeholder="unlimited" value={rpm} onChange={(e) => setRpm(e.target.value)} />
         </div>
+        <div>
+          <div className="label mb-1">Default model (optional)</div>
+          <input className="input w-48" placeholder="global default" value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} />
+        </div>
+        <div>
+          <div className="label mb-1">Allowed models (optional, comma-separated)</div>
+          <input className="input w-72" placeholder="leave blank = unrestricted" value={allowedModels} onChange={(e) => setAllowedModels(e.target.value)} />
+        </div>
         <button className="btn-secondary" disabled={busy} onClick={create}>Create key</button>
         {err && <div className="w-full text-xs text-red-600">{err}</div>}
       </div>
@@ -435,6 +452,7 @@ function ApiKeys({ onChange }) {
               <th className="py-1 font-medium">Name</th>
               <th className="py-1 font-medium">Application</th>
               <th className="py-1 font-medium">Rate limit</th>
+              <th className="py-1 font-medium">Models</th>
               <th className="py-1 font-medium">Last used</th>
               <th className="py-1 font-medium">On</th>
               <th className="py-1" />
@@ -447,6 +465,12 @@ function ApiKeys({ onChange }) {
                 <td className="py-2 text-gyde-charcoal">{k.name}</td>
                 <td className="py-2"><Badge tone="charcoal">{k.application}</Badge></td>
                 <td className="py-2 text-gray-600">{k.rpm ? `${k.rpm}/min` : "—"}</td>
+                <td className="py-2 text-xs text-gray-500 max-w-[160px]">
+                  {k.defaultModel && <div className="truncate" title={k.defaultModel}>↳ {k.defaultModel}</div>}
+                  {k.allowedModels?.length > 0
+                    ? <div className="truncate" title={k.allowedModels.join(", ")}>{k.allowedModels.length} allowed</div>
+                    : <div className="text-gray-300">unrestricted</div>}
+                </td>
                 <td className="py-2 text-gray-500">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "never"}</td>
                 <td className="py-2"><Toggle checked={k.enabled} onChange={() => toggleKey(k)} label="enable key" /></td>
                 <td className="py-2 text-right"><button className="btn-ghost" onClick={() => revoke(k._id)}>Revoke</button></td>
