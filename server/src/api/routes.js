@@ -22,6 +22,8 @@ const { createRouter } = require("../providers/llm-router");
 const { toRouterConfig, getRouter } = require("../providers/router");
 const pricing = require("../pricing/registry");
 const ModelEntry = require("../models/ModelEntry");
+const CustomProvider = require("../models/CustomProvider");
+const secrets = require("../security/secrets");
 const { config } = require("../config");
 
 const router = express.Router();
@@ -235,6 +237,95 @@ router.post("/connections/:provider/test", async (req, res) => {
     // Generous budget so "thinking" models (e.g. Gemini 2.5) have room to answer.
     const out = await r.complete({ messages: [{ role: "user", content: "Reply with: ok" }], maxTokens: 256 });
     res.json({ ok: true, model: out.modelId, sample: (out.text || "").slice(0, 40) });
+  } catch (e) {
+    res.json({ ok: false, message: String(e.message || e) });
+  }
+});
+
+// ── custom providers ──
+function cpView(d) {
+  return { id: d.id, label: d.label, baseURL: d.baseURL, last4: d.last4, enabled: d.enabled, createdAt: d.createdAt };
+}
+
+router.get("/custom-providers", async (_req, res, next) => {
+  try {
+    const docs = await CustomProvider.find().sort({ createdAt: -1 }).lean();
+    res.json(docs.map(cpView));
+  } catch (e) { next(e); }
+});
+
+router.post("/custom-providers", async (req, res, next) => {
+  try {
+    const { id, label, baseURL, apiKey } = req.body || {};
+    if (!id || !String(id).trim()) return res.status(400).json({ error: "id is required" });
+    if (!label || !String(label).trim()) return res.status(400).json({ error: "label is required" });
+    if (!baseURL || !String(baseURL).trim()) return res.status(400).json({ error: "baseURL is required" });
+    if (!apiKey || !String(apiKey).trim()) return res.status(400).json({ error: "apiKey is required" });
+    const cleanKey = String(apiKey).trim();
+    const enc = secrets.encrypt(cleanKey);
+    const doc = await CustomProvider.create({
+      id: String(id).trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-"),
+      label: String(label).trim(),
+      baseURL: String(baseURL).trim().replace(/\/+$/, ""),
+      ...enc,
+      last4: cleanKey.slice(-4),
+      enabled: true,
+    });
+    connections.invalidate();
+    res.status(201).json(cpView(doc.toObject()));
+  } catch (e) {
+    if (e.code === 11000) return res.status(409).json({ error: "provider_exists", message: `Custom provider "${req.body?.id}" already exists` });
+    next(e);
+  }
+});
+
+router.patch("/custom-providers/:id", async (req, res, next) => {
+  try {
+    const doc = await CustomProvider.findOne({ id: req.params.id });
+    if (!doc) return res.status(404).json({ error: "not_found" });
+    const update = {};
+    if (req.body.label) update.label = String(req.body.label).trim();
+    if (req.body.baseURL) update.baseURL = String(req.body.baseURL).trim().replace(/\/+$/, "");
+    if (req.body.apiKey && String(req.body.apiKey).trim()) {
+      const cleanKey = String(req.body.apiKey).trim();
+      Object.assign(update, secrets.encrypt(cleanKey));
+      update.last4 = cleanKey.slice(-4);
+    }
+    if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
+    await CustomProvider.updateOne({ id: req.params.id }, { $set: update });
+    connections.invalidate();
+    res.json(cpView(await CustomProvider.findOne({ id: req.params.id }).lean()));
+  } catch (e) { next(e); }
+});
+
+router.delete("/custom-providers/:id", async (req, res, next) => {
+  try {
+    const doc = await CustomProvider.findOne({ id: req.params.id });
+    if (!doc) return res.status(404).json({ error: "not_found" });
+    await CustomProvider.deleteOne({ id: req.params.id });
+    connections.invalidate();
+    res.json({ deleted: true });
+  } catch (e) { next(e); }
+});
+
+router.post("/custom-providers/:id/test", async (req, res) => {
+  try {
+    const doc = await CustomProvider.findOne({ id: req.params.id }).lean();
+    if (!doc || !doc.enabled) return res.status(400).json({ ok: false, message: "provider not found or disabled" });
+    const apiKey = secrets.decrypt(doc);
+    const model = req.body?.model || "gpt-4o-mini";
+    const url = `${doc.baseURL}/chat/completions`;
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: "user", content: "Reply: ok" }], max_tokens: 16 }),
+    });
+    const data = await upstream.json().catch(() => null);
+    if (!upstream.ok) {
+      return res.json({ ok: false, message: `upstream ${upstream.status}: ${data?.error?.message || ""}` });
+    }
+    const reply = data?.choices?.[0]?.message?.content || "";
+    res.json({ ok: true, model, sample: reply.slice(0, 60) });
   } catch (e) {
     res.json({ ok: false, message: String(e.message || e) });
   }

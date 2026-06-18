@@ -28,7 +28,7 @@ function toRouterConfig(id, p) {
       },
     };
   }
-  return { apiKey: p.credential.apiKey, model: p.defaultModel, baseURL: PROVIDERS[id]?.baseURL };
+  return { apiKey: p.credential.apiKey, model: p.defaultModel, baseURL: PROVIDERS[id]?.baseURL || p.baseURL };
 }
 
 // Returns { router, eff } or { router: null, eff } in demo mode.

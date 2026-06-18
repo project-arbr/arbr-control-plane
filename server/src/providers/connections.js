@@ -11,6 +11,7 @@ const {
   config, PROVIDERS, KNOWN_PROVIDERS, DEFAULT_MODELS, primaryField, envCredentialFor,
 } = require("../config");
 const ProviderCredential = require("../models/ProviderCredential");
+const CustomProvider = require("../models/CustomProvider");
 const Settings = require("../models/Settings");
 const secrets = require("../security/secrets");
 const pricing = require("../pricing/registry");
@@ -61,6 +62,20 @@ async function compute() {
       authType: PROVIDERS[id].authType,
       source,
     };
+  }
+
+  // Merge user-added custom providers (OpenAI-compat endpoints stored in MongoDB).
+  for (const cp of await CustomProvider.find({ enabled: true }).lean()) {
+    try {
+      const apiKey = secrets.decrypt(cp);
+      providers[cp.id] = {
+        credential: { apiKey },
+        defaultModel: null,
+        authType: "apiKey",
+        source: "stored",
+        baseURL: cp.baseURL,
+      };
+    } catch { /* skip undecodable */ }
   }
 
   const liveIds = Object.keys(providers);
@@ -159,7 +174,10 @@ async function removeCredential(provider) {
 }
 
 async function setDefaultProvider(provider) {
-  if (provider != null && !KNOWN_PROVIDERS.includes(provider)) throw new Error(`unknown provider "${provider}"`);
+  if (provider != null) {
+    const { liveIds } = await effective();
+    if (!liveIds.includes(provider)) throw new Error(`unknown or unconfigured provider "${provider}"`);
+  }
   const s = await Settings.get();
   s.defaultProvider = provider || null;
   await s.save();

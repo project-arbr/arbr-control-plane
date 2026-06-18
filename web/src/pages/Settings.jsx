@@ -307,6 +307,162 @@ function Field({ label, children }) {
   );
 }
 
+function CustomProviders({ onChanged }) {
+  const [providers, setProviders] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({ id: "", label: "", baseURL: "", apiKey: "" });
+  const [editForm, setEditForm] = useState({ label: "", baseURL: "", apiKey: "" });
+  const [testModel, setTestModel] = useState({});
+  const [testResult, setTestResult] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = () => api.customProviders().then(setProviders).catch(() => setProviders([]));
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await api.addCustomProvider(form);
+      setForm({ id: "", label: "", baseURL: "", apiKey: "" });
+      setAdding(false);
+      await load(); onChanged?.();
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const save = async (id) => {
+    setBusy(true); setErr(null);
+    try {
+      await api.updateCustomProvider(id, editForm);
+      setEditId(null);
+      await load(); onChanged?.();
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    if (!confirm(`Delete custom provider "${id}"? All models registered against it will stop routing.`)) return;
+    setBusy(true);
+    try { await api.removeCustomProvider(id); await load(); onChanged?.(); }
+    finally { setBusy(false); }
+  };
+
+  const runTest = async (id) => {
+    setBusy(true);
+    setTestResult((r) => ({ ...r, [id]: null }));
+    try {
+      const result = await api.testCustomProvider(id, testModel[id] || "");
+      setTestResult((r) => ({ ...r, [id]: result }));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">
+          Any OpenAI-compatible endpoint: OpenRouter, Together AI, Fireworks, a local Ollama, etc.
+          Add a provider here, then register models against it in the Models tab.
+        </p>
+        {!adding && (
+          <button className="btn-secondary shrink-0" onClick={() => { setAdding(true); setErr(null); }}>
+            + Add provider
+          </button>
+        )}
+      </div>
+
+      {adding && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="text-sm font-medium text-gyde-charcoal mb-3">New custom provider</div>
+          <div className="flex flex-wrap gap-3 items-end">
+            <Field label="Provider ID (slug)">
+              <input className="input w-36" placeholder="openrouter" value={form.id}
+                onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))} />
+            </Field>
+            <Field label="Label">
+              <input className="input w-44" placeholder="OpenRouter" value={form.label}
+                onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} />
+            </Field>
+            <Field label="Base URL">
+              <input className="input w-72" placeholder="https://openrouter.ai/api/v1" value={form.baseURL}
+                onChange={(e) => setForm((f) => ({ ...f, baseURL: e.target.value }))} />
+            </Field>
+            <Field label="API key">
+              <input type="password" className="input w-56" placeholder="paste key…" value={form.apiKey}
+                onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))} />
+            </Field>
+            <button className="btn-secondary"
+              disabled={busy || !form.id.trim() || !form.label.trim() || !form.baseURL.trim() || !form.apiKey.trim()}
+              onClick={add}>Add</button>
+            <button className="btn-ghost" disabled={busy} onClick={() => { setAdding(false); setErr(null); }}>Cancel</button>
+          </div>
+          {err && <div className="mt-2 text-xs text-red-600">{err}</div>}
+        </div>
+      )}
+
+      {providers === null ? <Spinner /> : providers.length === 0 && !adding ? (
+        <div className="py-4 text-center text-sm text-gray-400">No custom providers yet.</div>
+      ) : providers.map((p) => (
+        <div key={p.id} className="border-b border-gray-100 py-3 last:border-b-0">
+          {editId === p.id ? (
+            <div className="flex flex-wrap gap-3 items-end">
+              <Field label="Label">
+                <input className="input w-44" value={editForm.label}
+                  onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))} />
+              </Field>
+              <Field label="Base URL">
+                <input className="input w-72" value={editForm.baseURL}
+                  onChange={(e) => setEditForm((f) => ({ ...f, baseURL: e.target.value }))} />
+              </Field>
+              <Field label="New API key (leave blank to keep)">
+                <input type="password" className="input w-56" placeholder="new key…" value={editForm.apiKey}
+                  onChange={(e) => setEditForm((f) => ({ ...f, apiKey: e.target.value }))} />
+              </Field>
+              <button className="btn-secondary" disabled={busy} onClick={() => save(p.id)}>Save</button>
+              <button className="btn-ghost" disabled={busy} onClick={() => setEditId(null)}>Cancel</button>
+              {err && <div className="w-full text-xs text-red-600">{err}</div>}
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-gyde-charcoal">{p.label}</span>
+                  <Badge tone="green">live · ••••{p.last4}</Badge>
+                  <Badge tone="charcoal">custom</Badge>
+                  {!p.enabled && <Badge tone="gray">disabled</Badge>}
+                </div>
+                <div className="mt-0.5 text-xs text-gray-500">
+                  id: <span className="font-mono">{p.id}</span> · {p.baseURL}
+                </div>
+                {testResult[p.id] && (
+                  <div className={`mt-1.5 text-xs ${testResult[p.id].ok ? "text-gyde-green-700" : "text-red-600"}`}>
+                    {testResult[p.id].ok
+                      ? `Test OK · "${testResult[p.id].sample}"`
+                      : `Test failed: ${testResult[p.id].message}`}
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <input className="input w-36 text-xs" placeholder="model for test"
+                  value={testModel[p.id] || ""}
+                  onChange={(e) => setTestModel((m) => ({ ...m, [p.id]: e.target.value }))} />
+                <button className="btn-outline text-xs" disabled={busy} onClick={() => runTest(p.id)}>Test</button>
+                <button className="btn-ghost text-xs" onClick={() => {
+                  setEditId(p.id);
+                  setEditForm({ label: p.label, baseURL: p.baseURL, apiKey: "" });
+                  setErr(null);
+                }}>Edit</button>
+                <button className="btn-ghost text-xs text-red-500" disabled={busy} onClick={() => remove(p.id)}>Delete</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const SUBTABS = [
   ["connections", "Connections"],
   ["models", "Models"],
@@ -626,12 +782,16 @@ function Budgets() {
 
 export default function Settings({ onChange }) {
   const [data, setData] = useState(null);
+  const [customProvs, setCustomProvs] = useState([]);
   const [err, setErr] = useState(null);
   const [tab, setTab] = useTabParam(SUBTABS);
 
   const [models, setModels] = useState([]);
 
-  const load = () => api.connections().then(setData).catch((e) => setErr(e.message));
+  const load = () => Promise.all([
+    api.connections(),
+    api.customProviders().catch(() => []),
+  ]).then(([d, cp]) => { setData(d); setCustomProvs(cp); }).catch((e) => setErr(e.message));
   useEffect(() => { load(); api.models().then(setModels).catch(() => {}); }, []);
   const refresh = async () => { await load(); onChange?.(); };
   const setDefault = async (provider) => { await api.setDefaultProvider(provider); await refresh(); };
@@ -640,7 +800,10 @@ export default function Settings({ onChange }) {
   if (err) return <div className="text-red-600">{err}</div>;
   if (!data) return <Spinner />;
 
-  const liveProviders = data.providers.filter((p) => p.configured);
+  const liveProviders = [
+    ...data.providers.filter((p) => p.configured),
+    ...customProvs.filter((p) => p.enabled).map((p) => ({ provider: p.id, label: p.label })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -659,6 +822,10 @@ export default function Settings({ onChange }) {
               stored encrypted server-side and never shown again. Environment variables take precedence.
             </p>
             {data.providers.map((p) => <ProviderRow key={p.provider} p={p} onChanged={refresh} />)}
+          </Card>
+
+          <Card title="Custom providers">
+            <CustomProviders onChanged={refresh} />
           </Card>
 
           <Card title="Default provider & model">

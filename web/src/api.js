@@ -90,6 +90,12 @@ export const api = {
   setDefaultProvider: (provider) => req("/default-provider", { method: "PUT", body: JSON.stringify({ provider }) }),
   setDefaultModel: (model) => req("/default-model", { method: "PUT", body: JSON.stringify({ model }) }),
   testProvider: (provider) => req(`/connections/${provider}/test`, { method: "POST" }),
+
+  customProviders: () => req("/custom-providers"),
+  addCustomProvider: (body) => req("/custom-providers", { method: "POST", body: JSON.stringify(body) }),
+  updateCustomProvider: (id, body) => req(`/custom-providers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeCustomProvider: (id) => req(`/custom-providers/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  testCustomProvider: (id, model) => req(`/custom-providers/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify({ model }) }),
 };
 
 export const fmt = {

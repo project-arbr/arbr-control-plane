@@ -30,9 +30,9 @@ function createRouter(options) {
     );
   }
   for (const id of Object.keys(providers)) {
-    if (!SUPPORTED_PROVIDERS.includes(id)) {
+    if (!SUPPORTED_PROVIDERS.includes(id) && !providers[id].baseURL) {
       throw new Error(
-        `createRouter: unknown provider "${id}". Supported: ${SUPPORTED_PROVIDERS.join(", ")}`
+        `createRouter: unknown provider "${id}" and no baseURL set. Built-in providers: ${SUPPORTED_PROVIDERS.join(", ")}`
       );
     }
   }

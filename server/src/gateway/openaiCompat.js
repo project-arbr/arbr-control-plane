@@ -22,10 +22,18 @@ const NATIVE_TOOL_PROVIDERS = new Set(["bedrock-nova"]);
 
 // Resolved chat-completions base URL for an OpenAI-compatible provider, or null if the provider
 // is native (anthropic/gemini/bedrock) and must use the LangChain path.
-function openAICompatBaseURL(providerId) {
-  if (!OPENAI_COMPAT_PROVIDERS.has(providerId)) return null;
-  const base = PROVIDERS[providerId]?.baseURL || (providerId === "openai" ? "https://api.openai.com/v1" : null);
-  return base ? base.replace(/\/+$/, "") : null;
+// `eff` is passed so custom providers (whose baseURL lives in MongoDB) are recognized.
+function openAICompatBaseURL(providerId, eff) {
+  if (OPENAI_COMPAT_PROVIDERS.has(providerId)) {
+    const base = PROVIDERS[providerId]?.baseURL || (providerId === "openai" ? "https://api.openai.com/v1" : null);
+    return base ? base.replace(/\/+$/, "") : null;
+  }
+  // Custom (user-added) providers: eff carries their baseURL; they're never native.
+  if (!NATIVE_TOOL_PROVIDERS.has(providerId)) {
+    const base = eff?.providers?.[providerId]?.baseURL;
+    return base ? base.replace(/\/+$/, "") : null;
+  }
+  return null;
 }
 
 const DEMO_503 = {
@@ -272,7 +280,7 @@ async function handleOpenAICompat(req, res) {
   // Transparent passthrough for OpenAI-compatible providers (e.g. LiteLLM): forward the raw
   // body so tools/tool_calls/vision/response_format/streaming survive intact. Native providers
   // (anthropic/gemini/bedrock) fall through to the LangChain path below.
-  const compatBaseURL = openAICompatBaseURL(served.provider);
+  const compatBaseURL = openAICompatBaseURL(served.provider, eff);
 
   // Detect tools / vision before falling through to the LangChain path, which strips both.
   // NATIVE_TOOL_PROVIDERS handle tools via .bindTools() — only block vision for them.
