@@ -13,7 +13,7 @@ const { PROVIDERS } = require("../config");
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
 // streaming) instead of round-tripping through LangChain, which drops everything but text.
-const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq"]);
+const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
 
 // Native providers whose LangChain adapter supports tools via .bindTools() (e.g.
 // ChatBedrockConverse). These are excluded from the 501 gate for tools so that tool

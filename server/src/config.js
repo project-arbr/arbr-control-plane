@@ -77,6 +77,20 @@ const PROVIDERS = {
     defaultModel: "llama-3.3-70b-versatile",
     baseURL: "https://api.groq.com/openai/v1",
   },
+  // LiteLLM Proxy — only registered when LITELLM_BASE_URL is set. Absent from
+  // KNOWN_PROVIDERS entirely when unconfigured, so it never enters the fallback
+  // chain or the Connections page. Operators register models against it via
+  // POST /api/models with { provider: "litellm" }.
+  ...(process.env.LITELLM_BASE_URL ? {
+    litellm: {
+      label: "LiteLLM Proxy",
+      authType: "apiKey",
+      fields: ["apiKey"],
+      env: { apiKey: "LITELLM_API_KEY" },
+      defaultModel: process.env.LITELLM_DEFAULT_MODEL || undefined,
+      baseURL: process.env.LITELLM_BASE_URL,
+    },
+  } : {}),
 };
 
 const KNOWN_PROVIDERS = Object.keys(PROVIDERS);

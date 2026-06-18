@@ -14,7 +14,7 @@
 // - Messages accept BOTH plain { role, content } objects AND LangChain
 //   BaseMessage instances. We normalize internally.
 
-const SUPPORTED_PROVIDERS = ["gemini", "bedrock-nova", "openai", "anthropic", "deepseek", "moonshot", "xai", "groq"];
+const SUPPORTED_PROVIDERS = ["gemini", "bedrock-nova", "openai", "anthropic", "deepseek", "moonshot", "xai", "groq", "litellm"];
 
 function createRouter(options) {
   if (!options || typeof options !== "object") {
