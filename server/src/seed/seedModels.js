@@ -29,8 +29,11 @@ const SEED = [
 
   // ── Amazon Bedrock — cross-inference (third-party models on Bedrock) ──
   { id: "zai.glm-5",                              label: "GLM-5",                       provider: "bedrock-nova", inputPer1M: 1.00,  outputPer1M: 3.20,  tier: "mid"     },
+  { id: "zai.glm-4.7-flash",                      label: "GLM-4.7 Flash",               provider: "bedrock-nova", inputPer1M: 0.14,  outputPer1M: 0.14,  tier: "light"   },
   { id: "moonshotai.kimi-k2.5",                   label: "Kimi K2.5",                   provider: "bedrock-nova", inputPer1M: 0.60,  outputPer1M: 3.00,  tier: "mid"     },
-  { id: "qwen.qwen3-next-80b-a3b-instruct",       label: "Qwen3 Next",                  provider: "bedrock-nova", inputPer1M: 0.50,  outputPer1M: 1.20,  tier: "light"   },
+  // Converse API uses qwen.qwen3-next-80b-a3b (no -instruct suffix); the -instruct variant
+  // is the Chat Completions / bedrock-mantle endpoint name only.
+  { id: "qwen.qwen3-next-80b-a3b",                label: "Qwen3 Next",                  provider: "bedrock-nova", inputPer1M: 0.50,  outputPer1M: 1.20,  tier: "light"   },
   { id: "deepseek.v3.2",                          label: "DeepSeek V3.2",               provider: "bedrock-nova", inputPer1M: 0.62,  outputPer1M: 1.85,  tier: "light"   },
   { id: "us.deepseek.r1-v1:0",                    label: "DeepSeek R1",                 provider: "bedrock-nova", inputPer1M: 1.35,  outputPer1M: 5.40,  tier: "premium" },
   { id: "google.gemma-3-12b-it",                  label: "Gemma 3 12B",                 provider: "bedrock-nova", inputPer1M: 0.09,  outputPer1M: 0.29,  tier: "light"   },
