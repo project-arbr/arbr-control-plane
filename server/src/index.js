@@ -11,6 +11,7 @@ const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
 const apiRoutes = require("./api/routes");
+const connections = require("./providers/connections");
 
 // Built dashboard (created by `npm --prefix web run build`). When present, the
 // server serves it on the same port — single-port production / Docker.
@@ -36,6 +37,42 @@ async function start() {
 
   // OpenAI-compatible endpoint — any client that speaks the OpenAI spec can use Arbr.
   app.post("/v1/chat/completions", auth.middleware, handleOpenAICompat);
+
+  // OpenAI-compatible model discovery — lets any SDK (or curl) enumerate what's
+  // available on this Arbr instance without hitting the admin API.
+  app.get("/v1/models", auth.middleware, (_req, res) => {
+    const models = registry.listModels();
+    res.json({
+      object: "list",
+      data: models.map((m) => ({
+        id: m.id,
+        object: "model",
+        created: m.createdAt ? Math.floor(new Date(m.createdAt).getTime() / 1000) : 0,
+        owned_by: m.provider,
+        // Arbr extensions
+        provider: m.provider,
+        label: m.label || m.id,
+        tier: m.tier,
+        inputPer1M: m.inputPer1M,
+        outputPer1M: m.outputPer1M,
+      })),
+    });
+  });
+
+  // Provider discovery — lists which providers are live (no credentials exposed).
+  app.get("/v1/providers", auth.middleware, async (_req, res) => {
+    try {
+      const eff = await connections.effective();
+      const allModels = registry.listModels();
+      const data = eff.liveIds.map((id) => {
+        const providerModels = allModels.filter((m) => m.provider === id).map((m) => m.id);
+        return { id, models: providerModels };
+      });
+      res.json({ object: "list", data });
+    } catch (err) {
+      res.status(500).json({ error: "internal_error", message: String(err.message || err) });
+    }
+  });
 
   // Dashboard / admin API — master-key gated when ARBR_ADMIN_KEY is set.
   app.use("/api", adminAuth.middleware, apiRoutes);
