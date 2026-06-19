@@ -380,6 +380,62 @@ class Client:
     async def astatus(self) -> dict:
         return await asyncio.to_thread(self.status)
 
+    # — model/provider discovery —
+
+    def models(self) -> dict:
+        """List all models available on this Arbr instance — GET /v1/models.
+
+        Returns an OpenAI-compatible list dict::
+
+            {
+              "object": "list",
+              "data": [
+                {
+                  "id": "gpt-4o",
+                  "provider": "openai",
+                  "label": "GPT-4o",
+                  "tier": "premium",
+                  "inputPer1M": 2.5,
+                  "outputPer1M": 10.0,
+                },
+                ...
+              ]
+            }
+
+        Uses the same gateway API key as chat calls — no admin key required.
+        """
+        return _request_with_retries(
+            f"{self.base_url}/v1/models",
+            method="GET",
+            body=None,
+            timeout_s=self._timeout_s,
+            retries=self._retries,
+            headers=self._headers,
+        )
+
+    async def amodels(self) -> dict:
+        """Async :meth:`models`."""
+        return await asyncio.to_thread(self.models)
+
+    def providers(self) -> dict:
+        """List configured live providers — GET /v1/providers.
+
+        Returns ``{"object": "list", "data": [{"id": ..., "models": [...]}]}``.
+        No credentials or keys are exposed.
+        """
+        return _request_with_retries(
+            f"{self.base_url}/v1/providers",
+            method="GET",
+            body=None,
+            timeout_s=self._timeout_s,
+            retries=self._retries,
+            headers=self._headers,
+        )
+
+    async def aproviders(self) -> dict:
+        """Async :meth:`providers`."""
+        return await asyncio.to_thread(self.providers)
+
 
 def create_client(
     base_url: Optional[str] = None,

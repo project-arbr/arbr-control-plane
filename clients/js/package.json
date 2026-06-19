@@ -1,6 +1,6 @@
 {
   "name": "arbr-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Official JS client for the Arbr AI control-plane gateway — one function to route, observe, and govern every LLM call.",
   "license": "MIT",
   "main": "./src/index.js",

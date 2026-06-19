@@ -58,6 +58,39 @@ export interface StatusResponse {
   breachedCaps: number;
 }
 
+export type ModelTier = "light" | "mid" | "premium";
+
+export interface ArbrModel {
+  id: string;
+  object: "model";
+  created: number;
+  owned_by: string;
+  /** Underlying Arbr provider (e.g. "openai", "bedrock-nova", "anthropic"). */
+  provider: string;
+  label: string;
+  tier: ModelTier;
+  /** USD per 1M input tokens. */
+  inputPer1M: number;
+  /** USD per 1M output tokens. */
+  outputPer1M: number;
+}
+
+export interface ModelsResponse {
+  object: "list";
+  data: ArbrModel[];
+}
+
+export interface ArbrProvider {
+  id: string;
+  /** Model IDs registered against this provider. */
+  models: string[];
+}
+
+export interface ProvidersResponse {
+  object: "list";
+  data: ArbrProvider[];
+}
+
 export interface ClientOptions {
   /** Gateway origin, e.g. "http://localhost:4100". Falls back to ARBR_GATEWAY_URL. */
   baseUrl?: string;
@@ -126,6 +159,10 @@ export interface Client {
   stream(opts: ChatRequest): AsyncGenerator<{ text: string }, ChatResponse>;
   /** Gateway healthcheck — GET /api/status. */
   status(opts?: { signal?: AbortSignal }): Promise<StatusResponse>;
+  /** List all models available on this Arbr instance — GET /v1/models. */
+  models(opts?: { signal?: AbortSignal }): Promise<ModelsResponse>;
+  /** List configured live providers — GET /v1/providers. */
+  providers(opts?: { signal?: AbortSignal }): Promise<ProvidersResponse>;
   baseUrl: string;
 }
 

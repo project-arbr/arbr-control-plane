@@ -130,6 +130,58 @@ Healthcheck against `GET /api/status`:
 When the gateway has admin auth enabled (`ARBR_ADMIN_KEY` set server-side), this endpoint
 requires a credential — your gateway `apiKey` is accepted, so set it and `status()` keeps working.
 
+### `client.models() → Promise<ModelsResponse>`
+
+List every model available on this Arbr instance — `GET /v1/models`.
+Uses the same gateway API key as chat calls (no admin key needed).
+
+```js
+const { data: models } = await arbr.models();
+
+// Find all light-tier models, sorted by input cost
+const cheap = models
+  .filter(m => m.tier === "light")
+  .sort((a, b) => a.inputPer1M - b.inputPer1M);
+
+console.log(cheap[0].id, cheap[0].provider); // e.g. "us.amazon.nova-micro-v1:0", "bedrock-nova"
+```
+
+Response shape is OpenAI-compatible (`{ object: "list", data: [...] }`) with Arbr extensions on each model:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Model ID — pass as `model:` in chat calls |
+| `provider` | string | Underlying provider (`"openai"`, `"bedrock-nova"`, `"anthropic"`, …) |
+| `label` | string | Human-readable name |
+| `tier` | `"light"` \| `"mid"` \| `"premium"` | Cost tier |
+| `inputPer1M` | number | USD per 1M input tokens |
+| `outputPer1M` | number | USD per 1M output tokens |
+
+Because the response is OpenAI-compatible, it also works directly via the OpenAI Node.js SDK:
+
+```js
+import OpenAI from "openai";
+const openai = new OpenAI({ apiKey: "ab_…", baseURL: "https://arbr.gyde.ai/v1" });
+const list = await openai.models.list();
+list.data.forEach(m => console.log(m.id));
+```
+
+### `client.providers() → Promise<ProvidersResponse>`
+
+List which providers are live on this instance — `GET /v1/providers`.
+Returns `{ object: "list", data: [{ id, models: string[] }] }`. No credentials exposed.
+
+```js
+const { data: providers } = await arbr.providers();
+
+for (const p of providers) {
+  console.log(p.id, "→", p.models.length, "models");
+}
+// openai       → 2 models
+// bedrock-nova → 11 models
+// anthropic    → 3 models
+```
+
 ### `asLangChainModel(client, meta?) → { invoke, stream }`
 
 For apps that centralise LLM calls behind a factory (the recommended chokepoint pattern):

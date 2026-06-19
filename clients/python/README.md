@@ -116,6 +116,53 @@ Healthcheck against `GET /api/status` — `demoMode`, `liveProviders`, `defaultP
 When the gateway has admin auth enabled (`ARBR_ADMIN_KEY` set server-side), this endpoint
 requires a credential — your gateway `api_key` is accepted, so set it and `status()` keeps working.
 
+### `Client.models() → dict`
+
+List every model available on this Arbr instance — `GET /v1/models`.
+Uses the same gateway API key as chat calls (no admin key needed).
+
+```python
+result = arbr.models()
+
+# Filter and sort by tier / cost
+cheap = sorted(
+    [m for m in result["data"] if m["tier"] == "light"],
+    key=lambda m: m["inputPer1M"],
+)
+print(cheap[0]["id"], cheap[0]["provider"])  # e.g. "us.amazon.nova-micro-v1:0", "bedrock-nova"
+```
+
+Response shape is OpenAI-compatible (`{"object": "list", "data": [...]}`) with Arbr extensions:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | str | Model ID — pass as `model=` in chat calls |
+| `provider` | str | Underlying provider (`"openai"`, `"bedrock-nova"`, `"anthropic"`, …) |
+| `label` | str | Human-readable name |
+| `tier` | str | `"light"` / `"mid"` / `"premium"` |
+| `inputPer1M` | float | USD per 1M input tokens |
+| `outputPer1M` | float | USD per 1M output tokens |
+
+Async counterpart: `await arbr.amodels()`.
+
+### `Client.providers() → dict`
+
+List configured live providers — `GET /v1/providers`.
+Returns `{"object": "list", "data": [{"id": ..., "models": [...]}]}`. No credentials exposed.
+
+```python
+result = arbr.providers()
+
+for p in result["data"]:
+    print(p["id"], "→", len(p["models"]), "models")
+
+# openai       → 2 models
+# bedrock-nova → 11 models
+# anthropic    → 3 models
+```
+
+Async counterpart: `await arbr.aproviders()`.
+
 ## Error handling
 
 All failures raise `GatewayError` with `.status`, `.code`, `.retryable`, `.request_id`:

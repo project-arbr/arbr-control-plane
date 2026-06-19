@@ -232,7 +232,35 @@ function createClient(options = {}) {
     );
   }
 
-  return { chat, stream, status, baseUrl };
+  /**
+   * List all models available on this Arbr instance — GET /v1/models.
+   * Returns an OpenAI-compatible list object with Arbr extensions on each entry:
+   * `id`, `provider`, `label`, `tier`, `inputPer1M`, `outputPer1M`.
+   */
+  async function models({ signal } = {}) {
+    return requestWithRetries(
+      fetchImpl,
+      `${baseUrl}/v1/models`,
+      { method: "GET", headers: baseHeaders },
+      { timeoutMs, retries, signal }
+    );
+  }
+
+  /**
+   * List configured live providers — GET /v1/providers.
+   * Returns `{ object: "list", data: [{ id, models: string[] }] }`.
+   * No credentials or keys are exposed.
+   */
+  async function providers({ signal } = {}) {
+    return requestWithRetries(
+      fetchImpl,
+      `${baseUrl}/v1/providers`,
+      { method: "GET", headers: baseHeaders },
+      { timeoutMs, retries, signal }
+    );
+  }
+
+  return { chat, stream, status, models, providers, baseUrl };
 }
 
 // ── LangChain-style adapter (duck-typed; no LangChain dependency) ─────────────

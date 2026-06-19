@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 (2026-06-19)
+
+- `models()` — list all models available on this Arbr instance (`GET /v1/models`). Returns OpenAI-compatible format with Arbr extensions: `provider`, `label`, `tier`, `inputPer1M`, `outputPer1M`. Works with the OpenAI Node.js SDK `openai.models.list()` too.
+- `providers()` — list configured live providers and their model IDs (`GET /v1/providers`). No credentials exposed.
+- TypeScript: added `ArbrModel`, `ModelsResponse`, `ArbrProvider`, `ProvidersResponse` interfaces.
+
 ## 0.1.0 (2026-06-17)
 
 Initial release.
