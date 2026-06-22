@@ -10,6 +10,7 @@ const NAV_GROUPS = [
   ] },
   { section: "Control", items: [
     { to: "/routing", label: "Routing" },
+    { to: "/models",  label: "Models" },
     { to: "/settings", label: "Settings" },
   ] },
 ];

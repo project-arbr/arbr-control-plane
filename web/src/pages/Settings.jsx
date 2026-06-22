@@ -465,7 +465,6 @@ function CustomProviders({ onChanged }) {
 
 const SUBTABS = [
   ["connections", "Connections"],
-  ["models", "Models"],
   ["budgets", "Budgets"],
   ["keys", "API keys"],
 ];
@@ -870,12 +869,6 @@ export default function Settings({ onChange }) {
             </p>
           </Card>
         </>
-      )}
-
-      {tab === "models" && (
-        <Card title="Model tiers & pricing">
-          <ModelTiers />
-        </Card>
       )}
 
       {tab === "budgets" && (

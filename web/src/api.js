@@ -58,6 +58,7 @@ export const api = {
   createModel: (body) => req("/models", { method: "POST", body: JSON.stringify(body) }),
   updateModel: (id, body) => req(`/models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteModel: (id) => req(`/models/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  testModel: (id, message) => req(`/models/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify({ message }) }),
 
   rules: () => req("/rules"),
   createRule: (body) => req("/rules", { method: "POST", body: JSON.stringify(body) }),

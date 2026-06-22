@@ -231,7 +231,7 @@ router.post("/connections/:provider/test", async (req, res) => {
     const p = eff.providers[provider];
     if (!p) return res.status(400).json({ ok: false, message: "provider not configured" });
     const r = createRouter({
-      providers: { [provider]: toRouterConfig(p) },
+      providers: { [provider]: toRouterConfig(provider, p) },
       defaultProvider: provider,
     });
     // Generous budget so "thinking" models (e.g. Gemini 2.5) have room to answer.
@@ -337,7 +337,35 @@ router.get("/models", (_req, res) => {
     id: m.id, provider: m.provider, tier: m.tier, label: m.label || "",
     inputPer1M: m.inputPer1M, outputPer1M: m.outputPer1M,
     builtIn: m.builtIn, enabled: m.enabled,
+    bestUsedFor: m.bestUsedFor || "", releaseDate: m.releaseDate || "",
+    contextWindow: m.contextWindow || null,
   })));
+});
+
+// Live test — send a user message to a specific model and return the response.
+router.post("/models/:id/test", async (req, res) => {
+  try {
+    const model = pricing.getModel(req.params.id);
+    if (!model) return res.status(404).json({ ok: false, message: "model not found" });
+    const eff = await connections.effective();
+    const p = eff.providers[model.provider];
+    if (!p) return res.status(400).json({ ok: false, message: `provider "${model.provider}" is not configured` });
+    const message = String(req.body?.message || "Reply with exactly: ok").slice(0, 1000);
+    const start = Date.now();
+    const cfg = { ...toRouterConfig(model.provider, p), model: model.id };
+    const r = createRouter({ providers: { [model.provider]: cfg }, defaultProvider: model.provider });
+    const out = await r.complete({ messages: [{ role: "user", content: message }], maxTokens: 512 });
+    res.json({
+      ok: true,
+      text: out.text || "",
+      model: out.modelId || model.id,
+      provider: model.provider,
+      latencyMs: Date.now() - start,
+      usage: out.usage || null,
+    });
+  } catch (e) {
+    res.json({ ok: false, message: String(e.message || e) });
+  }
 });
 
 router.post("/models", async (req, res, next) => {
@@ -347,6 +375,7 @@ router.post("/models", async (req, res, next) => {
     if (!provider || !String(provider).trim()) return res.status(400).json({ error: "provider is required" });
     if (!["light", "mid", "premium"].includes(tier)) return res.status(400).json({ error: "tier must be light, mid, or premium" });
     if (!(Number(inputPer1M) >= 0) || !(Number(outputPer1M) >= 0)) return res.status(400).json({ error: "prices must be non-negative numbers" });
+    const { bestUsedFor, releaseDate, contextWindow } = req.body || {};
     const doc = await ModelEntry.create({
       id: String(id).trim(),
       provider: String(provider).trim(),
@@ -356,6 +385,9 @@ router.post("/models", async (req, res, next) => {
       tier,
       builtIn: false,
       enabled: true,
+      bestUsedFor: bestUsedFor ? String(bestUsedFor).trim() : "",
+      releaseDate:  releaseDate  ? String(releaseDate).trim()  : "",
+      contextWindow: contextWindow ? Number(contextWindow) : null,
     });
     await pricing.reload();
     res.status(201).json(doc);
@@ -375,6 +407,9 @@ router.patch("/models/:id", async (req, res, next) => {
     if (Number(req.body.inputPer1M) >= 0) update.inputPer1M = Number(req.body.inputPer1M);
     if (Number(req.body.outputPer1M) >= 0) update.outputPer1M = Number(req.body.outputPer1M);
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
+    if (req.body.bestUsedFor != null) update.bestUsedFor = String(req.body.bestUsedFor).trim();
+    if (req.body.releaseDate != null) update.releaseDate = String(req.body.releaseDate).trim();
+    if (req.body.contextWindow != null) update.contextWindow = Number(req.body.contextWindow) || null;
     await ModelEntry.updateOne({ id: req.params.id }, { $set: update });
     await pricing.reload();
     res.json(await ModelEntry.findOne({ id: req.params.id }).lean());

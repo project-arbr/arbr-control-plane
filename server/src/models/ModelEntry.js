@@ -8,8 +8,11 @@ const modelEntrySchema = new mongoose.Schema(
     inputPer1M:   { type: Number, required: true, min: 0 },
     outputPer1M:  { type: Number, required: true, min: 0 },
     tier:         { type: String, enum: ["light", "mid", "premium"], required: true },
-    builtIn:      { type: Boolean, default: false },
-    enabled:      { type: Boolean, default: true },
+    builtIn:       { type: Boolean, default: false },
+    enabled:       { type: Boolean, default: true },
+    bestUsedFor:   { type: String, default: "" },
+    releaseDate:   { type: String, default: "" },
+    contextWindow: { type: Number, default: null },
   },
   { timestamps: true }
 );
