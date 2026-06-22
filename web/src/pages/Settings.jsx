@@ -469,6 +469,57 @@ const SUBTABS = [
   ["keys", "API keys"],
 ];
 
+function KeyRow({ k, onToggle, onRevoke, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm]       = useState({ name: k.name, application: k.application });
+  const [saving, setSaving]   = useState(false);
+
+  async function save() {
+    if (!form.name.trim() || !form.application.trim()) return;
+    setSaving(true);
+    try { await onSave({ name: form.name.trim(), application: form.application.trim() }); setEditing(false); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <tr className="border-t border-gray-100">
+      <td className="py-2 font-mono text-xs text-gray-600">{k.prefix}</td>
+      <td className="py-2">
+        {editing
+          ? <input className="input w-36" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          : <span className="text-gyde-charcoal">{k.name}</span>}
+      </td>
+      <td className="py-2">
+        {editing
+          ? <input className="input w-40" value={form.application} onChange={(e) => setForm({ ...form, application: e.target.value })} />
+          : <Badge tone="charcoal">{k.application}</Badge>}
+      </td>
+      <td className="py-2 text-gray-600">{k.rpm ? `${k.rpm}/min` : "—"}</td>
+      <td className="py-2 text-xs text-gray-500 max-w-[160px]">
+        {k.defaultModel && <div className="truncate" title={k.defaultModel}>↳ {k.defaultModel}</div>}
+        {k.allowedModels?.length > 0
+          ? <div className="truncate" title={k.allowedModels.join(", ")}>{k.allowedModels.length} allowed</div>
+          : <div className="text-gray-300">unrestricted</div>}
+      </td>
+      <td className="py-2 text-gray-500">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "never"}</td>
+      <td className="py-2"><Toggle checked={k.enabled} onChange={onToggle} label="enable key" /></td>
+      <td className="py-2 text-right">
+        <div className="flex items-center justify-end gap-2">
+          {editing ? (
+            <>
+              <button className="btn-secondary text-xs" disabled={saving} onClick={save}>{saving ? "…" : "Save"}</button>
+              <button className="btn-ghost text-xs" onClick={() => { setEditing(false); setForm({ name: k.name, application: k.application }); }}>Cancel</button>
+            </>
+          ) : (
+            <button className="btn-ghost text-xs" onClick={() => setEditing(true)}>Edit</button>
+          )}
+          <button className="btn-ghost text-xs" onClick={onRevoke}>Revoke</button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function ApiKeys({ onChange }) {
   const [keys, setKeys] = useState(null);
   const [required, setRequired] = useState(false);
@@ -615,21 +666,8 @@ function ApiKeys({ onChange }) {
           </thead>
           <tbody>
             {keys.map((k) => (
-              <tr key={k._id} className="border-t border-gray-100">
-                <td className="py-2 font-mono text-xs text-gray-600">{k.prefix}</td>
-                <td className="py-2 text-gyde-charcoal">{k.name}</td>
-                <td className="py-2"><Badge tone="charcoal">{k.application}</Badge></td>
-                <td className="py-2 text-gray-600">{k.rpm ? `${k.rpm}/min` : "—"}</td>
-                <td className="py-2 text-xs text-gray-500 max-w-[160px]">
-                  {k.defaultModel && <div className="truncate" title={k.defaultModel}>↳ {k.defaultModel}</div>}
-                  {k.allowedModels?.length > 0
-                    ? <div className="truncate" title={k.allowedModels.join(", ")}>{k.allowedModels.length} allowed</div>
-                    : <div className="text-gray-300">unrestricted</div>}
-                </td>
-                <td className="py-2 text-gray-500">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "never"}</td>
-                <td className="py-2"><Toggle checked={k.enabled} onChange={() => toggleKey(k)} label="enable key" /></td>
-                <td className="py-2 text-right"><button className="btn-ghost" onClick={() => revoke(k._id)}>Revoke</button></td>
-              </tr>
+              <KeyRow key={k._id} k={k} onToggle={() => toggleKey(k)} onRevoke={() => revoke(k._id)}
+                onSave={(patch) => api.updateKey(k._id, patch).then(() => load())} />
             ))}
           </tbody>
         </table>

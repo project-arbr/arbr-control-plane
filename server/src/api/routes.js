@@ -158,6 +158,8 @@ router.post("/keys", async (req, res, next) => {
 router.patch("/keys/:id", async (req, res, next) => {
   try {
     const update = {};
+    if (req.body.name) update.name = String(req.body.name).trim();
+    if (req.body.application) update.application = String(req.body.application).trim();
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
     if (req.body.rpm === null || Number(req.body.rpm) > 0) update.rpm = req.body.rpm === null ? null : Number(req.body.rpm);
     if (Array.isArray(req.body.allowedModels)) update.allowedModels = req.body.allowedModels.filter(Boolean);
