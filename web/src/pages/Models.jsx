@@ -59,13 +59,7 @@ function ModelBenchmarkPanel({ model }) {
   const caps   = model.capabilities || {};
   const hasCaps = BENCH_DIMS.some((d) => caps[d] != null);
 
-  if (!hasCaps) {
-    return (
-      <div className="border-t border-gray-100 bg-gray-50 px-4 py-4 text-sm text-gray-400 text-center">
-        No benchmark data — click "Sync from LiveBench" at the top of this page
-      </div>
-    );
-  }
+  if (!hasCaps) return null;
 
   return (
     <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
@@ -186,15 +180,19 @@ function ModelTestPanel({ modelId }) {
 // ── ModelRow ──────────────────────────────────────────────────────────────────
 
 function ModelRow({ model, onRefresh }) {
-  const [expanded, setExpanded] = useState(null); // null | "meta" | "test"
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing]   = useState(false);
+  const [showTest, setShowTest] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm]         = useState({});
   const [saving, setSaving]     = useState(false);
   const [err, setErr]           = useState("");
 
-  function togglePanel(panel) {
-    setExpanded((prev) => (prev === panel ? null : panel));
+  function toggleExpand() {
+    setExpanded((v) => !v);
+    setEditing(false);
+    setShowTest(false);
+    setDeleting(false);
   }
 
   function startEdit() {
@@ -208,7 +206,8 @@ function ModelRow({ model, onRefresh }) {
       contextWindow: model.contextWindow || "",
     });
     setEditing(true);
-    setExpanded(null);
+    setExpanded(false);
+    setShowTest(false);
   }
 
   async function saveEdit() {
@@ -237,54 +236,24 @@ function ModelRow({ model, onRefresh }) {
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      {/* main row */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 transition-colors">
-        {/* chevron for meta */}
-        <button
-          onClick={() => togglePanel("meta")}
-          className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-          title="Show details"
+      {/* collapsed row — click anywhere to expand */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 transition-colors cursor-pointer select-none"
+        onClick={toggleExpand}
+      >
+        <svg
+          className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${expanded || editing ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
         >
-          <svg className={`w-4 h-4 transition-transform ${expanded === "meta" ? "rotate-180" : ""}`}
-               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
 
-        {/* name + id */}
         <div className="flex-1 min-w-0">
           <div className="font-medium text-gyde-charcoal truncate">{model.label || model.id}</div>
           {model.label && <div className="text-xs text-gray-400 truncate font-mono">{model.id}</div>}
         </div>
 
-        {/* tier */}
         <Badge tone={tierTone(model.tier)}>{model.tier}</Badge>
-
-        {/* actions */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={() => togglePanel("scores")}
-            className={`${BTN} text-xs ${expanded === "scores" ? "bg-gyde-green-50 text-gyde-green-700 border border-gyde-green-200" : "text-gray-600 hover:bg-gray-100"}`}
-          >
-            Scores
-          </button>
-          <button
-            onClick={() => togglePanel("test")}
-            className={`${BTN} text-xs ${expanded === "test" ? "bg-gyde-green-50 text-gyde-green-700 border border-gyde-green-200" : "text-gray-600 hover:bg-gray-100"}`}
-          >
-            Test
-          </button>
-          <button onClick={startEdit} className={`${BTN} text-xs text-gray-600 hover:bg-gray-100`}>Edit</button>
-          {!deleting
-            ? <button onClick={() => setDeleting(true)} className={`${BTN} text-xs ${BTN_DANGER}`}>Delete</button>
-            : (
-              <span className="flex items-center gap-1 text-xs">
-                <button onClick={doDelete} disabled={saving} className={`${BTN} text-xs bg-red-600 text-white hover:bg-red-700`}>Confirm</button>
-                <button onClick={() => setDeleting(false)} className={`${BTN} text-xs text-gray-500`}>Cancel</button>
-              </span>
-            )
-          }
-        </div>
       </div>
 
       {/* edit form */}
@@ -325,10 +294,46 @@ function ModelRow({ model, onRefresh }) {
         </div>
       )}
 
-      {/* expandable panels */}
-      {expanded === "meta"    && !editing && <ModelMetaPanel model={model} />}
-      {expanded === "scores"  && !editing && <ModelBenchmarkPanel model={model} />}
-      {expanded === "test"    && <ModelTestPanel modelId={model.id} />}
+      {/* expanded card — meta + scores + actions */}
+      {expanded && !editing && (
+        <div className="border-t border-gray-100">
+          <ModelMetaPanel model={model} />
+          <ModelBenchmarkPanel model={model} />
+          {showTest && <ModelTestPanel modelId={model.id} />}
+
+          {/* action bar */}
+          <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowTest((v) => !v); setDeleting(false); }}
+              className={`${BTN} text-xs ${showTest ? "bg-gyde-green-50 text-gyde-green-700 border border-gyde-green-200" : "text-gray-600 hover:bg-gray-100"}`}
+            >
+              Test
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); startEdit(); }}
+              className={`${BTN} text-xs text-gray-600 hover:bg-gray-100`}
+            >
+              Edit
+            </button>
+            {!deleting
+              ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeleting(true); }}
+                  className={`${BTN} text-xs ${BTN_DANGER}`}
+                >
+                  Delete
+                </button>
+              ) : (
+                <span className="flex items-center gap-1 text-xs">
+                  <button onClick={doDelete} disabled={saving} className={`${BTN} text-xs bg-red-600 text-white hover:bg-red-700`}>Confirm delete</button>
+                  <button onClick={() => setDeleting(false)} className={`${BTN} text-xs text-gray-500`}>Cancel</button>
+                </span>
+              )
+            }
+            {err && <p className="text-xs text-red-600 ml-1">{err}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
