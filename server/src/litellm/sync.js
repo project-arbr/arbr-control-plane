@@ -49,7 +49,9 @@ const PROVIDER_IMPORT = {
     provider: "anthropic",
   },
   gemini: {
-    match: (k) => k.startsWith("gemini/") && !k.includes("vision"),
+    // Only import models whose name starts with "gemini-" — excludes lyria-*, learnlm-*, gemma-*
+    // (LiteLLM incorrectly marks some non-chat Google models as mode:chat)
+    match: (k) => k.startsWith("gemini/gemini-"),
     id:    (k) => k.slice("gemini/".length),
     provider: "gemini",
   },
@@ -70,7 +72,8 @@ const PROVIDER_IMPORT = {
     provider: "xai",
   },
   groq: {
-    match: (k) => k.startsWith("groq/"),
+    // Exclude nested paths like groq/openai/gpt-oss-120b (double slash = not a real Groq model ID)
+    match: (k) => k.startsWith("groq/") && !k.slice(5).includes("/"),
     id:    (k) => k.slice("groq/".length),
     provider: "groq",
   },
@@ -194,6 +197,33 @@ async function run() {
     await ModelEntry.insertMany(toInsert, { ordered: false }).catch(() => {});
     added = toInsert.length;
     console.log(`[litellm] discovered ${added} new models`);
+  }
+
+  // ── 1b. Cleanup: remove non-builtIn models that no longer pass import rules ─
+  // Catches models wrongly imported in earlier syncs (bad LiteLLM metadata etc.)
+  const validByProvider = {};
+  for (const [arbrProvider, rule] of Object.entries(PROVIDER_IMPORT)) {
+    if (!liveIds.includes(arbrProvider)) continue;
+    const validIds = new Set();
+    for (const [ltKey, ltEntry] of Object.entries(data)) {
+      if (ltEntry.mode !== "chat") continue;
+      if (!rule.match(ltKey)) continue;
+      validIds.add(rule.id(ltKey));
+    }
+    validByProvider[arbrProvider] = validIds;
+  }
+
+  const toDelete = [];
+  for (const [arbrProvider, validIds] of Object.entries(validByProvider)) {
+    const providerModels = await ModelEntry.find({ provider: arbrProvider, builtIn: false }, { id: 1 }).lean();
+    for (const m of providerModels) {
+      if (!validIds.has(m.id)) toDelete.push(m.id);
+    }
+  }
+  if (toDelete.length > 0) {
+    await ModelEntry.deleteMany({ id: { $in: toDelete }, builtIn: false });
+    for (const id of toDelete) existingIds.delete(id);
+    console.log(`[litellm] removed ${toDelete.length} stale models:`, toDelete);
   }
 
   // ── 2. Refresh pricing/specs on ALL models (including newly added) ─────────
