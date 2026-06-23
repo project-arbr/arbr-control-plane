@@ -23,6 +23,7 @@ const { toRouterConfig, getRouter } = require("../providers/router");
 const pricing = require("../pricing/registry");
 const ModelEntry = require("../models/ModelEntry");
 const CustomProvider = require("../models/CustomProvider");
+const Settings = require("../models/Settings");
 const secrets = require("../security/secrets");
 const { config } = require("../config");
 
@@ -587,7 +588,16 @@ router.put("/routing-mode", async (req, res, next) => {
 
 // ── AI routing policy (task → model, generated/editable) ──
 router.get("/ai-policy", async (_req, res, next) => {
-  try { res.json(await aiPolicy.describe()); } catch (e) { next(e); }
+  try {
+    const s = await Settings.get();
+    const storedVer = s.aiPolicy?.capabilityVersion ?? null;
+    // Auto-regen when: assignments already exist (not a fresh install) AND version is stale.
+    if (storedVer !== aiPolicy.CAPABILITY_VERSION && s.aiPolicy?.assignments) {
+      const { router: r, eff } = await getRouter().catch(() => ({}));
+      if (r) await aiPolicy.regenerate({ router: r, eff });
+    }
+    res.json(await aiPolicy.describe());
+  } catch (e) { next(e); }
 });
 
 router.put("/ai-policy", async (req, res, next) => {

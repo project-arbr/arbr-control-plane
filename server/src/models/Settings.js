@@ -14,11 +14,15 @@ const settingsSchema = new mongoose.Schema(
     // When true, /v1/* requires a valid gateway API key (default off — backward compatible).
     requireApiKey: { type: Boolean, default: false },
     autoRouting: { type: Boolean, default: false }, // legacy — kept for migration
+    // Tracks the last applied seedModels.js version. registry.init() re-seeds when this
+    // differs from SEED_VERSION in seedModels.js.
+    modelSeedVersion: { type: Number, default: null },
     // AI-generated routing policy: task type → model id, editable + regeneratable.
     aiPolicy: {
-      assignments: { type: mongoose.Schema.Types.Mixed, default: null },
-      generatedAt: { type: Date, default: null },
-      generatorModel: { type: String, default: null },
+      assignments:       { type: mongoose.Schema.Types.Mixed, default: null },
+      generatedAt:       { type: Date,   default: null },
+      generatorModel:    { type: String, default: null },
+      capabilityVersion: { type: Number, default: null },
     },
     // Editable knobs for the automated-routing cost guardrail. null fields fall back
     // to the hardcoded defaults in pricing/table.js (so behaviour is unchanged until edited).

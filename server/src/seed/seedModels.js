@@ -1,11 +1,15 @@
 // Seed the ModelEntry collection with built-in model pricing.
 // Run standalone: node server/src/seed/seedModels.js
-// Also called automatically by pricing/registry.js on first boot (empty collection).
+// Also called automatically by pricing/registry.js on server start when SEED_VERSION changes.
 //
 // Upsert strategy:
 //   - Model not in DB          → create with builtIn: true
 //   - Model in DB, builtIn     → update pricing/label (prices change over time)
 //   - Model in DB, !builtIn    → skip (user-created, never overwritten)
+//
+// HOW TO UPDATE: change model data below, then increment SEED_VERSION by 1.
+// registry.init() will detect the version mismatch on next server start and re-seed automatically.
+const SEED_VERSION = 2;
 
 const SEED = [
   // ── Anthropic ──
@@ -95,4 +99,4 @@ if (require.main === module) {
   }).catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { SEED, run };
+module.exports = { SEED, run, SEED_VERSION };

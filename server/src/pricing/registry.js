@@ -4,7 +4,8 @@
 // after any write via reload().
 
 const ModelEntry = require("../models/ModelEntry");
-const { run: seedModels } = require("../seed/seedModels");
+const Settings = require("../models/Settings");
+const { run: seedModels, SEED_VERSION } = require("../seed/seedModels");
 
 // Task types that are "cheap work" — safe candidates for a lighter model.
 const CHEAP_TASK_TYPES = new Set([
@@ -41,10 +42,19 @@ async function _load() {
 }
 
 // Called once at server boot after mongoose.connect().
-// Seeds the collection from seedModels if empty, then warms the cache.
+// Re-seeds when SEED_VERSION has changed (or collection is empty), then warms the cache.
 async function init() {
+  const s     = await Settings.get();
   const count = await ModelEntry.countDocuments();
-  if (count === 0) await seedModels(ModelEntry);
+  if (count === 0 || s.modelSeedVersion !== SEED_VERSION) {
+    await seedModels(ModelEntry);
+    await Settings.findOneAndUpdate(
+      { key: "global" },
+      { $set: { modelSeedVersion: SEED_VERSION } },
+      { upsert: true }
+    );
+    console.log(`[registry] models seeded to version ${SEED_VERSION}`);
+  }
   await _load();
   console.log(`[registry] ${Object.keys(_cache).length} models loaded`);
 }

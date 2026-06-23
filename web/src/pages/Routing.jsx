@@ -172,19 +172,40 @@ function PolicyEditor({ models }) {
   );
 }
 
+const TIER_CONFIG = [
+  { tier: "light",   label: "Light",   badge: "teal",   desc: "Fast, cheap, low-latency tasks" },
+  { tier: "mid",     label: "Medium",  badge: "indigo",  desc: "Balanced capability and cost" },
+  { tier: "premium", label: "Complex", badge: "violet",  desc: "Deep reasoning and multi-step tasks" },
+];
+
+function Chevron({ open }) {
+  return (
+    <svg className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
 function AiPolicyEditor({ models }) {
   const [pol, setPol] = useState(null);
   const [assignments, setAssignments] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [expanded, setExpanded] = useState({ light: false, mid: false, premium: false });
 
   const load = () => api.aiPolicy().then((p) => { setPol(p); setAssignments({ ...p.assignments }); }).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, []);
   if (!pol) return <Spinner />;
 
   const regen = async () => {
-    setBusy(true); setMsg("Generating with the default model…");
-    try { const p = await api.regenerateAiPolicy(); setPol(p); setAssignments({ ...p.assignments }); setMsg("Generated"); setTimeout(() => setMsg(null), 1500); }
+    setBusy(true); setMsg("Generating policy with AI…");
+    try {
+      const p = await api.regenerateAiPolicy();
+      setPol(p);
+      setAssignments({ ...p.assignments });
+      setMsg(p.generatorModel ? `Done — via ${p.generatorModel}` : "Done");
+      setTimeout(() => setMsg(null), 3000);
+    }
     catch (e) { setMsg(e.message); }
     finally { setBusy(false); }
   };
@@ -195,48 +216,113 @@ function AiPolicyEditor({ models }) {
     finally { setBusy(false); }
   };
   const setOne = (t, model) => setAssignments((a) => ({ ...a, [t]: model }));
+  const toggleTier = (tier) => setExpanded((e) => ({ ...e, [tier]: !e[tier] }));
+
+  // Group catalog tasks by tier; catalog comes from API so old servers return undefined.
+  const catalog = pol.taskCatalog || [];
+  const byTier = { light: [], mid: [], premium: [] };
+  for (const task of catalog) {
+    if (byTier[task.tier]) byTier[task.tier].push(task);
+  }
+
+  // The model most frequently assigned to tasks within a tier (shown in header).
+  function dominantModel(tier) {
+    const counts = {};
+    for (const task of (byTier[tier] || [])) {
+      const m = assignments[task.id];
+      if (m) counts[m] = (counts[m] || 0) + 1;
+    }
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : null;
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <button className="btn-secondary" disabled={busy} onClick={regen}>{busy ? "Working…" : "Regenerate with AI"}</button>
+        <button className="btn-secondary" disabled={busy} onClick={regen}>{busy ? "Generating…" : "Generate with AI"}</button>
         <button className="btn-outline" disabled={busy} onClick={save}>Save edits</button>
-        {pol.generatedAt && <span className="text-xs text-gray-500">generated {new Date(pol.generatedAt).toLocaleString()}{pol.generatorModel ? ` · ${pol.generatorModel}` : ""}</span>}
+        {pol.generatedAt && (
+          <span className="text-xs text-gray-500">
+            generated {new Date(pol.generatedAt).toLocaleString()}{pol.generatorModel ? ` · ${pol.generatorModel}` : ""}
+          </span>
+        )}
         {msg && <span className="text-xs text-gray-500">{msg}</span>}
       </div>
 
-      {pol.customTaskTypes.length > 0 && (
-        <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-          Custom task types seen in traffic (the AI is given these on regenerate): {pol.customTaskTypes.join(", ")}
+      {pol.unmapped.length > 0 && (
+        <div className="text-xs text-amber-700">
+          Unmapped tasks (using default model until you regenerate): {pol.unmapped.join(", ")}
         </div>
       )}
-      {pol.unmapped.length > 0 && (
-        <div className="text-xs text-amber-700">Unmapped (using the default model until you regenerate): {pol.unmapped.join(", ")}</div>
-      )}
 
-      <table className="w-full table-fixed text-sm">
-        <colgroup><col className="w-1/2" /><col className="w-1/2" /></colgroup>
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-400">
-            <th className="py-1 font-medium">Task type</th><th className="py-1 font-medium">Model</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pol.taskTypes.map((t) => (
-            <tr key={t} className="border-t border-gray-100">
-              <td className="py-1.5 text-gyde-charcoal">
-                {t} {!pol.builtInTaskTypes.includes(t) && <Badge tone="indigo">custom</Badge>}
-              </td>
-              <td className="py-1.5">
-                <select className="input w-full max-w-xs" value={assignments[t] || ""} onChange={(e) => setOne(t, e.target.value)}>
-                  <option value="">(use default model)</option>
-                  {models.map((m) => <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>)}
-                </select>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Three expandable tier cards */}
+      <div className="space-y-2">
+        {TIER_CONFIG.map(({ tier, label, badge, desc }) => {
+          const tasks = byTier[tier] || [];
+          const dominant = dominantModel(tier);
+          const isOpen = expanded[tier];
+          return (
+            <div key={tier} className="overflow-hidden rounded-lg border border-gray-200">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                onClick={() => toggleTier(tier)}
+              >
+                <div className="flex items-center gap-3">
+                  <Badge tone={badge}>{label}</Badge>
+                  <span className="text-sm font-medium text-gyde-charcoal">{tasks.length} tasks</span>
+                  <span className="hidden text-xs text-gray-400 sm:inline">{desc}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {dominant && <span className="hidden truncate font-mono text-xs text-gray-500 sm:block max-w-[180px]">{dominant}</span>}
+                  <Chevron open={isOpen} />
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="border-t border-gray-100">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-400">
+                        <th className="w-1/4 px-4 py-2 font-medium">Task</th>
+                        <th className="px-4 py-2 font-medium">Description</th>
+                        <th className="w-60 px-4 py-2 font-medium">Model</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasks.map((task) => (
+                        <tr key={task.id} className="border-t border-gray-100">
+                          <td className="px-4 py-2 font-medium text-gyde-charcoal">{task.label}</td>
+                          <td className="px-4 py-2 text-xs text-gray-500">{task.description}</td>
+                          <td className="px-4 py-2">
+                            <select
+                              className="input w-full"
+                              value={assignments[task.id] || ""}
+                              onChange={(e) => setOne(task.id, e.target.value)}
+                            >
+                              <option value="">(use default)</option>
+                              {models.map((m) => (
+                                <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Custom task types observed in traffic but outside the built-in catalog */}
+      {pol.customTaskTypes.length > 0 && (
+        <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+          Custom task types seen in traffic (included on regenerate): {pol.customTaskTypes.join(", ")}
+        </div>
+      )}
     </div>
   );
 }
