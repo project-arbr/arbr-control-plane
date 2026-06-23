@@ -664,4 +664,37 @@ router.get("/livebench/status", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── LMSYS Arena Elo sync ─────────────────────────────────────────────────────
+router.post("/lmsys/sync", async (_req, res, next) => {
+  try {
+    const result = await require("../lmsys/sync").run();
+    await pricing.reload();
+    aiPolicy.invalidate();
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.get("/lmsys/status", async (_req, res, next) => {
+  try {
+    const s = await Settings.get();
+    res.json({ syncedAt: s.lmsysSyncedAt || null, version: s.lmsysVersion || null });
+  } catch (e) { next(e); }
+});
+
+// ── LiteLLM pricing/spec sync ────────────────────────────────────────────────
+router.post("/litellm/sync", async (_req, res, next) => {
+  try {
+    const result = await require("../litellm/sync").run();
+    await pricing.reload();
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.get("/litellm/status", async (_req, res, next) => {
+  try {
+    const s = await Settings.get();
+    res.json({ syncedAt: s.litellmSyncedAt || null, version: s.litellmVersion || null });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

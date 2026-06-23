@@ -13,8 +13,9 @@
 // Models not present in LiveBench are skipped (they fall back to the hardcoded
 // MODEL_CAPABILITIES table in aiPolicy.js).
 
-const ModelEntry = require("../models/ModelEntry");
-const Settings   = require("../models/Settings");
+const ModelEntry                 = require("../models/ModelEntry");
+const Settings                   = require("../models/Settings");
+const { normalize, prefixMatch } = require("./normalize");
 
 // Known release dates in descending order. Used as fallback when GitHub API
 // is unavailable. Extend this list when LiveBench publishes a new leaderboard.
@@ -68,22 +69,7 @@ async function fetchCsv(date) {
   return { version: date, rows };
 }
 
-// Normalize a model name for fuzzy matching:
-//   - lowercase
-//   - strip effort qualifiers (-low-effort, -medium-effort, -high-effort, -xhigh-effort)
-//   - strip date patterns  (-YYYY-MM-DD  or  -MMDD at the end)
-//   - strip common suffixes (-preview, -snapshot, -instruct, -v1, -v2, etc.)
-function normalize(name) {
-  return name
-    .toLowerCase()
-    .replace(/-(?:x?high|medium|low)-effort$/i, "")
-    .replace(/-\d{4}-\d{2}-\d{2}$/, "")
-    .replace(/-\d{4}$/, "")
-    .replace(/-\d{2}-\d{2}$/, "")
-    .replace(/-(?:preview|snapshot|instruct|v\d+)$/i, "")
-    .replace(/-\d{8}$/, "")
-    .trim();
-}
+// normalize() and prefixMatch() imported from ./normalize.js
 
 // Map a LiveBench row's category averages to Arbr's 7 capability dimensions.
 // All values normalized to 0–1; null fields are treated as 0 in calculations.
@@ -165,10 +151,7 @@ async function run() {
     let entry = lbIndex[ourKey];
     if (!entry) {
       for (const [lbKey, lbEntry] of Object.entries(lbIndex)) {
-        if (lbKey.startsWith(ourKey) || ourKey.startsWith(lbKey)) {
-          entry = lbEntry;
-          break;
-        }
+        if (prefixMatch(ourKey, lbKey)) { entry = lbEntry; break; }
       }
     }
 

@@ -24,6 +24,11 @@ const modelEntrySchema = new mongoose.Schema(
     },
     livebenchSyncedAt:  { type: Date,   default: null },
     livebenchModelName: { type: String, default: null },
+    lmsysSyncedAt:      { type: Date,   default: null },
+    lmsysModelName:     { type: String, default: null },
+    litellmSyncedAt:    { type: Date,   default: null },
+    supportsVision:     { type: Boolean, default: null },
+    supportsReasoning:  { type: Boolean, default: null },
   },
   { timestamps: true }
 );

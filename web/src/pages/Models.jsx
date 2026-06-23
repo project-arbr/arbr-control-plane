@@ -70,19 +70,24 @@ function ModelBenchmarkPanel({ model }) {
   return (
     <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">LiveBench scores</span>
-        {model.livebenchModelName && (
-          <span className="text-xs text-gray-400 font-mono truncate max-w-[240px]" title={model.livebenchModelName}>
-            {model.livebenchModelName}
-          </span>
-        )}
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {model.livebenchSyncedAt ? "LiveBench scores" : "LMSYS Arena score (general only)"}
+        </span>
+        <span className="text-xs text-gray-400 font-mono truncate max-w-[240px]"
+              title={model.livebenchModelName || model.lmsysModelName}>
+          {model.livebenchModelName || model.lmsysModelName || ""}
+        </span>
       </div>
       {BENCH_DIMS.map((d) => (
         <BenchmarkBar key={d} dim={d} value={caps[d]} />
       ))}
-      {model.livebenchSyncedAt && (
-        <p className="text-xs text-gray-400 pt-1">Synced {new Date(model.livebenchSyncedAt).toLocaleString()}</p>
-      )}
+      <p className="text-xs text-gray-400 pt-1">
+        {model.livebenchSyncedAt
+          ? `LiveBench · synced ${new Date(model.livebenchSyncedAt).toLocaleString()}`
+          : model.lmsysSyncedAt
+            ? `LMSYS Arena (Elo-based) · synced ${new Date(model.lmsysSyncedAt).toLocaleString()}`
+            : ""}
+      </p>
     </div>
   );
 }
@@ -97,18 +102,33 @@ function ModelMetaPanel({ model }) {
     model.contextWindow            && ["Context window", fmtCtx(model.contextWindow)],
   ].filter(Boolean);
 
-  if (!rows.length) return null;
+  const chips = [
+    model.supportsReasoning === true  && "Reasoning",
+    model.supportsVision    === true  && "Vision",
+  ].filter(Boolean);
+
+  if (!rows.length && !chips.length) return null;
 
   return (
-    <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex flex-col">
-            <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</dt>
-            <dd className="text-gray-800">{value}</dd>
-          </div>
-        ))}
-      </dl>
+    <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-3">
+      {rows.length > 0 && (
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex flex-col">
+              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</dt>
+              <dd className="text-gray-800">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {chips.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Capabilities</span>
+          {chips.map((c) => (
+            <span key={c} className="rounded-full bg-gyde-green-50 border border-gyde-green-200 px-2 py-0.5 text-xs font-medium text-gyde-green-700">{c}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -798,6 +818,8 @@ export default function Models() {
   const [selected, setSelected]     = useState(null);
   const [loading, setLoading]       = useState(true);
   const [lbStatus, setLbStatus]     = useState(null);
+  const [lmsysStatus, setLmsysStatus] = useState(null);
+  const [ltStatus, setLtStatus]     = useState(null);
   const [syncing, setSyncing]       = useState(false);
   const [syncMsg, setSyncMsg]       = useState(null);
 
@@ -815,25 +837,31 @@ export default function Models() {
     } catch { setLoading(false); }
   }, []);
 
-  const loadLbStatus = useCallback(() => {
+  const loadStatuses = useCallback(() => {
     api.livebenchStatus().then(setLbStatus).catch(() => {});
+    api.lmsysStatus().then(setLmsysStatus).catch(() => {});
+    api.litellmStatus().then(setLtStatus).catch(() => {});
   }, []);
 
-  const syncLivebench = async () => {
-    setSyncing(true); setSyncMsg("Syncing from LiveBench…");
+  const makeSyncer = (apiFn, label, setStatus) => async () => {
+    setSyncing(true); setSyncMsg(`Syncing from ${label}…`);
     try {
-      const result = await api.syncLivebench();
-      setLbStatus({ syncedAt: new Date().toISOString(), version: result.version });
-      setSyncMsg(`${result.matched} of ${result.total} models updated · v${result.version?.replace(/_/g, "-")}`);
+      const result = await apiFn();
+      setStatus({ syncedAt: new Date().toISOString(), version: result.version });
+      setSyncMsg(`${label}: ${result.matched} of ${result.total} models updated`);
       await load();
       setTimeout(() => setSyncMsg(null), 6000);
     } catch (e) {
-      setSyncMsg(`Sync failed: ${e.message}`);
+      setSyncMsg(`${label} sync failed: ${e.message}`);
       setTimeout(() => setSyncMsg(null), 5000);
     } finally { setSyncing(false); }
   };
 
-  useEffect(() => { load(); loadLbStatus(); }, [load, loadLbStatus]);
+  const syncLivebench = makeSyncer(api.syncLivebench, "LiveBench", setLbStatus);
+  const syncLmsys     = makeSyncer(api.syncLmsys,     "LMSYS",     setLmsysStatus);
+  const syncLitellm   = makeSyncer(api.syncLitellm,   "LiteLLM",   setLtStatus);
+
+  useEffect(() => { load(); loadStatuses(); }, [load, loadStatuses]);
 
   // Auto-select first provider once loaded
   const didAutoSelect = useRef(false);
@@ -859,17 +887,21 @@ export default function Models() {
             Manage provider connections and the model registry.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <button className={BTN_GHOST} disabled={syncing} onClick={syncLivebench}>
-            {syncing ? "Syncing…" : "Sync from LiveBench"}
-          </button>
+        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button className={BTN_GHOST} disabled={syncing} onClick={syncLivebench}>Sync LiveBench</button>
+            <button className={BTN_GHOST} disabled={syncing} onClick={syncLmsys}>Sync LMSYS</button>
+            <button className={BTN_GHOST} disabled={syncing} onClick={syncLitellm}>Sync LiteLLM pricing</button>
+          </div>
           {syncMsg
-            ? <span className="text-xs text-gray-500">{syncMsg}</span>
-            : lbStatus?.syncedAt
-              ? <span className="text-xs text-gray-400">
-                  LiveBench: {new Date(lbStatus.syncedAt).toLocaleDateString()}{lbStatus.version ? ` · v${lbStatus.version.replace(/_/g, "-")}` : ""}
-                </span>
-              : <span className="text-xs text-gray-400">LiveBench: not synced</span>
+            ? <span className="text-xs text-gray-500 text-right">{syncMsg}</span>
+            : <span className="text-xs text-gray-400 text-right">
+                {[
+                  lbStatus?.syncedAt    && `LiveBench ${new Date(lbStatus.syncedAt).toLocaleDateString()}`,
+                  lmsysStatus?.syncedAt && `LMSYS ${new Date(lmsysStatus.syncedAt).toLocaleDateString()}`,
+                  ltStatus?.syncedAt    && `LiteLLM ${new Date(ltStatus.syncedAt).toLocaleDateString()}`,
+                ].filter(Boolean).join(" · ") || "Not yet synced"}
+              </span>
           }
         </div>
       </div>

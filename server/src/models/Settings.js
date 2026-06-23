@@ -41,6 +41,10 @@ const settingsSchema = new mongoose.Schema(
     defaultModel: { type: String, default: null },
     livebenchSyncedAt: { type: Date,   default: null },
     livebenchVersion:  { type: String, default: null },
+    lmsysSyncedAt:     { type: Date,   default: null },
+    lmsysVersion:      { type: String, default: null },
+    litellmSyncedAt:   { type: Date,   default: null },
+    litellmVersion:    { type: String, default: null },
   },
   { collection: "settings" }
 );

@@ -73,8 +73,12 @@ export const api = {
   setAiPolicy: (assignments) => req("/ai-policy", { method: "PUT", body: JSON.stringify({ assignments }) }),
   regenerateAiPolicy: () => req("/ai-policy/regenerate", { method: "POST" }),
 
-  syncLivebench:   () => req("/livebench/sync", { method: "POST" }),
+  syncLivebench:   () => req("/livebench/sync",  { method: "POST" }),
   livebenchStatus: () => req("/livebench/status"),
+  syncLmsys:       () => req("/lmsys/sync",      { method: "POST" }),
+  lmsysStatus:     () => req("/lmsys/status"),
+  syncLitellm:     () => req("/litellm/sync",    { method: "POST" }),
+  litellmStatus:   () => req("/litellm/status"),
 
   clearCache: () => req("/cache/clear", { method: "POST" }),
 
