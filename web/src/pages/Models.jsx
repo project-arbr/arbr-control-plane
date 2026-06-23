@@ -817,11 +817,9 @@ export default function Models() {
   const [models, setModels]         = useState([]);
   const [selected, setSelected]     = useState(null);
   const [loading, setLoading]       = useState(true);
-  const [lbStatus, setLbStatus]     = useState(null);
-  const [lmsysStatus, setLmsysStatus] = useState(null);
-  const [ltStatus, setLtStatus]     = useState(null);
-  const [syncing, setSyncing]       = useState(false);
-  const [syncMsg, setSyncMsg]       = useState(null);
+  const [benchStatus, setBenchStatus] = useState(null);
+  const [syncing, setSyncing]         = useState(false);
+  const [syncMsg, setSyncMsg]         = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -837,31 +835,28 @@ export default function Models() {
     } catch { setLoading(false); }
   }, []);
 
-  const loadStatuses = useCallback(() => {
-    api.livebenchStatus().then(setLbStatus).catch(() => {});
-    api.lmsysStatus().then(setLmsysStatus).catch(() => {});
-    api.litellmStatus().then(setLtStatus).catch(() => {});
+  const loadBenchStatus = useCallback(() => {
+    api.benchmarksStatus().then(setBenchStatus).catch(() => {});
   }, []);
 
-  const makeSyncer = (apiFn, label, setStatus) => async () => {
-    setSyncing(true); setSyncMsg(`Syncing from ${label}…`);
+  const syncBenchmarks = async () => {
+    setSyncing(true); setSyncMsg("Syncing benchmarks…");
     try {
-      const result = await apiFn();
-      setStatus({ syncedAt: new Date().toISOString(), version: result.version });
-      setSyncMsg(`${label}: ${result.matched} of ${result.total} models updated`);
+      const result = await api.syncBenchmarks();
+      setBenchStatus({ lastSyncedAt: new Date().toISOString() });
+      const lb = result.livebench?.matched ?? 0;
+      const ls = result.lmsys?.matched     ?? 0;
+      const lt = result.litellm?.matched   ?? 0;
+      setSyncMsg(`Updated: ${lt} pricing · ${lb} benchmark scores · ${ls} LMSYS scores`);
       await load();
-      setTimeout(() => setSyncMsg(null), 6000);
+      setTimeout(() => setSyncMsg(null), 7000);
     } catch (e) {
-      setSyncMsg(`${label} sync failed: ${e.message}`);
+      setSyncMsg(`Sync failed: ${e.message}`);
       setTimeout(() => setSyncMsg(null), 5000);
     } finally { setSyncing(false); }
   };
 
-  const syncLivebench = makeSyncer(api.syncLivebench, "LiveBench", setLbStatus);
-  const syncLmsys     = makeSyncer(api.syncLmsys,     "LMSYS",     setLmsysStatus);
-  const syncLitellm   = makeSyncer(api.syncLitellm,   "LiteLLM",   setLtStatus);
-
-  useEffect(() => { load(); loadStatuses(); }, [load, loadStatuses]);
+  useEffect(() => { load(); loadBenchStatus(); }, [load, loadBenchStatus]);
 
   // Auto-select first provider once loaded
   const didAutoSelect = useRef(false);
@@ -887,20 +882,16 @@ export default function Models() {
             Manage provider connections and the model registry.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <button className={BTN_GHOST} disabled={syncing} onClick={syncLivebench}>Sync LiveBench</button>
-            <button className={BTN_GHOST} disabled={syncing} onClick={syncLmsys}>Sync LMSYS</button>
-            <button className={BTN_GHOST} disabled={syncing} onClick={syncLitellm}>Sync LiteLLM pricing</button>
-          </div>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <button className={BTN_GHOST} disabled={syncing} onClick={syncBenchmarks}>
+            {syncing ? "Syncing…" : "Sync Benchmarks"}
+          </button>
           {syncMsg
             ? <span className="text-xs text-gray-500 text-right">{syncMsg}</span>
             : <span className="text-xs text-gray-400 text-right">
-                {[
-                  lbStatus?.syncedAt    && `LiveBench ${new Date(lbStatus.syncedAt).toLocaleDateString()}`,
-                  lmsysStatus?.syncedAt && `LMSYS ${new Date(lmsysStatus.syncedAt).toLocaleDateString()}`,
-                  ltStatus?.syncedAt    && `LiteLLM ${new Date(ltStatus.syncedAt).toLocaleDateString()}`,
-                ].filter(Boolean).join(" · ") || "Not yet synced"}
+                {benchStatus?.lastSyncedAt
+                  ? `Last synced ${new Date(benchStatus.lastSyncedAt).toLocaleString()}`
+                  : "Not yet synced"}
               </span>
           }
         </div>

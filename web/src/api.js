@@ -73,6 +73,9 @@ export const api = {
   setAiPolicy: (assignments) => req("/ai-policy", { method: "PUT", body: JSON.stringify({ assignments }) }),
   regenerateAiPolicy: () => req("/ai-policy/regenerate", { method: "POST" }),
 
+  syncBenchmarks:   () => req("/benchmarks/sync",  { method: "POST" }),
+  benchmarksStatus: () => req("/benchmarks/status"),
+  // individual sync endpoints kept for debugging
   syncLivebench:   () => req("/livebench/sync",  { method: "POST" }),
   livebenchStatus: () => req("/livebench/status"),
   syncLmsys:       () => req("/lmsys/sync",      { method: "POST" }),
