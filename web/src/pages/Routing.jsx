@@ -191,7 +191,7 @@ function AiPolicyEditor({ models }) {
   const [assignments, setAssignments] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [expanded, setExpanded] = useState({ light: false, mid: false, premium: false });
+  const [expanded, setExpanded] = useState({ light: false, mid: false, premium: false, custom: true });
 
   const load = () => api.aiPolicy().then((p) => { setPol(p); setAssignments({ ...p.assignments }); }).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, []);
@@ -317,12 +317,68 @@ function AiPolicyEditor({ models }) {
         })}
       </div>
 
-      {/* Custom task types observed in traffic but outside the built-in catalog */}
-      {pol.customTaskTypes.length > 0 && (
-        <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-          Custom task types seen in traffic (included on regenerate): {pol.customTaskTypes.join(", ")}
-        </div>
-      )}
+      {/* Custom task types observed in traffic — shown as a 4th expandable tier */}
+      {pol.customTaskTypes.length > 0 && (() => {
+        const dominated = Object.entries(
+          pol.customTaskTypes.reduce((acc, t) => { const m = assignments[t]; if (m) acc[m] = (acc[m] || 0) + 1; return acc; }, {})
+        ).sort((a, b) => b[1] - a[1])[0];
+        return (
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-gray-50"
+              onClick={() => toggleTier("custom")}
+            >
+              <div className="flex items-center gap-3">
+                <Badge tone="charcoal">Custom</Badge>
+                <span className="text-sm font-medium text-gyde-charcoal">{pol.customTaskTypes.length} tasks</span>
+                <span className="hidden text-xs text-gray-400 sm:inline">Task types seen in traffic, not in the built-in catalog</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {dominated && <span className="hidden truncate font-mono text-xs text-gray-500 sm:block max-w-[180px]">{dominated[0]}</span>}
+                <Chevron open={expanded.custom} />
+              </div>
+            </button>
+            {expanded.custom && (
+              <div className="border-t border-gray-100">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-400">
+                      <th className="w-1/4 px-4 py-2 font-medium">Task type</th>
+                      <th className="px-4 py-2 font-medium">Status</th>
+                      <th className="w-60 px-4 py-2 font-medium">Model</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pol.customTaskTypes.map((taskId) => (
+                      <tr key={taskId} className="border-t border-gray-100">
+                        <td className="px-4 py-2 font-mono text-sm font-medium text-gyde-charcoal">{taskId}</td>
+                        <td className="px-4 py-2 text-xs text-gray-500">
+                          {assignments[taskId]
+                            ? "AI-evaluated · scored as mid tier"
+                            : <span className="text-amber-600">Unassigned — click Generate with AI</span>}
+                        </td>
+                        <td className="px-4 py-2">
+                          <select
+                            className="input w-full"
+                            value={assignments[taskId] || ""}
+                            onChange={(e) => setOne(taskId, e.target.value)}
+                          >
+                            <option value="">(use default)</option>
+                            {models.map((m) => (
+                              <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
