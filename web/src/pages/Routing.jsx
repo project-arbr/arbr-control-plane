@@ -192,11 +192,24 @@ function AiPolicyEditor({ models }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [expanded, setExpanded] = useState({ light: false, mid: false, premium: false, custom: true });
+  const [lbStatus, setLbStatus] = useState(null);
 
   const load = () => api.aiPolicy().then((p) => { setPol(p); setAssignments({ ...p.assignments }); }).catch((e) => setMsg(e.message));
-  useEffect(() => { load(); }, []);
+  const loadLbStatus = () => api.livebenchStatus().then(setLbStatus).catch(() => {});
+  useEffect(() => { load(); loadLbStatus(); }, []);
   if (!pol) return <Spinner />;
 
+  const syncLivebench = async () => {
+    setBusy(true); setMsg("Syncing from LiveBench…");
+    try {
+      const result = await api.syncLivebench();
+      setLbStatus({ syncedAt: new Date().toISOString(), version: result.version });
+      setMsg(`LiveBench: ${result.matched} of ${result.total} models updated (v${result.version?.replace(/_/g, "-")})`);
+      setTimeout(() => setMsg(null), 5000);
+    }
+    catch (e) { setMsg(`Sync failed: ${e.message}`); }
+    finally { setBusy(false); }
+  };
   const regen = async () => {
     setBusy(true); setMsg("Generating policy with AI…");
     try {
@@ -240,6 +253,7 @@ function AiPolicyEditor({ models }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn-secondary" disabled={busy} onClick={regen}>{busy ? "Generating…" : "Generate with AI"}</button>
+        <button className="btn-outline" disabled={busy} onClick={syncLivebench}>Sync from LiveBench</button>
         <button className="btn-outline" disabled={busy} onClick={save}>Save edits</button>
         {pol.generatedAt && (
           <span className="text-xs text-gray-500">
@@ -247,6 +261,11 @@ function AiPolicyEditor({ models }) {
           </span>
         )}
         {msg && <span className="text-xs text-gray-500">{msg}</span>}
+      </div>
+      <div className="text-xs text-gray-400">
+        {lbStatus?.syncedAt
+          ? `LiveBench scores: synced ${new Date(lbStatus.syncedAt).toLocaleString()}${lbStatus.version ? ` · v${lbStatus.version.replace(/_/g, "-")}` : ""}`
+          : "LiveBench scores: not synced — using built-in capability scores"}
       </div>
 
       {pol.unmapped.length > 0 && (

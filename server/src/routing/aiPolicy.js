@@ -199,7 +199,9 @@ const COST_SENSITIVITY = { light: 0.20, mid: 0.25, premium: 0.10 };
 // Scoring function: returns weighted capability score and cost efficiency ratio.
 // costScore = cheapestInPool / model.cost  →  cheapest model = 1.0, expensive → near 0.
 function scoreModel(taskCaps, model, cheapestCost) {
-  const caps = MODEL_CAPABILITIES[model.id] || deriveCapabilities(model);
+  const caps = (model.capabilities?.coding != null ? model.capabilities : null)
+            || MODEL_CAPABILITIES[model.id]
+            || deriveCapabilities(model);
   let weighted = 0, totalWeight = 0;
   for (const d of DIMS) {
     const w = taskCaps[d] || 0;

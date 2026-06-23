@@ -647,4 +647,21 @@ router.put("/policy", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── LiveBench benchmark score sync ───────────────────────────────────────────
+router.post("/livebench/sync", async (_req, res, next) => {
+  try {
+    const result = await require("../livebench/sync").run();
+    await pricing.reload();
+    aiPolicy.invalidate();
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.get("/livebench/status", async (_req, res, next) => {
+  try {
+    const s = await Settings.get();
+    res.json({ syncedAt: s.livebenchSyncedAt || null, version: s.livebenchVersion || null });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

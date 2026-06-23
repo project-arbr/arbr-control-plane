@@ -13,6 +13,17 @@ const modelEntrySchema = new mongoose.Schema(
     bestUsedFor:   { type: String, default: "" },
     releaseDate:   { type: String, default: "" },
     contextWindow: { type: Number, default: null },
+    capabilities: {
+      coding:    { type: Number, default: null },
+      reasoning: { type: Number, default: null },
+      writing:   { type: Number, default: null },
+      analysis:  { type: Number, default: null },
+      language:  { type: Number, default: null },
+      general:   { type: Number, default: null },
+      data:      { type: Number, default: null },
+    },
+    livebenchSyncedAt:  { type: Date,   default: null },
+    livebenchModelName: { type: String, default: null },
   },
   { timestamps: true }
 );

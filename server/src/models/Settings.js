@@ -39,6 +39,8 @@ const settingsSchema = new mongoose.Schema(
     defaultProvider: { type: String, default: null },
     // Preferred default MODEL (applies to the default provider; null = that provider's built-in default).
     defaultModel: { type: String, default: null },
+    livebenchSyncedAt: { type: Date,   default: null },
+    livebenchVersion:  { type: String, default: null },
   },
   { collection: "settings" }
 );
