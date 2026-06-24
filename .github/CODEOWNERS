@@ -1,0 +1,8 @@
+# CODEOWNERS — auto-requests review from owners on every PR touching these paths.
+# Format: pattern  @github-username
+
+*               @shubham-gyde
+server/src/     @shubham-gyde
+web/src/        @shubham-gyde
+clients/        @shubham-gyde
+docs/           @shubham-gyde
