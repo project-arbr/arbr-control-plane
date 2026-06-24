@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbr-client"
-version = "0.2.0"
+version = "0.3.0"
 description = "Official Python client for the Arbr AI control-plane gateway — one function to route, observe, and govern every LLM call."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "Gyde" }]
 keywords = [
   "llm", "ai", "gateway", "routing", "control-plane",
