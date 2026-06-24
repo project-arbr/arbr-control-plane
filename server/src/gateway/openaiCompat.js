@@ -273,13 +273,22 @@ async function handleOpenAICompat(req, res) {
     throw err;
   }
 
-  // Budget enforcement.
+  // Budget enforcement — mirrors handleChat. SSE clients (LibreChat) need the error in stream
+  // format, otherwise the client spins forever waiting for the first data chunk.
   const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
   if (enf) {
     if (enf.action === "block") {
-      return res.status(429).json({
-        error: { message: "Budget cap exceeded — request blocked.", type: "rate_limit_error", code: "budget_exceeded" },
-      });
+      const msg = `Budget exceeded: ${capEngine.describeScope(enf.cap)} is over its `
+        + `${enf.cap.period === "day" ? "daily" : "monthly"} limit ($${enf.cap.limit}).`;
+      const errBody = { error: { message: msg, type: "rate_limit_error", code: "budget_exceeded" } };
+      if (body.stream) {
+        res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+        res.flushHeaders();
+        res.write(`data: ${JSON.stringify(errBody)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+      return res.status(429).json(errBody);
     }
     const target = pricing.suggestLightTarget(served.model);
     if (target) { served = { provider: target.provider, model: target.model }; routingDecision = "budget"; }

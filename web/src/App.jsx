@@ -9,6 +9,7 @@ import Requests from "./pages/Requests.jsx";
 import Settings from "./pages/Settings.jsx";
 import Docs from "./pages/Docs.jsx";
 import Models from "./pages/Models.jsx";
+import Budgets from "./pages/Budgets.jsx";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/requests" element={<Requests />} />
         <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
+        <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
         <Route path="/models" element={<Models />} />
         <Route path="/settings" element={<Settings onChange={refreshStatus} />} />
         <Route path="/docs" element={<Docs />} />
