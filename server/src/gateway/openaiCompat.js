@@ -15,10 +15,15 @@ const { PROVIDERS } = require("../config");
 // streaming) instead of round-tripping through LangChain, which drops everything but text.
 const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
 
-// Native providers whose LangChain adapter supports tools via .bindTools() (e.g.
-// ChatBedrockConverse). These are excluded from the 501 gate for tools so that tool
-// calls flow through the LangChain invocation path instead of being rejected.
+// Amazon Nova models on Bedrock support tools via ChatBedrockConverse.bindTools().
+// Other Bedrock models (DeepSeek R1, etc.) do not — they share the bedrock-nova provider
+// but the tool path must be gated to Nova model IDs to avoid silent failures.
 const NATIVE_TOOL_PROVIDERS = new Set(["bedrock-nova"]);
+function isNativeToolModel(providerId, modelId) {
+  if (!NATIVE_TOOL_PROVIDERS.has(providerId)) return false;
+  if (providerId === "bedrock-nova") return /amazon\.nova|nova-lite|nova-micro|nova-pro/i.test(modelId || "");
+  return true;
+}
 
 // Resolved chat-completions base URL for an OpenAI-compatible provider, or null if the provider
 // is native (anthropic/gemini/bedrock) and must use the LangChain path.
@@ -290,19 +295,28 @@ async function handleOpenAICompat(req, res) {
     const hasVision = body.messages.some(
       (m) => Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
-    const toolsUnsupported = hasTools && !NATIVE_TOOL_PROVIDERS.has(served.provider);
+    const toolsUnsupported = hasTools && !isNativeToolModel(served.provider, served.model);
     if (toolsUnsupported || hasVision) {
       const features = [toolsUnsupported && "tools", hasVision && "vision"].filter(Boolean).join(" and ");
-      return res.status(501).json({
+      const errBody = {
         error: {
           message:
-            `Provider "${served.provider}" does not support ${features} on /v1/chat/completions. ` +
+            `Model "${served.model}" does not support ${features} on /v1/chat/completions. ` +
             `Route to an OpenAI-compatible provider (openai, deepseek, moonshot, xai, groq), or ` +
-            `front Bedrock/Gemini with a LiteLLM proxy and configure it as the "openai" provider.`,
+            `front this provider with a LiteLLM proxy.`,
           type: "not_implemented_error",
           code: "capability_not_supported",
         },
-      });
+      };
+      // Return as SSE when the client expects a stream — otherwise it spins forever.
+      if (body.stream) {
+        res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+        res.flushHeaders();
+        res.write(`data: ${JSON.stringify(errBody)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+      return res.status(501).json(errBody);
     }
   }
 
@@ -317,7 +331,7 @@ async function handleOpenAICompat(req, res) {
   // LangChain's .bindTools(). Bypass the generic invoke path (which has no tool support)
   // and call the model directly. Always returns non-streaming — the tool_calls turn is
   // typically a single decision; the client sends the tool result back in a follow-up call.
-  if (NATIVE_TOOL_PROVIDERS.has(served.provider) && Array.isArray(body.tools) && body.tools.length > 0) {
+  if (isNativeToolModel(served.provider, served.model) && Array.isArray(body.tools) && body.tools.length > 0) {
     const start = Date.now();
     try {
       const model = router.getModel({
