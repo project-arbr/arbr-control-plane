@@ -91,7 +91,8 @@ const RULES = [
 
 function firstUserText(messages) {
   if (!Array.isArray(messages)) return "";
-  const m = messages.find((x) => (x.role || "user").toLowerCase() === "user") || messages[0];
+  const valid = messages.filter((x) => x != null);
+  const m = valid.find((x) => (x.role || "user").toLowerCase() === "user") || valid[0];
   if (!m) return "";
   if (typeof m.content === "string") return m.content;
   if (Array.isArray(m.content)) {

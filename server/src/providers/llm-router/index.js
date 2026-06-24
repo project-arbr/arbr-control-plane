@@ -176,11 +176,16 @@ function toLangchainMessages(messages) {
     return messages;
   }
   const { SystemMessage, HumanMessage, AIMessage } = require("@langchain/core/messages");
-  return messages.map((m) => {
+  // Filter nulls first — a malformed LibreChat multi-turn history can include null entries.
+  return messages.filter((m) => m != null).map((m) => {
     const role = (m.role || "user").toLowerCase();
-    if (role === "system") return new SystemMessage(m.content);
-    if (role === "assistant" || role === "ai") return new AIMessage(m.content);
-    return new HumanMessage(m.content);
+    const content = m.content || "";
+    if (role === "system") return new SystemMessage(content);
+    // Collapse tool/assistant turns in multi-turn history to a human message so native
+    // providers (gemini/bedrock) receive a clean conversation without tool_call artifacts.
+    if (role === "tool") return new HumanMessage(`[Search result]: ${content}`);
+    if (role === "assistant" || role === "ai") return new AIMessage(content);
+    return new HumanMessage(content);
   });
 }
 

@@ -65,9 +65,11 @@ function chunkText(chunk) {
 // Convert OpenAI-format messages to LangChain BaseMessages.
 // Handles all roles including "tool" (multi-turn tool results) and "assistant"
 // with tool_calls (prior assistant turns in a multi-turn tool flow).
+// Null/undefined elements are filtered out so a malformed LibreChat history
+// never causes "Cannot read properties of undefined (reading 'role')".
 function toLcMessages(messages) {
   const { SystemMessage, HumanMessage, AIMessage, ToolMessage } = require("@langchain/core/messages");
-  return messages.map((m) => {
+  return messages.filter((m) => m != null).map((m) => {
     const role = (m.role || "user").toLowerCase();
     if (role === "system") return new SystemMessage(m.content || "");
     if (role === "tool") {
