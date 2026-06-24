@@ -78,6 +78,41 @@ for await (const chunk of arbr.stream({ messages: "Tell me a story" })) {
 // generator return value is the full ChatResponse
 ```
 
+## `client.models() → Promise<ModelsResponse>`
+
+Returns all models available on this Arbr instance — only models whose provider is currently connected are included. Each entry carries a `toolCallSupported` flag so you can decide whether to enable the Search / function-calling UI for that model.
+
+```js
+const { data } = await arbr.models();
+
+// data is an array of ArbrModel:
+// {
+//   id: "gpt-4o",
+//   provider: "openai",
+//   label: "GPT-4o",
+//   tier: "premium",        // "light" | "mid" | "premium"
+//   inputPer1M: 2.5,        // USD per 1M input tokens
+//   outputPer1M: 10.0,
+//   toolCallSupported: true // false for Gemini, DeepSeek R1, GLM, etc.
+// }
+
+// Filter to only tool-capable models (for a Search toggle or function-calling UI):
+const toolModels = data.filter((m) => m.toolCallSupported);
+
+// Check before sending tools:
+const model = data.find((m) => m.id === "us.deepseek.r1-v1:0");
+if (model && !model.toolCallSupported) {
+  console.warn("Search is not supported for this model — disabling.");
+}
+```
+
+**`toolCallSupported` rules:**
+
+| Value | Providers / models |
+|-------|--------------------|
+| `true` | `openai`, `deepseek`, `groq`, `xai`, `moonshot`, `litellm` (all proxy tools natively); Amazon Nova models on Bedrock (`nova-lite`, `nova-micro`, `nova-pro`) |
+| `false` | `gemini`, `anthropic`, DeepSeek R1 on Bedrock (`us.deepseek.r1-v1:0`), GLM, Llama, and other non-Nova Bedrock models |
+
 ## `client.taskTypes() → Promise<TaskTypesResponse>`
 
 Returns all supported task types with their routing tier and a plain-English description. Use the `id` values as the `taskType` field in `chat()` calls to activate smart routing.

@@ -97,6 +97,42 @@ for chunk in arbr.stream("Tell me a story"):
     print(chunk, end="", flush=True)
 ```
 
+## `Client.models() → dict`
+
+Returns all models available on this Arbr instance — only models whose provider is currently connected are included. Each entry includes a `toolCallSupported` flag so you can disable Search / function-calling UI for models that don't support it.
+
+```python
+result = arbr.models()
+# result["data"] is a list of dicts:
+# {
+#   "id": "gpt-4o",
+#   "provider": "openai",
+#   "label": "GPT-4o",
+#   "tier": "premium",        # "light" | "mid" | "premium"
+#   "inputPer1M": 2.5,        # USD per 1M input tokens
+#   "outputPer1M": 10.0,
+#   "toolCallSupported": True # False for Gemini, DeepSeek R1, GLM, etc.
+# }
+
+# Async variant:
+result = await arbr.amodels()
+
+# Filter to models that support tool/function calling:
+tool_models = [m for m in result["data"] if m["toolCallSupported"]]
+
+# Guard before enabling Search toggle:
+models_by_id = {m["id"]: m for m in result["data"]}
+if not models_by_id.get("us.deepseek.r1-v1:0", {}).get("toolCallSupported"):
+    print("Search disabled for DeepSeek R1")
+```
+
+**`toolCallSupported` rules:**
+
+| Value | Providers / models |
+|-------|--------------------|
+| `True` | `openai`, `deepseek`, `groq`, `xai`, `moonshot`, `litellm` (all proxy tools natively); Amazon Nova models on Bedrock (`nova-lite`, `nova-micro`, `nova-pro`) |
+| `False` | `gemini`, `anthropic`, DeepSeek R1 on Bedrock (`us.deepseek.r1-v1:0`), GLM, Llama, and other non-Nova Bedrock models |
+
 ## `Client.task_types() → dict`
 
 Returns all supported task types with routing tier and description. Use the `id` values as `task_type` in `chat()` calls to activate smart routing.
