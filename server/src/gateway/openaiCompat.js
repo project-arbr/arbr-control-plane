@@ -379,66 +379,31 @@ async function handleOpenAICompat(req, res) {
   }
 
   if (body.stream) {
-    // — SSE streaming ——————————————————————————————————————————————————————————
+    // — SSE streaming for native providers (gemini, anthropic, bedrock-nova) ——————————
+    // LangChain's model.stream() for thinking models (Gemini 2.5 Pro/Flash, Claude 3.x)
+    // filters out thinking tokens per-chunk, producing only the short final-answer text
+    // (~71 chars) while model.invoke() assembles the full response correctly (~1988 chars).
+    // We use invoke() here for correctness and emit the full response as a single SSE chunk.
+    // OpenAI-compat providers (openai, deepseek, groq, …) use proxyOpenAICompat above,
+    // which pipes raw upstream SSE bytes and is unaffected by this path.
     res.set({
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    res.flushHeaders(); // send headers immediately so the client/proxy knows it's SSE
+    res.flushHeaders();
 
-    let promptTokens = 0, completionTokens = 0;
     const start = Date.now();
+    let invocation;
     try {
-      const model = router.getModel({
-        providerOverride: served.provider,
-        modelOverride: served.model,
+      invocation = await invokeWithFallback(router, eff, {
+        provider: served.provider,
+        model: served.model,
+        messages: body.messages,
         temperature: body.temperature,
         maxTokens: body.max_tokens,
       });
-      const lcMessages = toLcMessages(body.messages);
-
-      for await (const chunk of await model.stream(lcMessages)) {
-        const delta = chunkText(chunk);
-        if (delta) {
-          completionTokens += delta.split(/\s+/).length; // rough count
-          res.write(
-            `data: ${JSON.stringify({
-              id: `chatcmpl-${requestId}`,
-              object: "chat.completion.chunk",
-              model: served.model,
-              choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
-            })}\n\n`
-          );
-        }
-        // Capture usage from the final chunk if the provider emits it.
-        if (chunk.usage_metadata) {
-          promptTokens = chunk.usage_metadata.input_tokens || promptTokens;
-          completionTokens = chunk.usage_metadata.output_tokens || completionTokens;
-        }
-      }
-
-      res.write(`data: ${JSON.stringify({
-        id: `chatcmpl-${requestId}`,
-        object: "chat.completion.chunk",
-        model: served.model,
-        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-      })}\n\n`);
-      res.write("data: [DONE]\n\n");
-      res.end();
-
-      const latencyMs = Date.now() - start;
-      setImmediate(() =>
-        logger.write({
-          requestId, timestamp, ...meta,
-          provider: served.provider, model: served.model, modelRequested,
-          taskType, classifiedBy,
-          promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
-          latencyMs, status: "success", routingDecision, cacheHit: false,
-          knownPricing: served.knownPricing,
-        })
-      );
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: String(err.message || err) })}\n\n`);
       res.end();
@@ -450,7 +415,54 @@ async function handleOpenAICompat(req, res) {
           status: "failure", routingDecision, cacheHit: false,
         })
       );
+      return;
     }
+
+    const { result, usedFallback } = invocation;
+    if (usedFallback) routingDecision = "fallback";
+
+    const promptTokens = result.usage?.inputTokens || 0;
+    const completionTokens = result.usage?.outputTokens || 0;
+    const totalTokens = result.usage?.totalTokens || (promptTokens + completionTokens);
+
+    // Role delta on the first chunk (OpenAI protocol).
+    res.write(`data: ${JSON.stringify({
+      id: `chatcmpl-${requestId}`,
+      object: "chat.completion.chunk",
+      model: result.modelId,
+      choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
+    })}\n\n`);
+
+    // Full content as a single chunk — clients render it immediately on receipt.
+    res.write(`data: ${JSON.stringify({
+      id: `chatcmpl-${requestId}`,
+      object: "chat.completion.chunk",
+      model: result.modelId,
+      choices: [{ index: 0, delta: { content: result.text }, finish_reason: null }],
+    })}\n\n`);
+
+    // Terminal chunk with usage.
+    res.write(`data: ${JSON.stringify({
+      id: `chatcmpl-${requestId}`,
+      object: "chat.completion.chunk",
+      model: result.modelId,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: totalTokens },
+    })}\n\n`);
+
+    res.write("data: [DONE]\n\n");
+    res.end();
+
+    setImmediate(() =>
+      logger.write({
+        requestId, timestamp, ...meta,
+        provider: result.providerId, model: result.modelId, modelRequested,
+        taskType, classifiedBy,
+        promptTokens, completionTokens, totalTokens,
+        latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
+        knownPricing: served.knownPricing,
+      })
+    );
     return;
   }
 
