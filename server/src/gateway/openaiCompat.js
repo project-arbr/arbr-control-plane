@@ -339,12 +339,18 @@ async function handleOpenAICompat(req, res) {
     });
   }
 
-  // Native tool invocation: NATIVE_TOOL_PROVIDERS (e.g. bedrock-nova) support tools via
-  // LangChain's .bindTools(). Bypass the generic invoke path (which has no tool support)
-  // and call the model directly using invoke() — tool_calls come back in one shot.
-  // When stream:true, the result is emitted as SSE tool_call delta chunks so streaming
-  // clients (LibreChat, gyde-chat) receive the tool_calls turn in the expected SSE format.
-  if (isNativeToolModel(served.provider, served.model) && Array.isArray(body.tools) && body.tools.length > 0) {
+  // Native tool invocation: owns both turns of a tool flow for NATIVE_TOOL_PROVIDERS.
+  //
+  // Turn 1 (body.tools present): bind tools, invoke → SSE tool_call deltas or text.
+  // Turn 2 (no body.tools but messages include a "tool" role entry): plain invoke with
+  //   proper ToolMessage / AIMessage(tool_calls) via toLcMessages → SSE text response.
+  //
+  // Both turns use toLcMessages (the one in this file, with ToolMessage support) instead
+  // of the generic invokeWithFallback path, which uses the older llm-router converter
+  // that strips tool_calls and maps "tool" → HumanMessage — breaking Bedrock Converse.
+  const hasTurnTools = Array.isArray(body.tools) && body.tools.length > 0;
+  const hasToolHistory = body.messages.some((m) => m?.role === "tool");
+  if (isNativeToolModel(served.provider, served.model) && (hasTurnTools || hasToolHistory)) {
     const start = Date.now();
     try {
       const model = router.getModel({
@@ -353,10 +359,12 @@ async function handleOpenAICompat(req, res) {
         temperature: body.temperature,
         maxTokens: body.max_tokens,
       });
-      const boundModel = buildBoundModel(model, body);
+      // Turn 1: bind tools. Turn 2 (tool result history, no new tools): plain invoke.
+      const boundModel = hasTurnTools ? buildBoundModel(model, body) : model;
       const lcMessages = toLcMessages(body.messages);
       const aiMsg = await boundModel.invoke(lcMessages);
-      const toolCalls = translateToolCalls(aiMsg.tool_calls);
+      // Only parse tool_calls on turn 1; turn 2 always produces a text answer.
+      const toolCalls = hasTurnTools ? translateToolCalls(aiMsg.tool_calls) : undefined;
       const finishReason = toolCalls?.length ? "tool_calls" : "stop";
       const um = aiMsg.usage_metadata || {};
       const promptTokens = um.input_tokens || 0;
@@ -364,23 +372,20 @@ async function handleOpenAICompat(req, res) {
       const totalTokens = um.total_tokens || (promptTokens + completionTokens);
 
       if (body.stream) {
-        // Emit tool_calls as SSE deltas so streaming clients receive the tool call turn
-        // in the standard OpenAI chunk format. We got all tool_calls from invoke() at
-        // once, so each tool call is emitted as a single chunk (no character-by-character
-        // streaming of arguments — clients reassemble from deltas regardless).
+        // Emit result as SSE so streaming clients receive the turn in OpenAI chunk format.
+        // We branch on whether the model returned tool_calls or plain text — the model can
+        // always elect not to use a tool and answer directly, so we must handle both.
         res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
                   Connection: "keep-alive", "X-Accel-Buffering": "no" });
         res.flushHeaders();
         const id = `chatcmpl-${requestId}`;
         const base = { id, object: "chat.completion.chunk", model: served.model };
 
-        // 1. role delta
-        res.write(`data: ${JSON.stringify({
-          ...base, choices: [{ index: 0, delta: { role: "assistant", content: null }, finish_reason: null }],
-        })}\n\n`);
-
-        // 2. one chunk per tool call with full arguments
         if (toolCalls?.length) {
+          // Tool-call path: null content + one delta chunk per tool call.
+          res.write(`data: ${JSON.stringify({
+            ...base, choices: [{ index: 0, delta: { role: "assistant", content: null }, finish_reason: null }],
+          })}\n\n`);
           for (let i = 0; i < toolCalls.length; i++) {
             const tc = toolCalls[i];
             res.write(`data: ${JSON.stringify({
@@ -390,9 +395,21 @@ async function handleOpenAICompat(req, res) {
               }, finish_reason: null }],
             })}\n\n`);
           }
+        } else {
+          // Text path: model chose to answer without using a tool. Emit content so the
+          // client doesn't assemble null + "" → empty bubble.
+          const text = chunkText(aiMsg);
+          res.write(`data: ${JSON.stringify({
+            ...base, choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
+          })}\n\n`);
+          if (text) {
+            res.write(`data: ${JSON.stringify({
+              ...base, choices: [{ index: 0, delta: { content: text }, finish_reason: null }],
+            })}\n\n`);
+          }
         }
 
-        // 3. finish chunk
+        // Finish chunk — same shape for both paths.
         res.write(`data: ${JSON.stringify({
           ...base,
           choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
