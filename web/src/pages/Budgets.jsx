@@ -267,8 +267,8 @@ export default function Budgets({ onChange }) {
       const [c, p, f] = await Promise.all([api.caps(), api.gatewayProviders(), api.facets()]);
       setCaps(c.data ?? c);
       setProviders(p.data ?? p);
-      // facets returns { application: [...], provider: [...], ... } — filter out "unknown"
-      const apps = (f.application || []).filter((a) => a && a !== "unknown").sort();
+      // facets returns { applications: [...], providers: [...], ... } — filter out "unknown"
+      const apps = (f.applications || []).filter((a) => a && a !== "unknown").sort();
       setApplications(apps);
     } catch { setCaps([]); }
   };
