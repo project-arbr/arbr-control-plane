@@ -2,6 +2,8 @@
 // way back. Must never throw into the request path — errors are swallowed + logged.
 const RequestRecord = require("../models/RequestRecord");
 const { costFor } = require("../pricing/registry");
+const { maskMessages } = require("./piiFilter");
+const Settings = require("../models/Settings");
 
 // record: {
 //   requestId, timestamp, application, workflow, userId, department,
@@ -9,6 +11,7 @@ const { costFor } = require("../pricing/registry");
 //   promptTokens, completionTokens, totalTokens,
 //   latencyMs, status, retryCount, routingDecision, cacheHit,
 //   knownPricing?  — false for pass-through unlisted models; costs logged as $0
+//   messages?      — raw messages array; stored masked when piiMaskingEnabled
 // }
 async function write(record) {
   try {
@@ -19,8 +22,17 @@ async function write(record) {
       ? { inputCost: 0, outputCost: 0, totalCost: 0 }
       : costFor(record.model, promptTokens, completionTokens);
 
+    // PII masking: check setting lazily (cached by Settings.get's singleton pattern).
+    // Only applied to the logged copy — the model already received the original text.
+    let messages = record.messages;
+    if (messages) {
+      const s = await Settings.get().catch(() => null);
+      if (s?.piiMaskingEnabled) messages = maskMessages(messages);
+    }
+
     await RequestRecord.create({
       ...record,
+      messages,
       promptTokens,
       completionTokens,
       totalTokens,

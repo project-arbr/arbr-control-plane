@@ -10,6 +10,8 @@ import Settings from "./pages/Settings.jsx";
 import Docs from "./pages/Docs.jsx";
 import Models from "./pages/Models.jsx";
 import Budgets from "./pages/Budgets.jsx";
+import Audit from "./pages/Audit.jsx";
+import Governance from "./pages/Governance.jsx";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -36,6 +38,8 @@ export default function App() {
         <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
         <Route path="/models" element={<Models />} />
         <Route path="/settings" element={<Settings onChange={refreshStatus} />} />
+        <Route path="/governance" element={<Governance />} />
+        <Route path="/audit" element={<Audit />} />
         <Route path="/docs" element={<Docs />} />
 
         {/* Redirects for old / deep links — pages now live as sub-tabs. */}

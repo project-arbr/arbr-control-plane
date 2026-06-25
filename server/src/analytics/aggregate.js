@@ -109,6 +109,29 @@ async function facets() {
   return { applications, workflows, departments, models, providers, taskTypes };
 }
 
+// Per-provider health over the last 24h: error rate and average latency.
+// Surfaces in the Connections page so operators can spot degraded providers.
+async function providerHealth() {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await RequestRecord.aggregate([
+    { $match: { timestamp: { $gte: since } } },
+    {
+      $group: {
+        _id: "$provider",
+        total:    { $sum: 1 },
+        failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
+        avgLatencyMs: { $avg: "$latencyMs" },
+        p50LatencyMs: { $median: { input: "$latencyMs", method: "approximate" } },
+      },
+    },
+    { $project: { _id: 0, provider: "$_id", total: 1, failures: 1, avgLatencyMs: 1, p50LatencyMs: 1 } },
+  ]);
+  return rows.map((r) => ({
+    ...r,
+    errorRate: r.total > 0 ? r.failures / r.total : 0,
+  }));
+}
+
 module.exports = {
   buildMatch,
   overview,
@@ -120,4 +143,5 @@ module.exports = {
   byProvider,
   byTaskType,
   facets,
+  providerHealth,
 };

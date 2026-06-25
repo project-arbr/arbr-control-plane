@@ -9,6 +9,7 @@ const registry = require("./pricing/registry");
 const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
+const { purgeOldRecords } = require("./maintenance/purge");
 const { supportsTools } = require("./gateway/capabilities");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
@@ -26,7 +27,10 @@ async function start() {
   const app = express();
   // Behind a reverse proxy (nginx/ALB) this yields correct client IPs + proto.
   app.set("trust proxy", true);
-  app.use(cors({ origin: config.corsOrigin }));
+  app.use(cors({
+    origin: config.corsOrigin,
+    exposedHeaders: ["X-Arbr-Request-ID", "X-Arbr-Model", "X-Arbr-Provider", "X-Arbr-Routing", "X-Arbr-Task-Type"],
+  }));
   app.use(express.json({ limit: "2mb" }));
 
   // Liveness.
@@ -111,6 +115,11 @@ async function start() {
     console.error("[api] error:", err);
     res.status(500).json({ error: "internal_error", message: String(err.message || err) });
   });
+
+  // Daily purge of request records older than the configured retention window.
+  // Runs immediately on startup (catches any overdue records), then every 24h.
+  purgeOldRecords();
+  setInterval(purgeOldRecords, 24 * 60 * 60 * 1000);
 
   app.listen(config.port, config.host, () => {
     console.log("\n" + describe() + "\n");

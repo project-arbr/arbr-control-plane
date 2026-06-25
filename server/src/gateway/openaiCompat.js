@@ -9,6 +9,17 @@ const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
 const { PROVIDERS } = require("../config");
+const Settings = require("../models/Settings");
+
+// Set standard gateway tracing headers. Called before res.json() / res.flushHeaders()
+// so clients always see which model, provider, and routing decision served the request.
+function setGatewayHeaders(res, { requestId, model, provider, routing, taskType }) {
+  if (requestId) res.setHeader("X-Arbr-Request-ID", requestId);
+  if (model)     res.setHeader("X-Arbr-Model",      model);
+  if (provider)  res.setHeader("X-Arbr-Provider",   provider);
+  if (routing)   res.setHeader("X-Arbr-Routing",    routing);
+  if (taskType !== undefined) res.setHeader("X-Arbr-Task-Type", taskType || "");
+}
 
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
@@ -242,6 +253,26 @@ async function handleOpenAICompat(req, res) {
     });
   }
 
+  // Maintenance mode (kill-switch): checked before any routing or provider access.
+  const settings = await Settings.get();
+  if (settings.maintenanceMode?.enabled) {
+    const msg = settings.maintenanceMode.message || "Service temporarily unavailable.";
+    const errBody = { error: { message: msg, type: "server_error", code: "maintenance_mode" } };
+    if (body.stream) {
+      res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+      res.flushHeaders();
+      res.write(`data: ${JSON.stringify(errBody)}\n\n`);
+      res.write("data: [DONE]\n\n");
+      return res.end();
+    }
+    return res.status(503).json(errBody);
+  }
+
+  // Max-tokens guardrail: clamp body.max_tokens to the configured ceiling.
+  if (settings.maxTokensGuardrail && body.max_tokens > settings.maxTokensGuardrail) {
+    body.max_tokens = settings.maxTokensGuardrail;
+  }
+
   const { router, eff } = await getRouter();
   if (!router) return res.status(503).json(DEMO_503);
 
@@ -333,6 +364,8 @@ async function handleOpenAICompat(req, res) {
   }
 
   if (compatBaseURL) {
+    setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
+      routing: routingDecision, taskType });
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,
       taskType, classifiedBy, routingDecision, eff, baseURL: compatBaseURL,
@@ -375,6 +408,8 @@ async function handleOpenAICompat(req, res) {
         // Emit result as SSE so streaming clients receive the turn in OpenAI chunk format.
         // We branch on whether the model returned tool_calls or plain text — the model can
         // always elect not to use a tool and answer directly, so we must handle both.
+        setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
+          routing: routingDecision, taskType });
         res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
                   Connection: "keep-alive", "X-Accel-Buffering": "no" });
         res.flushHeaders();
@@ -419,6 +454,8 @@ async function handleOpenAICompat(req, res) {
         res.write("data: [DONE]\n\n");
         res.end();
       } else {
+        setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
+          routing: routingDecision, taskType });
         res.json({
           id: `chatcmpl-${requestId}`,
           object: "chat.completion",
@@ -481,6 +518,8 @@ async function handleOpenAICompat(req, res) {
     // We use invoke() here for correctness and emit the full response as a single SSE chunk.
     // OpenAI-compat providers (openai, deepseek, groq, …) use proxyOpenAICompat above,
     // which pipes raw upstream SSE bytes and is unaffected by this path.
+    setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
+      routing: routingDecision, taskType });
     res.set({
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -563,6 +602,8 @@ async function handleOpenAICompat(req, res) {
   }
 
   // — Non-streaming ——————————————————————————————————————————————————————————————
+  setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
+    routing: routingDecision, taskType });
   let invocation;
   try {
     invocation = await invokeWithFallback(router, eff, {

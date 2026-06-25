@@ -7,7 +7,9 @@ const Rule = require("../models/Rule");
 const Recommendation = require("../models/Recommendation");
 const Cap = require("../models/Cap");
 const ApiKey = require("../models/ApiKey");
+const AuditLog = require("../models/AuditLog");
 const auth = require("../gateway/auth");
+const { logAction } = require("./auditLogger");
 const { supportsTools } = require("../gateway/capabilities");
 const capEngine = require("../routing/capEngine");
 const crypto = require("crypto");
@@ -106,6 +108,7 @@ router.post("/caps", async (req, res, next) => {
       enabled: true,
     });
     capEngine.invalidate();
+    setImmediate(() => logAction("cap.create", "cap", cap._id, { dimension: dim, value, period, limit, action }));
     res.json(await capStatus(cap.toObject()));
   } catch (e) { next(e); }
 });
@@ -119,6 +122,7 @@ router.patch("/caps/:id", async (req, res, next) => {
     if (CAP_ACTIONS.includes(req.body.action)) update.action = req.body.action;
     const cap = await Cap.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
     capEngine.invalidate();
+    setImmediate(() => logAction("cap.update", "cap", req.params.id, update));
     res.json(cap ? await capStatus(cap) : { error: "not found" });
   } catch (e) { next(e); }
 });
@@ -127,6 +131,7 @@ router.delete("/caps/:id", async (req, res, next) => {
   try {
     await Cap.findByIdAndDelete(req.params.id);
     capEngine.invalidate();
+    setImmediate(() => logAction("cap.delete", "cap", req.params.id, null));
     res.json({ deleted: true });
   } catch (e) { next(e); }
 });
@@ -163,6 +168,7 @@ router.post("/keys", async (req, res, next) => {
       defaultModel: defaultModel ? String(defaultModel).trim() || null : null,
     });
     auth.invalidate();
+    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application }));
     // The ONLY time the full secret is ever returned.
     res.json({ ...keyView(doc.toObject()), key: secret });
   } catch (e) { next(e); }
@@ -187,6 +193,7 @@ router.delete("/keys/:id", async (req, res, next) => {
   try {
     await ApiKey.findByIdAndUpdate(req.params.id, { enabled: false, revokedAt: new Date() });
     auth.invalidate();
+    setImmediate(() => logAction("key.revoke", "key", req.params.id, null));
     res.json({ revoked: true });
   } catch (e) { next(e); }
 });
@@ -541,6 +548,7 @@ router.post("/rules", async (req, res, next) => {
       target, enabled: !!enabled, note,
     });
     ruleEngine.invalidate();
+    setImmediate(() => logAction("rule.create", "rule", rule._id, { condition: rule.condition, target, enabled: !!enabled }));
     res.json(rule);
   } catch (e) { next(e); }
 });
@@ -554,6 +562,7 @@ router.patch("/rules/:id", async (req, res, next) => {
     const rule = await Rule.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!rule) return res.status(404).json({ error: "not found" });
     ruleEngine.invalidate();
+    setImmediate(() => logAction("rule.update", "rule", req.params.id, update));
     res.json(rule);
   } catch (e) { next(e); }
 });
@@ -562,6 +571,7 @@ router.delete("/rules/:id", async (req, res, next) => {
   try {
     await Rule.findByIdAndDelete(req.params.id);
     ruleEngine.invalidate();
+    setImmediate(() => logAction("rule.delete", "rule", req.params.id, null));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -722,6 +732,70 @@ router.get("/benchmarks/status", async (_req, res, next) => {
       litellm:   { syncedAt: s.litellmSyncedAt   || null, version: s.litellmVersion   || null },
     });
   } catch (e) { next(e); }
+});
+
+// ── Governance settings (maintenance mode, max-tokens, webhook, retention, PII) ──
+const GOVERNANCE_FIELDS = ["maintenanceMode", "maxTokensGuardrail", "webhookUrl", "retentionDays", "piiMaskingEnabled"];
+
+router.get("/governance", async (_req, res, next) => {
+  try {
+    const s = await Settings.get();
+    res.json({
+      maintenanceMode: s.maintenanceMode || { enabled: false, message: "" },
+      maxTokensGuardrail: s.maxTokensGuardrail || null,
+      webhookUrl: s.webhookUrl || null,
+      retentionDays: s.retentionDays ?? 90,
+      piiMaskingEnabled: s.piiMaskingEnabled ?? false,
+    });
+  } catch (e) { next(e); }
+});
+
+router.patch("/governance", async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const update = {};
+    if (body.maintenanceMode !== undefined) {
+      update["maintenanceMode.enabled"] = !!body.maintenanceMode.enabled;
+      if (typeof body.maintenanceMode.message === "string") {
+        update["maintenanceMode.message"] = body.maintenanceMode.message.trim() || "Service temporarily unavailable.";
+      }
+    }
+    if ("maxTokensGuardrail" in body) {
+      update.maxTokensGuardrail = body.maxTokensGuardrail ? Math.max(1, Number(body.maxTokensGuardrail)) : null;
+    }
+    if ("webhookUrl" in body) update.webhookUrl = body.webhookUrl ? String(body.webhookUrl).trim() : null;
+    if ("retentionDays" in body) update.retentionDays = Math.max(0, Number(body.retentionDays) || 0) || null;
+    if ("piiMaskingEnabled" in body) update.piiMaskingEnabled = !!body.piiMaskingEnabled;
+
+    await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
+    const s = await Settings.get();
+    setImmediate(() => logAction("governance.update", "settings", "global", body));
+    res.json({
+      maintenanceMode: s.maintenanceMode || { enabled: false, message: "" },
+      maxTokensGuardrail: s.maxTokensGuardrail || null,
+      webhookUrl: s.webhookUrl || null,
+      retentionDays: s.retentionDays ?? 90,
+      piiMaskingEnabled: s.piiMaskingEnabled ?? false,
+    });
+  } catch (e) { next(e); }
+});
+
+// ── Audit log (admin actions) ──
+router.get("/audit", async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const page  = Math.max(Number(req.query.page)  || 1,  1);
+    const [items, total] = await Promise.all([
+      AuditLog.find().sort({ timestamp: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      AuditLog.countDocuments(),
+    ]);
+    res.json({ items, total, page, limit });
+  } catch (e) { next(e); }
+});
+
+// ── Provider health (error rate + avg latency over last 24h) ──
+router.get("/analytics/provider-health", async (_req, res, next) => {
+  try { res.json(await analytics.providerHealth()); } catch (e) { next(e); }
 });
 
 module.exports = router;

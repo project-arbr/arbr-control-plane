@@ -112,6 +112,13 @@ export const api = {
   updateCustomProvider: (id, body) => req(`/custom-providers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   removeCustomProvider: (id) => req(`/custom-providers/${encodeURIComponent(id)}`, { method: "DELETE" }),
   testCustomProvider: (id, model) => req(`/custom-providers/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify({ model }) }),
+
+  governance: () => req("/governance"),
+  updateGovernance: (body) => req("/governance", { method: "PATCH", body: JSON.stringify(body) }),
+
+  auditLog: (params) => req(`/audit${qs(params)}`),
+
+  providerHealth: () => req("/analytics/provider-health"),
 };
 
 export const fmt = {

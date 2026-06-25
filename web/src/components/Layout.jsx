@@ -9,10 +9,14 @@ const NAV_GROUPS = [
     { to: "/requests", label: "Requests" },
   ] },
   { section: "Control", items: [
-    { to: "/routing", label: "Routing" },
-    { to: "/budgets", label: "Budgets" },
-    { to: "/models",  label: "Models" },
+    { to: "/routing",  label: "Routing" },
+    { to: "/budgets",  label: "Budgets" },
+    { to: "/models",   label: "Models" },
     { to: "/settings", label: "Settings" },
+  ] },
+  { section: "Governance", items: [
+    { to: "/governance", label: "Governance" },
+    { to: "/audit",      label: "Audit" },
   ] },
 ];
 const FOOTER_LINK = { to: "/docs", label: "Docs" };

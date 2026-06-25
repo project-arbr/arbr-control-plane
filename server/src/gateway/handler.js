@@ -18,6 +18,7 @@ const aiPolicy = require("../routing/aiPolicy");
 const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
 const logger = require("../logging/logger");
+const Settings = require("../models/Settings");
 
 // An explicit, honorable model pin → { provider, model, knownPricing } to use
 // as-is, or null to defer to the router. Defers when the model is "auto"/absent
@@ -154,6 +155,16 @@ async function handleChat(req, res) {
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return res.status(400).json({ error: "messages array is required" });
   }
+
+  // Maintenance mode (kill-switch): checked before any routing or provider access.
+  const settings = await Settings.get();
+  if (settings.maintenanceMode?.enabled) {
+    return res.status(503).json({
+      error: "maintenance_mode",
+      message: settings.maintenanceMode.message || "Service temporarily unavailable.",
+    });
+  }
+
   const { router, eff } = await getRouter();
   if (!router) {
     return res.status(503).json({
@@ -163,6 +174,11 @@ async function handleChat(req, res) {
         "dashboard (Settings → Connections) or set OPENAI_API_KEY / ANTHROPIC_API_KEY / " +
         "GEMINI_API_KEY in .env. Dashboards, analytics, recommendations and rules work without keys.",
     });
+  }
+
+  // Max-tokens guardrail: clamp body.maxTokens to the configured ceiling.
+  if (settings.maxTokensGuardrail && body.maxTokens > settings.maxTokensGuardrail) {
+    body.maxTokens = settings.maxTokensGuardrail;
   }
 
   const requestId = uuidv4();
@@ -243,7 +259,13 @@ async function handleChat(req, res) {
   {
     const cached = responseCache.get(served.model, body.messages);
     if (cached) {
-      res.json({
+      res.set({
+        "X-Arbr-Request-ID": requestId,
+        "X-Arbr-Model":      cached.model,
+        "X-Arbr-Provider":   cached.provider,
+        "X-Arbr-Routing":    "cache",
+        "X-Arbr-Task-Type":  taskType || "",
+      }).json({
         requestId,
         model: cached.model,
         modelRequested,
@@ -297,7 +319,13 @@ async function handleChat(req, res) {
   if (usedFallback) routingDecision = "fallback";
 
   // 4 · RETURN — response on its way back immediately.
-  res.json({
+  res.set({
+    "X-Arbr-Request-ID": requestId,
+    "X-Arbr-Model":      result.modelId,
+    "X-Arbr-Provider":   result.providerId,
+    "X-Arbr-Routing":    routingDecision,
+    "X-Arbr-Task-Type":  taskType || "",
+  }).json({
     requestId,
     model: result.modelId,
     modelRequested,

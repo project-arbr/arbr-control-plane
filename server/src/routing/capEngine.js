@@ -4,6 +4,7 @@
 // in-memory scan. Alert-only caps are ignored here — they surface in the UI only.
 const Cap = require("../models/Cap");
 const analytics = require("../analytics/aggregate");
+const notifier = require("./notifier");
 
 const TTL_MS = 30_000;
 let _cache = { breached: [], at: 0 };
@@ -27,7 +28,19 @@ async function _breachedEnforcing() {
       value: cap.value,
       from: windowStart(cap.period),
     });
-    if (spent >= cap.limit) breached.push({ ...cap, spent });
+    if (spent >= cap.limit) {
+      breached.push({ ...cap, spent });
+      // Fire-and-forget webhook on first detection of this breach (dedup inside notifier).
+      setImmediate(() => notifier.notify("cap_breach", {
+        key: `${cap._id}`,
+        dimension: cap.dimension || "global",
+        value: cap.value || null,
+        period: cap.period,
+        limit: cap.limit,
+        spent,
+        action: cap.action,
+      }));
+    }
   }
   _cache = { breached, at: Date.now() };
   return breached;

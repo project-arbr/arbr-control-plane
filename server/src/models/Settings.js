@@ -45,6 +45,20 @@ const settingsSchema = new mongoose.Schema(
     lmsysVersion:      { type: String, default: null },
     litellmSyncedAt:   { type: Date,   default: null },
     litellmVersion:    { type: String, default: null },
+    // Maintenance / kill-switch: when enabled, all /v1/* gateway calls return 503.
+    maintenanceMode: {
+      enabled: { type: Boolean, default: false },
+      message: { type: String, default: "Service temporarily unavailable for maintenance." },
+    },
+    // Hard cap on max_tokens per request. When set, requests claiming more are clamped.
+    // Prevents runaway expensive completions from any single call.
+    maxTokensGuardrail: { type: Number, default: null },
+    // Webhook URL for real-time alerts (cap breach, provider errors, new unknown applications).
+    webhookUrl: { type: String, default: null },
+    // Request record retention in days. Records older than this are auto-purged daily.
+    retentionDays: { type: Number, default: 90 },
+    // PII masking: when enabled, PII patterns are redacted from prompts before logging.
+    piiMaskingEnabled: { type: Boolean, default: false },
   },
   { collection: "settings" }
 );
