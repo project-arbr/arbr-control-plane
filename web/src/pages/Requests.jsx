@@ -1,47 +1,90 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { api, fmt } from "../api.js";
-import { Card, Table, Badge, Spinner } from "../components/ui.jsx";
+import { Card, Table, Badge } from "../components/ui.jsx";
 
 const ROUTING_TONE = { passthrough: "gray", explicit: "teal", rule: "green", auto: "indigo", ai: "violet", budget: "red", cache: "charcoal", fallback: "amber" };
 
-// How the task type was determined.
 const CLASSIFY = {
   provided: { tone: "gray", label: "provided" },
-  keyword: { tone: "gray", label: "rule-based" },
-  ai: { tone: "violet", label: "AI" },
+  keyword:  { tone: "gray", label: "rule-based" },
+  ai:       { tone: "violet", label: "AI" },
 };
 
 const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", taskType: "" };
 
+// Period presets — compute from/to ISO strings (or null for "all time").
+const PERIODS = [
+  { label: "Today",    days: 0 },
+  { label: "7 days",   days: 7 },
+  { label: "30 days",  days: 30 },
+  { label: "All time", days: null },
+];
+
+function periodRange(days) {
+  if (days === null) return {};
+  const to = new Date();
+  const from = new Date(to);
+  if (days === 0) {
+    from.setHours(0, 0, 0, 0); // start of today
+  } else {
+    from.setDate(from.getDate() - days);
+  }
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
+function StatCard({ label, value, sub, highlight }) {
+  return (
+    <div className={`card px-5 py-4 ${highlight ? "border-red-200 bg-red-50" : ""}`}>
+      <div className="label">{label}</div>
+      <div className={`mt-1 text-2xl font-bold ${highlight ? "text-red-600" : "text-gyde-charcoal"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-gray-400">{sub}</div>}
+    </div>
+  );
+}
+
 export default function Requests() {
-  const [facets, setFacets] = useState(null);
-  const [filter, setFilter] = useState(EMPTY_FILTER);
-  const [data, setData] = useState(null);
-  const [page, setPage] = useState(1);
-  const [err, setErr] = useState(null);
+  const [facets, setFacets]   = useState(null);
+  const [filter, setFilter]   = useState(EMPTY_FILTER);
+  const [activePeriod, setActivePeriod] = useState(1); // index into PERIODS (default: 7 days)
+  const [data, setData]       = useState(null);
+  const [stats, setStats]     = useState(null);
+  const [page, setPage]       = useState(1);
+  const [err, setErr]         = useState(null);
 
   useEffect(() => { api.facets().then(setFacets).catch(() => {}); }, []);
-  useEffect(() => {
+
+  const range = periodRange(PERIODS[activePeriod].days);
+
+  const load = useCallback(() => {
     setData(null);
-    api.requests({ ...filter, page, limit: 50 }).then(setData).catch((e) => setErr(e.message));
-  }, [filter, page]);
+    setStats(null);
+    const combined = { ...filter, ...range };
+    Promise.all([
+      api.requests({ ...combined, page, limit: 50 }),
+      api.overview(combined),
+    ])
+      .then(([d, s]) => { setData(d); setStats(s); })
+      .catch((e) => setErr(e.message));
+  }, [filter, page, activePeriod]);
+
+  useEffect(() => { load(); }, [load]);
 
   const setField = (k, v) => { setPage(1); setFilter((f) => ({ ...f, [k]: v })); };
 
   const FILTERS = [
     ["application", "Application", facets?.applications],
-    ["workflow", "Workflow", facets?.workflows],
-    ["department", "Department", facets?.departments],
-    ["model", "Model", facets?.models],
-    ["provider", "Provider", facets?.providers],
-    ["taskType", "Task type", facets?.taskTypes],
+    ["workflow",    "Workflow",    facets?.workflows],
+    ["department",  "Department",  facets?.departments],
+    ["model",       "Model",       facets?.models],
+    ["provider",    "Provider",    facets?.providers],
+    ["taskType",    "Task type",   facets?.taskTypes],
   ];
 
   const columns = [
-    { key: "timestamp", header: "Time", render: (r) => <span className="whitespace-nowrap text-gray-500">{fmt.date(r.timestamp)}</span> },
-    { key: "application", header: "App" },
-    { key: "workflow", header: "Workflow" },
-    { key: "taskType", header: "Task", render: (r) => {
+    { key: "timestamp",  header: "Time",    render: (r) => <span className="whitespace-nowrap text-gray-500">{fmt.date(r.timestamp)}</span> },
+    { key: "application",header: "App" },
+    { key: "workflow",   header: "Workflow" },
+    { key: "taskType",   header: "Task",    render: (r) => {
       const c = CLASSIFY[r.classifiedBy] || CLASSIFY.keyword;
       return (
         <span className="flex flex-col gap-0.5">
@@ -50,7 +93,7 @@ export default function Requests() {
         </span>
       );
     } },
-    { key: "model", header: "Served", render: (r) => (
+    { key: "model",      header: "Served",  render: (r) => (
       r.modelRequested && r.modelRequested !== r.model
         ? <span><span className="text-gray-400 line-through">{r.modelRequested}</span> → <span className="font-medium">{r.model}</span></span>
         : <span>{r.model}</span>
@@ -62,18 +105,72 @@ export default function Requests() {
         {r.status === "failure" && <Badge tone="amber">failed</Badge>}
       </span>
     ) },
-    { key: "totalTokens", header: "Tokens", render: (r) => fmt.num(r.totalTokens) },
-    { key: "totalCost", header: "Cost", render: (r) => fmt.usd(r.totalCost) },
-    { key: "latencyMs", header: "Latency", render: (r) => fmt.ms(r.latencyMs) },
+    { key: "totalTokens",header: "Tokens",  render: (r) => fmt.num(r.totalTokens) },
+    { key: "totalCost",  header: "Cost",    render: (r) => fmt.usd(r.totalCost) },
+    { key: "latencyMs",  header: "Latency", render: (r) => fmt.ms(r.latencyMs) },
   ];
 
+  const successRate = stats
+    ? stats.totalRequests > 0
+      ? (((stats.totalRequests - stats.failures) / stats.totalRequests) * 100).toFixed(1) + "%"
+      : "—"
+    : "—";
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gyde-charcoal">Requests</h1>
-        <p className="text-sm text-gray-500">One record per request — model requested vs served, routing decision, cost.</p>
+    <div className="space-y-5">
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gyde-charcoal">Requests</h1>
+          <p className="text-sm text-gray-500">One record per request — model requested vs served, routing decision, cost.</p>
+        </div>
+
+        {/* Period selector */}
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+          {PERIODS.map((p, i) => (
+            <button
+              key={p.label}
+              onClick={() => { setPage(1); setActivePeriod(i); }}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                activePeriod === i
+                  ? "bg-white text-gyde-charcoal shadow-sm border border-gray-200"
+                  : "text-gray-500 hover:text-gyde-charcoal"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Summary stat cards */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <StatCard
+          label="Total requests"
+          value={stats ? fmt.num(stats.totalRequests) : "—"}
+          sub={PERIODS[activePeriod].label}
+        />
+        <StatCard
+          label="Total cost"
+          value={stats ? fmt.usd(stats.totalCost) : "—"}
+          sub={stats ? `${fmt.usd(stats.avgCostPerRequest)} / req` : null}
+        />
+        <StatCard
+          label="Total tokens"
+          value={stats ? fmt.num(stats.totalTokens) : "—"}
+        />
+        <StatCard
+          label="Avg latency"
+          value={stats ? fmt.ms(stats.avgLatency) : "—"}
+        />
+        <StatCard
+          label="Success rate"
+          value={successRate}
+          sub={stats?.failures > 0 ? `${fmt.num(stats.failures)} failed` : null}
+          highlight={stats?.failures > 0 && stats?.totalRequests > 0 && (stats.failures / stats.totalRequests) > 0.05}
+        />
+      </div>
+
+      {/* Filters */}
       <Card>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {FILTERS.map(([key, label, options]) => (
@@ -88,8 +185,11 @@ export default function Requests() {
         </div>
       </Card>
 
+      {/* Requests table */}
       <Card>
-        {data === null ? <Spinner /> : (
+        {data === null ? (
+          <div className="py-8 text-center text-sm text-gray-400">Loading…</div>
+        ) : (
           <>
             <Table columns={columns} rows={data.items} empty="No matching requests." />
             <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
@@ -103,7 +203,8 @@ export default function Requests() {
           </>
         )}
       </Card>
-      {err && <div className="text-red-600">{err}</div>}
+
+      {err && <div className="text-red-600 text-sm">{err}</div>}
     </div>
   );
 }
