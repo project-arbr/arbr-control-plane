@@ -19,13 +19,17 @@ const MODELS = {
   "gemini-2.5-flash":      { provider: "gemini", inputPer1M: 0.3,  outputPer1M: 2.5,  tier: "light" },
   "gemini-2.5-flash-lite": { provider: "gemini", inputPer1M: 0.1,  outputPer1M: 0.4,  tier: "light" },
 
-  // ── Amazon Bedrock (Nova + Claude + Llama) ──
+  // ── Amazon Bedrock (Nova + Claude + Llama + Kimi) ──
   "us.amazon.nova-pro-v1:0":                   { provider: "bedrock-nova", inputPer1M: 0.8,   outputPer1M: 3.2,  tier: "mid" },
   "us.amazon.nova-lite-v1:0":                  { provider: "bedrock-nova", inputPer1M: 0.06,  outputPer1M: 0.24, tier: "light" },
   "us.amazon.nova-micro-v1:0":                 { provider: "bedrock-nova", inputPer1M: 0.035, outputPer1M: 0.14, tier: "light" },
+  "amazon.nova-premier-v1:0":                  { provider: "bedrock-nova", inputPer1M: 2.5,   outputPer1M: 12.5, tier: "premium" },
   "anthropic.claude-3-5-sonnet-20241022-v2:0": { provider: "bedrock-nova", inputPer1M: 3.0,   outputPer1M: 15.0, tier: "premium" },
+  "anthropic.claude-3-7-sonnet-20250219-v1:0": { provider: "bedrock-nova", inputPer1M: 3.0,   outputPer1M: 15.0, tier: "premium" },
+  "anthropic.claude-3-5-haiku-20241022-v1:0":  { provider: "bedrock-nova", inputPer1M: 0.8,   outputPer1M: 4.0,  tier: "light" },
   "meta.llama3-70b-instruct-v1:0":             { provider: "bedrock-nova", inputPer1M: 0.99,  outputPer1M: 0.99, tier: "mid" },
   "meta.llama3-8b-instruct-v1:0":              { provider: "bedrock-nova", inputPer1M: 0.22,  outputPer1M: 0.22, tier: "light" },
+  "moonshotai.kimi-k2.5":                      { provider: "bedrock-nova", inputPer1M: 0.14,  outputPer1M: 0.14, tier: "mid" },
 
   // ── DeepSeek ──
   "deepseek-chat":     { provider: "deepseek", inputPer1M: 0.27, outputPer1M: 1.10, tier: "light" },

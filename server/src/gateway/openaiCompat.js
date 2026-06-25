@@ -27,12 +27,27 @@ function setGatewayHeaders(res, { requestId, model, provider, routing, taskType 
 const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
 
 // Amazon Nova models on Bedrock support tools via ChatBedrockConverse.bindTools().
-// Other Bedrock models (DeepSeek R1, etc.) do not — they share the bedrock-nova provider
-// but the tool path must be gated to Nova model IDs to avoid silent failures.
+// Other Bedrock models (Mistral 7B, Mixtral 8x7B, DeepSeek R1) do not — they share the
+// bedrock-nova provider but must be gated out to avoid silent failures.
+// Keep in sync with BEDROCK_TOOL_PATTERNS in capabilities.js.
 const NATIVE_TOOL_PROVIDERS = new Set(["bedrock-nova"]);
+const BEDROCK_CONVERSE_TOOL_PATTERNS = [
+  /amazon\.nova/i,
+  /anthropic\.claude-3/i,
+  /moonshotai\.kimi/i,
+  /meta\.llama3/i,
+  /cohere\.command-r/i,
+  /mistral\.mistral-large/i,
+  /mistral\.mistral-small/i,
+  /ai21\.jamba/i,
+  /writer\.palmyra-x5/i,
+];
 function isNativeToolModel(providerId, modelId) {
   if (!NATIVE_TOOL_PROVIDERS.has(providerId)) return false;
-  if (providerId === "bedrock-nova") return /amazon\.nova|nova-lite|nova-micro|nova-pro/i.test(modelId || "");
+  if (providerId === "bedrock-nova") {
+    const id = modelId || "";
+    return BEDROCK_CONVERSE_TOOL_PATTERNS.some((re) => re.test(id));
+  }
   return true;
 }
 
