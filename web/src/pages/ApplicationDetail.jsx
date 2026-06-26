@@ -92,13 +92,13 @@ function ModelPicker({ models, excluded, onChange }) {
                   </label>
                 );
               })()}
-              {/* Model rows */}
+              {/* Model rows — indented under provider */}
               {filtered.map((m) => {
                 const included = !excluded.includes(m.id);
                 return (
                   <label
                     key={m.id}
-                    className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-gray-50 ${!included ? "opacity-40" : ""}`}
+                    className={`flex cursor-pointer items-center gap-3 py-1.5 pr-3 pl-9 text-sm transition-colors hover:bg-gray-50 ${!included ? "opacity-40" : ""}`}
                   >
                     <input
                       type="checkbox"
