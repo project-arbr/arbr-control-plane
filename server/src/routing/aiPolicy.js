@@ -227,7 +227,14 @@ async function _computeAssignments({ router, eff, excludeModels = [] }) {
 
   if (!liveModels.length) throw new Error("no live models available after exclusions");
 
-  const generatorModel = liveModels[0];
+  // Use the configured default model as the generator — it's the one the admin
+  // has verified works. Fall back to the first live model only if no default is set.
+  const defaultEntry = eff.defaultModel
+    ? pricing.getModel(eff.defaultModel)
+    : null;
+  const generatorModel = (defaultEntry && liveIdSet.has(defaultEntry.provider))
+    ? defaultEntry
+    : liveModels[0];
   const tasks          = await allTaskTypes();
   const catalogMap     = Object.fromEntries(TASK_CATALOG.map((t) => [t.id, t]));
   const validIds       = new Set(liveModels.map((m) => m.id));
