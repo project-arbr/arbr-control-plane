@@ -1,40 +1,56 @@
 version: 2
 updates:
-  # Server (root) npm dependencies
+  # Server (root) npm dependencies — all bumps in one PR
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
+    groups:
+      server-deps:
+        patterns: ["*"]
 
-  # Dashboard npm dependencies
+  # Dashboard npm dependencies — all bumps in one PR
   - package-ecosystem: "npm"
     directory: "/web"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
+    groups:
+      web-deps:
+        patterns: ["*"]
 
-  # JS SDK npm dependencies
+  # JS SDK npm dependencies — all bumps in one PR
   - package-ecosystem: "npm"
     directory: "/clients/js"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
+    groups:
+      js-sdk-deps:
+        patterns: ["*"]
 
-  # Python SDK dependencies
+  # Python SDK dependencies — all bumps in one PR
   - package-ecosystem: "pip"
     directory: "/clients/python"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
+    groups:
+      python-sdk-deps:
+        patterns: ["*"]
 
-  # GitHub Actions
+  # GitHub Actions — all bumps in one PR
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 1
     labels: ["ci"]
+    groups:
+      github-actions:
+        patterns: ["*"]
