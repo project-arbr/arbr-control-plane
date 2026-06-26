@@ -5,6 +5,7 @@ import { Spinner, Toggle } from "../components/ui.jsx";
 
 function AppCard({ app, stats, config, onToggleKill }) {
   const isKilled = config?.killSwitchEnabled ?? false;
+  const isActive = !isKilled;
   const successRate = stats && stats.requests > 0
     ? (((stats.requests - (stats.failures || 0)) / stats.requests) * 100).toFixed(1) + "%"
     : "—";
@@ -16,16 +17,21 @@ function AppCard({ app, stats, config, onToggleKill }) {
           <Link to={`/applications/${encodeURIComponent(app)}`} className="text-base font-semibold text-gyde-charcoal hover:text-gyde-green-700 hover:underline truncate block">
             {app}
           </Link>
-          {isKilled && (
+          {isKilled ? (
             <span className="mt-1 inline-flex items-center rounded text-xs font-medium text-red-600 bg-red-100 px-1.5 py-0.5">
-              Kill switch on
+              Disconnected
+            </span>
+          ) : (
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-gyde-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-gyde-green-600 inline-block" />
+              Active
             </span>
           )}
         </div>
         <Toggle
-          checked={isKilled}
+          checked={isActive}
           onChange={() => onToggleKill(app, !isKilled)}
-          label="kill switch"
+          label="connected"
         />
       </div>
 

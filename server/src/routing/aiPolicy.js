@@ -214,30 +214,29 @@ function scoreModel(taskCaps, model, cheapestCost) {
   return { capScore, costScore };
 }
 
-// Policy engine — uses the scoring engine to assign models to tasks.
-async function regenerate({ router, eff }) {
+// Core scoring engine — shared by regenerate() and regenerateForApp().
+// excludeModels: array of model IDs to exclude from consideration.
+async function _computeAssignments({ router, eff, excludeModels = [] }) {
   if (!eff) throw new Error("no effective config");
 
-  const liveIdSet = new Set(eff.liveIds);
+  const excludeSet = new Set(excludeModels);
+  const liveIdSet  = new Set(eff.liveIds);
   const liveModels = pricing.listModels()
-    .filter((m) => liveIdSet.has(m.provider))
+    .filter((m) => liveIdSet.has(m.provider) && !excludeSet.has(m.id))
     .sort((a, b) => (b.inputPer1M || 0) - (a.inputPer1M || 0));
 
-  if (!liveModels.length) throw new Error("no live models available");
+  if (!liveModels.length) throw new Error("no live models available after exclusions");
 
   const byTier = { light: [], mid: [], premium: [] };
   for (const m of liveModels) { if (byTier[m.tier]) byTier[m.tier].push(m); }
 
-  const hardFallback   = eff.defaultModel || liveModels[0].id;
-  const generatorModel = liveModels[0]; // most expensive = most capable; used for custom-task LLM calls
+  const hardFallback   = eff.defaultModel && !excludeSet.has(eff.defaultModel)
+    ? eff.defaultModel : liveModels[0].id;
+  const generatorModel = liveModels[0];
 
   const tasks      = await allTaskTypes();
   const catalogMap = Object.fromEntries(TASK_CATALOG.map((t) => [t.id, t]));
 
-  // ── Pool selection ──────────────────────────────────────────────────────────
-  // light → light models only (avoid mid premium spend for cheap tasks)
-  // mid   → light + mid (mid tasks may benefit from slightly better models)
-  // premium → all models (get the best available)
   function poolFor(tier) {
     if (tier === "premium") return liveModels;
     const p = tier === "light"
@@ -259,11 +258,7 @@ async function regenerate({ router, eff }) {
     return best?.id || hardFallback;
   }
 
-  // ── Custom task capability evaluation ───────────────────────────────────────
-  // For task types not in TASK_CAPABILITIES, ask the LLM to rate the task on
-  // each dimension. Results are cached for this regeneration run.
   const customCaps = {};
-
   async function evalCustomTask(task) {
     if (customCaps[task]) return customCaps[task];
     try {
@@ -281,17 +276,14 @@ async function regenerate({ router, eff }) {
       });
       const raw = parseJsonBlock(r.text || "");
       if (raw && DIMS.every((d) => typeof raw[d] === "number" && raw[d] >= 0 && raw[d] <= 1)) {
-        customCaps[task] = raw;
-        return raw;
+        customCaps[task] = raw; return raw;
       }
     } catch (_e) { /* fall through */ }
-    // Fallback: generic mid-level profile
     const fallback = { coding:0.3, reasoning:0.3, writing:0.3, analysis:0.3, language:0.1, general:0.5, data:0.2 };
     customCaps[task] = fallback;
     return fallback;
   }
 
-  // ── Assignment loop ─────────────────────────────────────────────────────────
   const assignments = {};
   for (const task of tasks) {
     let taskCaps = TASK_CAPABILITIES[task];
@@ -300,12 +292,24 @@ async function regenerate({ router, eff }) {
     assignments[task] = bestForTask(taskCaps, tier);
   }
 
+  return { assignments, generatorModel };
+}
+
+// Policy engine — saves global AI policy to Settings.
+async function regenerate({ router, eff }) {
+  const { assignments, generatorModel } = await _computeAssignments({ router, eff });
   const s = await Settings.get();
   s.aiPolicy = { assignments, generatedAt: new Date(), generatorModel: generatorModel.id, capabilityVersion: CAPABILITY_VERSION };
   s.markModified("aiPolicy");
   await s.save();
   invalidate();
   return s.aiPolicy;
+}
+
+// Per-app variant: returns raw assignments (caller saves to ApplicationConfig).
+async function regenerateForApp({ router, eff, excludeModels = [] }) {
+  const { assignments, generatorModel } = await _computeAssignments({ router, eff, excludeModels });
+  return { assignments, generatedAt: new Date(), generatorModel: generatorModel.id };
 }
 
 // Full view for the editor: assignments + catalogs + what's unmapped/custom.
@@ -331,4 +335,4 @@ async function describe() {
   };
 }
 
-module.exports = { getEffective, lookup, setAssignments, regenerate, describe, invalidate, CAPABILITY_VERSION };
+module.exports = { getEffective, lookup, setAssignments, regenerate, regenerateForApp, describe, invalidate, CAPABILITY_VERSION };

@@ -835,6 +835,22 @@ router.put("/app-configs/:app", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.post("/app-configs/:app/generate-policy", async (req, res, next) => {
+  try {
+    const { r, eff } = await getRouter();
+    if (!r) return res.status(503).json({ error: "no live providers — cannot generate policy" });
+    const excludeModels = Array.isArray(req.body?.excludeModels) ? req.body.excludeModels : [];
+    const result = await aiPolicy.regenerateForApp({ router: r, eff, excludeModels });
+    const cfg = await ApplicationConfig.findOneAndUpdate(
+      { applicationName: req.params.app },
+      { $set: { aiPolicyAssignments: result.assignments } },
+      { new: true, upsert: true }
+    ).lean();
+    setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels }));
+    res.json({ ...result, cfg });
+  } catch (e) { next(e); }
+});
+
 router.post("/app-configs/:app/set-default-policy", async (req, res, next) => {
   try {
     const cfg = await ApplicationConfig.findOne({ applicationName: req.params.app }).lean();

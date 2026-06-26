@@ -123,6 +123,7 @@ export const api = {
   appConfigs: () => req("/app-configs"),
   appConfig: (app) => req(`/app-configs/${encodeURIComponent(app)}`),
   setAppConfig: (app, body) => req(`/app-configs/${encodeURIComponent(app)}`, { method: "PUT", body: JSON.stringify(body) }),
+  generateAppPolicy: (app, excludeModels = []) => req(`/app-configs/${encodeURIComponent(app)}/generate-policy`, { method: "POST", body: JSON.stringify({ excludeModels }) }),
   setAppDefaultPolicy: (app) => req(`/app-configs/${encodeURIComponent(app)}/set-default-policy`, { method: "POST" }),
 };
 

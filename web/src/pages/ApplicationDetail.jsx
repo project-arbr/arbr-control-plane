@@ -27,12 +27,48 @@ function Chevron({ open }) {
 
 // ── App-level AI policy editor ─────────────────────────────────────────────────
 
+function ModelPicker({ models, excluded, onChange }) {
+  const byProvider = {};
+  for (const m of models) {
+    if (!byProvider[m.provider]) byProvider[m.provider] = [];
+    byProvider[m.provider].push(m);
+  }
+  const toggle = (id) => onChange(excluded.includes(id) ? excluded.filter((x) => x !== id) : [...excluded, id]);
+
+  return (
+    <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Models to include in policy generation</div>
+      {Object.entries(byProvider).map(([prov, provModels]) => (
+        <div key={prov}>
+          <div className="label mb-1">{prov}</div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+            {provModels.map((m) => (
+              <label key={m.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!excluded.includes(m.id)}
+                  onChange={() => toggle(m.id)}
+                  className="rounded"
+                />
+                <span className="font-mono text-xs">{m.id}</span>
+                <Badge tone={m.tier === "premium" ? "violet" : m.tier === "mid" ? "indigo" : "teal"}>{m.tier}</Badge>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AppAiPolicyEditor({ appName, initialAssignments, models, onSaved }) {
   const [globalPol, setGlobalPol]     = useState(null);
   const [assignments, setAssignments] = useState(initialAssignments || null);
   const [expanded, setExpanded]       = useState({ light: false, mid: false, premium: false, custom: true });
   const [busy, setBusy]               = useState(false);
   const [msg, setMsg]                 = useState(null);
+  const [showPicker, setShowPicker]   = useState(false);   // model picker for generation
+  const [excluded, setExcluded]       = useState([]);      // models to exclude from AI generation
 
   useEffect(() => { api.aiPolicy().then(setGlobalPol).catch((e) => setMsg(e.message)); }, []);
 
@@ -58,14 +94,25 @@ function AppAiPolicyEditor({ appName, initialAssignments, models, onSaved }) {
   const setOne = (t, model) => setAssignments((a) => ({ ...(a || globalPol.assignments || {}), [t]: model }));
   const toggleTier = (tier) => setExpanded((e) => ({ ...e, [tier]: !e[tier] }));
 
-  const createCustom = () => setAssignments({ ...(globalPol.assignments || {}) });
-
   const resetToGlobal = async () => {
     setBusy(true);
     try {
       await api.setAppConfig(appName, { aiPolicyAssignments: null });
       setAssignments(null);
       setMsg("Reset to global default.");
+      onSaved?.();
+    } catch (e) { setMsg(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const generatePolicy = async () => {
+    setBusy(true); setMsg("Generating policy with AI…");
+    try {
+      const result = await api.generateAppPolicy(appName, excluded);
+      setAssignments(result.assignments);
+      setShowPicker(false);
+      setMsg(result.generatorModel ? `Done — via ${result.generatorModel}` : "Done");
+      setTimeout(() => setMsg(null), 3000);
       onSaved?.();
     } catch (e) { setMsg(e.message); }
     finally { setBusy(false); }
@@ -94,19 +141,59 @@ function AppAiPolicyEditor({ appName, initialAssignments, models, onSaved }) {
   return (
     <div className="space-y-4">
       {usingGlobal ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-          <span className="text-sm text-gray-600">Using <strong>global default</strong> AI routing policy.</span>
-          <button className="btn-secondary text-xs" onClick={createCustom}>Create custom policy for this app</button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <span className="text-sm text-gray-600">Using <strong>global default</strong> AI routing policy.</span>
+            <button
+              className="btn-secondary text-xs"
+              disabled={busy}
+              onClick={() => { setShowPicker(true); }}
+            >
+              Generate custom policy with AI
+            </button>
+          </div>
+          {showPicker && (
+            <div className="space-y-3">
+              <ModelPicker models={models} excluded={excluded} onChange={setExcluded} />
+              <div className="flex items-center gap-3">
+                <button className="btn-secondary text-xs" disabled={busy} onClick={generatePolicy}>
+                  {busy ? "Generating…" : `Generate${excluded.length > 0 ? ` (${models.length - excluded.length} models)` : ""}`}
+                </button>
+                <button className="btn-ghost text-xs" disabled={busy} onClick={() => { setShowPicker(false); setExcluded([]); }}>Cancel</button>
+                {msg && <span className="text-xs text-gray-500">{msg}</span>}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <button className="btn-secondary text-xs" disabled={busy} onClick={save}>Save policy</button>
-          <button className="btn-outline text-xs" disabled={busy} onClick={promoteToDefault}>Set as global default</button>
-          <button className="btn-ghost text-xs" disabled={busy} onClick={resetToGlobal}>Reset to global default</button>
-          {msg && <span className="text-xs text-gray-500">{msg}</span>}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="btn-secondary text-xs" disabled={busy} onClick={save}>Save policy</button>
+            <button
+              className="btn-outline text-xs"
+              disabled={busy}
+              onClick={() => setShowPicker((v) => !v)}
+            >
+              {showPicker ? "Hide model picker" : "Regenerate with AI"}
+            </button>
+            <button className="btn-outline text-xs" disabled={busy} onClick={promoteToDefault}>Set as global default</button>
+            <button className="btn-ghost text-xs" disabled={busy} onClick={resetToGlobal}>Reset to global default</button>
+            {msg && <span className="text-xs text-gray-500">{msg}</span>}
+          </div>
+          {showPicker && (
+            <div className="space-y-3">
+              <ModelPicker models={models} excluded={excluded} onChange={setExcluded} />
+              <div className="flex items-center gap-3">
+                <button className="btn-secondary text-xs" disabled={busy} onClick={generatePolicy}>
+                  {busy ? "Generating…" : `Generate${excluded.length > 0 ? ` (${models.length - excluded.length} models)` : ""}`}
+                </button>
+                <button className="btn-ghost text-xs" disabled={busy} onClick={() => { setShowPicker(false); setExcluded([]); }}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
-      {usingGlobal && msg && <span className="text-xs text-gray-500">{msg}</span>}
+      {!showPicker && msg && usingGlobal && <span className="text-xs text-gray-500">{msg}</span>}
 
       <div className="space-y-2">
         {TIER_CONFIG.map(({ tier, label, badge, desc }) => {
@@ -376,13 +463,13 @@ export default function ApplicationDetail() {
             <h1 className="text-2xl font-bold text-gyde-charcoal">{appName}</h1>
             {isKilled && (
               <span className="mt-1 inline-flex items-center rounded text-xs font-medium text-red-600 bg-red-100 px-2 py-0.5">
-                Kill switch on — all requests blocked
+                Disconnected — all requests blocked
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">Kill switch</span>
-            <Toggle checked={isKilled} onChange={toggleKill} label="kill switch" disabled={killBusy} />
+            <span className="text-sm text-gray-500">{isKilled ? "Disconnected" : "Active"}</span>
+            <Toggle checked={!isKilled} onChange={(active) => toggleKill(!active)} label="connected" disabled={killBusy} />
           </div>
         </div>
 
