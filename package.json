@@ -37,7 +37,7 @@
     "@langchain/google-genai": "^0.1.0",
     "@langchain/openai": "^0.3.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.4.2",
     "express": "^4.18.2",
     "mongoose": "^8.4.0",
     "uuid": "^9.0.1"
