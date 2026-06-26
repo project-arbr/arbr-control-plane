@@ -36,7 +36,7 @@ services:
       ARBR_ENCRYPTION_KEY: ${ARBR_ENCRYPTION_KEY:-}
       # Provider keys (optional) — pass through from your .env if set.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # Redirect the OpenAI-compatible provider at a proxy/LiteLLM endpoint (e.g. Gyde LiteLLM).
+      # Redirect the OpenAI-compatible provider at a proxy/LiteLLM endpoint.
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

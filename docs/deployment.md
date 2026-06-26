@@ -32,8 +32,8 @@ Everything on **one port** (default 4100): the gateway (`/v1/chat`), the admin A
 ## Single-VM deployment (recommended)
 
 ```sh
-git clone https://github.com/gyde-ai/arbr
-cd arbr/control-plane
+git clone https://github.com/project-arbr/arbr-control-plane
+cd arbr-control-plane
 cp .env.example .env
 # Set in .env:
 #   ARBR_ADMIN_KEY=<generate with the command below>

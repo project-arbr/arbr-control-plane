@@ -22,7 +22,7 @@ function KeyRow({ k, onToggle, onRevoke, onSave }) {
       <td className="py-2">
         {editing
           ? <input className="input w-36" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          : <span className="text-gyde-charcoal">{k.name}</span>}
+          : <span className="text-arbr-charcoal">{k.name}</span>}
       </td>
       <td className="py-2">
         {editing
@@ -108,8 +108,8 @@ function ApiKeys({ onChange }) {
       </p>
 
       {created && (
-        <div className="rounded-lg border border-gyde-green-200 bg-gyde-green-50 p-4">
-          <div className="text-sm font-medium text-gyde-charcoal">Key created: {created.name}</div>
+        <div className="rounded-lg border border-arbr-green-200 bg-arbr-green-50 p-4">
+          <div className="text-sm font-medium text-arbr-charcoal">Key created: {created.name}</div>
           <div className="mt-1 text-xs text-gray-600">
             Copy it now — <strong>this is the only time it will be shown.</strong>
           </div>
@@ -118,7 +118,7 @@ function ApiKeys({ onChange }) {
             <button className="btn-secondary" onClick={copyKey}>{copied ? "Copied" : "Copy"}</button>
             <button className="btn-ghost" onClick={() => setCreated(null)}>Dismiss</button>
           </div>
-          <div className="mt-4 border-t border-gyde-green-200 pt-4">
+          <div className="mt-4 border-t border-arbr-green-200 pt-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Share with your developer</div>
             <pre className="rounded bg-white p-3 text-xs leading-relaxed text-gray-700 overflow-x-auto whitespace-pre">{[
               `# .env`,
@@ -249,7 +249,7 @@ export default function Settings({ onChange }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gyde-charcoal">Settings</h1>
+        <h1 className="text-xl font-semibold text-arbr-charcoal">Settings</h1>
         <p className="mt-1 text-sm text-gray-500">Gateway configuration and API key management.</p>
       </div>
 
@@ -261,7 +261,7 @@ export default function Settings({ onChange }) {
             <p className="mb-4 text-sm text-gray-600">
               Used when a request sends <code className="rounded bg-gray-100 px-1">model: "auto"</code> or
               names no model. Configure providers and models in the{" "}
-              <a href="/models" className="text-gyde-green-600 hover:underline">Models</a> page.
+              <a href="/models" className="text-arbr-green-600 hover:underline">Models</a> page.
             </p>
             <div className="flex flex-wrap items-end gap-4">
               <div>
@@ -297,7 +297,7 @@ export default function Settings({ onChange }) {
           <Card title="Security">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-gyde-charcoal">Require API keys</div>
+                <div className="text-sm font-medium text-arbr-charcoal">Require API keys</div>
                 <div className="mt-0.5 text-xs text-gray-500">
                   When on, anonymous gateway calls are rejected (401). Leave off until every integrated app has a key.
                 </div>
@@ -310,19 +310,19 @@ export default function Settings({ onChange }) {
             <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Control plane</dt>
-                <dd className="mt-0.5 font-mono text-gyde-charcoal">
+                <dd className="mt-0.5 font-mono text-arbr-charcoal">
                   {about ? `v${about.version}` : "—"}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">JS SDK (npm)</dt>
-                <dd className="mt-0.5 font-mono text-gyde-charcoal">
+                <dd className="mt-0.5 font-mono text-arbr-charcoal">
                   {about ? `arbr-client@${about.sdkJs}` : "—"}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Python SDK (PyPI)</dt>
-                <dd className="mt-0.5 font-mono text-gyde-charcoal">
+                <dd className="mt-0.5 font-mono text-arbr-charcoal">
                   {about ? `arbr-client@${about.sdkPython}` : "—"}
                 </dd>
               </div>

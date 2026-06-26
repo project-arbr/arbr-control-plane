@@ -14,7 +14,7 @@ function AppCard({ app, stats, config, onToggleKill }) {
     <div className={`card flex flex-col gap-4 p-5 transition-all ${isKilled ? "border-red-200 bg-red-50/30" : ""}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link to={`/applications/${encodeURIComponent(app)}`} className="text-base font-semibold text-gyde-charcoal hover:text-gyde-green-700 hover:underline truncate block">
+          <Link to={`/applications/${encodeURIComponent(app)}`} className="text-base font-semibold text-arbr-charcoal hover:text-arbr-green-700 hover:underline truncate block">
             {app}
           </Link>
           {isKilled ? (
@@ -22,8 +22,8 @@ function AppCard({ app, stats, config, onToggleKill }) {
               Disconnected
             </span>
           ) : (
-            <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-gyde-green-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-gyde-green-600 inline-block" />
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-arbr-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-arbr-green-600 inline-block" />
               Active
             </span>
           )}
@@ -38,25 +38,25 @@ function AppCard({ app, stats, config, onToggleKill }) {
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
           <div className="label">Requests</div>
-          <div className="font-semibold text-gyde-charcoal">{stats ? fmt.num(stats.requests) : "—"}</div>
+          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.num(stats.requests) : "—"}</div>
         </div>
         <div>
           <div className="label">Cost</div>
-          <div className="font-semibold text-gyde-charcoal">{stats ? fmt.usd(stats.cost) : "—"}</div>
+          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.usd(stats.cost) : "—"}</div>
         </div>
         <div>
           <div className="label">Success</div>
-          <div className={`font-semibold ${stats?.failures > 0 ? "text-red-600" : "text-gyde-charcoal"}`}>{successRate}</div>
+          <div className={`font-semibold ${stats?.failures > 0 ? "text-red-600" : "text-arbr-charcoal"}`}>{successRate}</div>
         </div>
         <div>
           <div className="label">Avg latency</div>
-          <div className="font-semibold text-gyde-charcoal">{stats ? fmt.ms(stats.avgLatency) : "—"}</div>
+          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.ms(stats.avgLatency) : "—"}</div>
         </div>
       </div>
 
       <Link
         to={`/applications/${encodeURIComponent(app)}`}
-        className="mt-auto text-xs text-gyde-green-600 hover:underline self-start"
+        className="mt-auto text-xs text-arbr-green-600 hover:underline self-start"
       >
         View details →
       </Link>
@@ -104,7 +104,7 @@ export default function Applications() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gyde-charcoal">Applications</h1>
+        <h1 className="text-2xl font-bold text-arbr-charcoal">Applications</h1>
         <p className="text-sm text-gray-500">Per-application traffic overview and controls. Apps appear as they generate requests.</p>
       </div>
 

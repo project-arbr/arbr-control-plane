@@ -97,7 +97,7 @@ function ModelPicker({ models, excluded, onChange }) {
                     className={`flex cursor-pointer items-center gap-3 py-1.5 pr-3 pl-9 transition-colors hover:bg-gray-50 ${!included ? "opacity-40" : ""}`}
                   >
                     <input type="checkbox" checked={included} onChange={() => toggle(m.id)} className="rounded shrink-0" />
-                    <span className="flex-1 font-mono text-xs text-gyde-charcoal truncate">{m.id}</span>
+                    <span className="flex-1 font-mono text-xs text-arbr-charcoal truncate">{m.id}</span>
                     <Badge tone={TIER_TONE[m.tier] || "gray"}>{m.tier}</Badge>
                   </label>
                 );
@@ -246,7 +246,7 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
                   >
                     <div className="flex items-center gap-3">
                       <Badge tone={badge}>{label}</Badge>
-                      <span className="text-sm font-medium text-gyde-charcoal">{tasks.length} tasks</span>
+                      <span className="text-sm font-medium text-arbr-charcoal">{tasks.length} tasks</span>
                       <span className="hidden text-xs text-gray-400 sm:inline">{desc}</span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -267,7 +267,7 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
                         <tbody>
                           {tasks.map((task) => (
                             <tr key={task.id} className="border-t border-gray-100">
-                              <td className="px-4 py-2 font-medium text-gyde-charcoal">{task.label}</td>
+                              <td className="px-4 py-2 font-medium text-arbr-charcoal">{task.label}</td>
                               <td className="px-4 py-2 text-xs text-gray-500">{task.description}</td>
                               <td className="px-4 py-2">
                                 <select
@@ -303,7 +303,7 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
               >
                 <div className="flex items-center gap-3">
                   <Badge tone="charcoal">Custom</Badge>
-                  <span className="text-sm font-medium text-gyde-charcoal">{globalPol.customTaskTypes.length} tasks</span>
+                  <span className="text-sm font-medium text-arbr-charcoal">{globalPol.customTaskTypes.length} tasks</span>
                   <span className="hidden text-xs text-gray-400 sm:inline">Task types seen in traffic, not in built-in catalog</span>
                 </div>
                 <Chevron open={expanded.custom} />
@@ -320,7 +320,7 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
                     <tbody>
                       {globalPol.customTaskTypes.map((taskId) => (
                         <tr key={taskId} className="border-t border-gray-100">
-                          <td className="px-4 py-2 font-mono text-sm font-medium text-gyde-charcoal">{taskId}</td>
+                          <td className="px-4 py-2 font-mono text-sm font-medium text-arbr-charcoal">{taskId}</td>
                           <td className="px-4 py-2">
                             <select
                               className="input w-full"
@@ -379,7 +379,7 @@ function AppOverview({ appName }) {
       {cards.map(({ label, value, sub, highlight }) => (
         <div key={label} className={`card px-5 py-4 ${highlight ? "border-red-200 bg-red-50" : ""}`}>
           <div className="label">{label}</div>
-          <div className={`mt-1 text-2xl font-bold ${highlight ? "text-red-600" : "text-gyde-charcoal"}`}>{value}</div>
+          <div className={`mt-1 text-2xl font-bold ${highlight ? "text-red-600" : "text-arbr-charcoal"}`}>{value}</div>
           {sub && <div className="mt-0.5 text-xs text-gray-400">{sub}</div>}
         </div>
       ))}
@@ -434,13 +434,13 @@ export default function ApplicationDetail() {
       {/* Breadcrumb + header */}
       <div>
         <div className="text-xs text-gray-400 mb-1">
-          <Link to="/applications" className="hover:text-gyde-charcoal">Applications</Link>
+          <Link to="/applications" className="hover:text-arbr-charcoal">Applications</Link>
           <span className="mx-1">/</span>
           <span>{appName}</span>
         </div>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gyde-charcoal">{appName}</h1>
+            <h1 className="text-2xl font-bold text-arbr-charcoal">{appName}</h1>
             {isKilled && (
               <span className="mt-1 inline-flex items-center rounded text-xs font-medium text-red-600 bg-red-100 px-2 py-0.5">
                 Disconnected — all requests blocked

@@ -19,7 +19,7 @@ function actionLabel(action) {
 // Inline progress bar: green → amber (>80%) → red (breached).
 function SpendBar({ cap }) {
   const pct = Math.min(cap.pct ?? 0, 100);
-  const color = cap.breached ? "bg-red-500" : pct > 80 ? "bg-amber-400" : "bg-gyde-green-600";
+  const color = cap.breached ? "bg-red-500" : pct > 80 ? "bg-amber-400" : "bg-arbr-green-600";
   return (
     <div className="flex items-center gap-2">
       <div className="relative h-1.5 w-20 overflow-hidden rounded-full bg-gray-200">
@@ -65,11 +65,11 @@ function CapRow({ cap, onRefresh }) {
 
   return (
     <>
-      <tr className={`border-b border-gray-100 ${cap.breached && cap.enabled ? "bg-red-50/40" : "hover:bg-gyde-green-50"}`}>
+      <tr className={`border-b border-gray-100 ${cap.breached && cap.enabled ? "bg-red-50/40" : "hover:bg-arbr-green-50"}`}>
         <td className="px-3 py-2.5">
           <Toggle checked={cap.enabled} onChange={toggle} label="enabled" />
         </td>
-        <td className="px-3 py-2.5 text-sm font-medium text-gyde-charcoal">{scopeLabel(cap)}</td>
+        <td className="px-3 py-2.5 text-sm font-medium text-arbr-charcoal">{scopeLabel(cap)}</td>
         <td className="px-3 py-2.5 text-sm text-gray-600">{cap.period === "day" ? "Daily" : "Monthly"}</td>
         <td className="px-3 py-2.5 text-sm text-gray-600">{fmt.usd(cap.limit)}</td>
         <td className="px-3 py-2.5"><SpendBar cap={cap} /></td>
@@ -295,7 +295,7 @@ export default function Budgets({ onChange }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gyde-charcoal">Budgets</h1>
+        <h1 className="text-xl font-bold text-arbr-charcoal">Budgets</h1>
         <p className="mt-1 text-sm text-gray-500">
           Stop or downgrade AI requests once a spending threshold is reached. Spend is measured across all
           requests logged in the current daily or monthly rolling window.
@@ -307,13 +307,13 @@ export default function Budgets({ onChange }) {
         <div className="card px-4 py-3 flex items-center gap-3">
           <div>
             <div className="label">Active constraints</div>
-            <div className="text-2xl font-bold text-gyde-charcoal">{active.length}</div>
+            <div className="text-2xl font-bold text-arbr-charcoal">{active.length}</div>
           </div>
         </div>
         <div className={`card px-4 py-3 flex items-center gap-3 ${breached.length > 0 ? "border-red-200 bg-red-50" : ""}`}>
           <div>
             <div className="label">Breached now</div>
-            <div className={`text-2xl font-bold ${breached.length > 0 ? "text-red-600" : "text-gyde-charcoal"}`}>
+            <div className={`text-2xl font-bold ${breached.length > 0 ? "text-red-600" : "text-arbr-charcoal"}`}>
               {breached.length}
             </div>
           </div>

@@ -62,7 +62,7 @@ function tierTone(tier) {
 
 function StatusDot({ live }) {
   return (
-    <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${live ? "bg-gyde-green-600" : "bg-gray-300"}`} />
+    <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${live ? "bg-arbr-green-600" : "bg-gray-300"}`} />
   );
 }
 
@@ -75,9 +75,9 @@ function Field({ label, children }) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-gyde-green-600 focus:outline-none focus:ring-1 focus:ring-gyde-green-600";
+const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-arbr-green-600 focus:outline-none focus:ring-1 focus:ring-arbr-green-600";
 const BTN   = "rounded-md px-3 py-1.5 text-sm font-medium transition-colors";
-const BTN_PRIMARY = `${BTN} bg-gyde-green-600 text-white hover:bg-gyde-green-700`;
+const BTN_PRIMARY = `${BTN} bg-arbr-green-600 text-white hover:bg-arbr-green-700`;
 const BTN_GHOST   = `${BTN} border border-gray-300 text-gray-700 hover:bg-gray-50`;
 const BTN_DANGER  = `${BTN} text-red-600 hover:bg-red-50`;
 
@@ -92,7 +92,7 @@ function BenchmarkBar({ dim, value }) {
       <span className="w-16 text-right text-gray-500 capitalize flex-shrink-0">{dim}</span>
       <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
         {pct != null && (
-          <div className="h-1.5 rounded-full bg-gyde-green-600 transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-1.5 rounded-full bg-arbr-green-600 transition-all" style={{ width: `${pct}%` }} />
         )}
       </div>
       <span className="w-8 font-mono text-gray-600 flex-shrink-0">{pct != null ? pct : "—"}</span>
@@ -169,7 +169,7 @@ function ModelMetaPanel({ model }) {
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Capabilities</span>
           {chips.map((c) => (
-            <span key={c} className="rounded-full bg-gyde-green-50 border border-gyde-green-200 px-2 py-0.5 text-xs font-medium text-gyde-green-700">{c}</span>
+            <span key={c} className="rounded-full bg-arbr-green-50 border border-arbr-green-200 px-2 py-0.5 text-xs font-medium text-arbr-green-700">{c}</span>
           ))}
         </div>
       )}
@@ -299,7 +299,7 @@ function ModelRow({ model, onRefresh }) {
         </svg>
 
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-gyde-charcoal truncate">{model.label || model.id}</div>
+          <div className="font-medium text-arbr-charcoal truncate">{model.label || model.id}</div>
           {model.label && <div className="text-xs text-gray-400 truncate font-mono">{model.id}</div>}
         </div>
 
@@ -355,7 +355,7 @@ function ModelRow({ model, onRefresh }) {
           <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setShowTest((v) => !v); setDeleting(false); }}
-              className={`${BTN} text-xs ${showTest ? "bg-gyde-green-50 text-gyde-green-700 border border-gyde-green-200" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`${BTN} text-xs ${showTest ? "bg-arbr-green-50 text-arbr-green-700 border border-arbr-green-200" : "text-gray-600 hover:bg-gray-100"}`}
             >
               Test
             </button>
@@ -434,7 +434,7 @@ function AddModelForm({ providerId, models, onSave, onClose }) {
 
   return (
     <form onSubmit={submit} className="border border-gray-200 rounded-lg bg-gray-50 px-4 py-4 space-y-3">
-      <p className="text-sm font-semibold text-gyde-charcoal">Add model</p>
+      <p className="text-sm font-semibold text-arbr-charcoal">Add model</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Model ID *">
           <input
@@ -456,7 +456,7 @@ function AddModelForm({ providerId, models, onSave, onClose }) {
               required
             />
             {autoFilled && (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gyde-green-600 font-medium">
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-arbr-green-600 font-medium">
                 auto-filled
               </span>
             )}
@@ -594,7 +594,7 @@ function BuiltinProviderDetail({ provider, models, onRefresh }) {
       {/* header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gyde-charcoal">{provider.label}</h2>
+          <h2 className="text-lg font-semibold text-arbr-charcoal">{provider.label}</h2>
           <div className="flex items-center gap-2 mt-1">
             <StatusDot live={isLive} />
             <span className="text-sm text-gray-500">
@@ -626,7 +626,7 @@ function BuiltinProviderDetail({ provider, models, onRefresh }) {
       </div>
 
       {testResult && (
-        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-gyde-green-50 text-gyde-green-800 border border-gyde-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-green-50 text-arbr-green-800 border border-arbr-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {testResult.ok ? `✓ Connected · model: ${testResult.model}${testResult.sample ? ` · "${testResult.sample}"` : ""}` : `✗ ${testResult.message}`}
         </div>
       )}
@@ -696,7 +696,7 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gyde-charcoal">{provider.label}</h2>
+            <h2 className="text-lg font-semibold text-arbr-charcoal">{provider.label}</h2>
             <Badge tone="gray">custom</Badge>
             {!provider.enabled && <Badge tone="amber">disabled</Badge>}
           </div>
@@ -716,7 +716,7 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
       </div>
 
       {testResult && (
-        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-gyde-green-50 text-gyde-green-800 border border-gyde-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-green-50 text-arbr-green-800 border border-arbr-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {testResult.ok ? `✓ Connected · "${testResult.sample}"` : `✗ ${testResult.message}`}
         </div>
       )}
@@ -814,7 +814,7 @@ function CatalogProviderDetail({ provider, models, onRefresh }) {
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gyde-charcoal">{provider.label}</h2>
+            <h2 className="text-lg font-semibold text-arbr-charcoal">{provider.label}</h2>
             <Badge tone="gray">not connected</Badge>
           </div>
           <p className="mt-1 text-sm text-gray-500">
@@ -840,7 +840,7 @@ function CatalogProviderDetail({ provider, models, onRefresh }) {
           <div className="flex flex-col gap-1 text-sm">
             <label className="font-medium text-gray-700">
               Base URL
-              {info.url && <span className="ml-2 text-xs font-normal text-gyde-green-700">· pre-filled with official endpoint</span>}
+              {info.url && <span className="ml-2 text-xs font-normal text-arbr-green-700">· pre-filled with official endpoint</span>}
               {!info.url && <span className="ml-2 text-xs font-normal text-amber-600">· account-specific, see hint below</span>}
             </label>
             <input
@@ -950,7 +950,7 @@ function ProviderSidebar({ allProviders, selected, onSelect, onRefresh }) {
             onClick={() => onSelect(p)}
             className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
               selected?.provider === p.provider && selected?.type === p.type
-                ? "bg-gyde-green-50 text-gyde-charcoal font-medium"
+                ? "bg-arbr-green-50 text-arbr-charcoal font-medium"
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -1074,7 +1074,7 @@ export default function Models() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gyde-charcoal">Models</h1>
+          <h1 className="text-xl font-semibold text-arbr-charcoal">Models</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage provider connections and the model registry.
           </p>

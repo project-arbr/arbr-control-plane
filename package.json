@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "description": "Arbr Control Plane — open source AI gateway. A single REST endpoint that routes requests across LLM providers, tracks spend, enforces budgets, and applies human-approved routing rules.",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/project-arbr/arbr-control-plane.git"

@@ -11,7 +11,7 @@ hero:
       link: /quickstart
     - theme: alt
       text: View on GitHub
-      link: https://github.com/gyde-ai/arbr
+      link: https://github.com/project-arbr/arbr-control-plane
 
 features:
   - icon: 🔍

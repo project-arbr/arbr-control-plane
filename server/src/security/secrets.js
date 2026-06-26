@@ -1,22 +1,35 @@
 // Encrypt provider API keys at rest (AES-256-GCM). Keys entered via the dashboard
 // are stored encrypted; they are never returned to the browser.
 //
-// The encryption key comes from ARBR_ENCRYPTION_KEY. If unset, a dev fallback is
-// used so the demo still runs — but a warning is printed, because storing keys
-// under a known dev secret is not safe for production. Set ARBR_ENCRYPTION_KEY
-// (any strong string) in real deployments.
+// The encryption key comes from ARBR_ENCRYPTION_KEY. Outside production, an insecure
+// dev fallback is used so the demo runs key-free — with a warning. In production the
+// fallback is refused: booting without ARBR_ENCRYPTION_KEY throws, because this is an
+// open-source project and the fallback value is public, so storing provider keys under
+// it would make them trivially decryptable by anyone. Set ARBR_ENCRYPTION_KEY (any
+// strong string) in real deployments.
 const crypto = require("crypto");
 
+// Public, intentionally-insecure constant: safe to ship only because it is refused in production.
 const DEV_FALLBACK = "arbr-dev-insecure-encryption-key-change-me";
 let warned = false;
 
 function secret() {
   const s = process.env.ARBR_ENCRYPTION_KEY;
   if (s && s.trim()) return s.trim();
+
+  // Never silently fall back to the public dev key in production — fail loud and early.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "[secrets] ARBR_ENCRYPTION_KEY is required in production. Without it, stored " +
+        "provider keys would be encrypted under a public, well-known dev key. Set " +
+        "ARBR_ENCRYPTION_KEY to a strong random string and restart."
+    );
+  }
+
   if (!warned) {
     console.warn(
       "[secrets] ARBR_ENCRYPTION_KEY is not set — using an insecure dev key for " +
-        "stored provider keys. Set ARBR_ENCRYPTION_KEY before production."
+        "stored provider keys. This is refused in production; set ARBR_ENCRYPTION_KEY there."
     );
     warned = true;
   }

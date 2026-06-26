@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build & lint
+    name: Build & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,5 +27,26 @@ jobs:
       - name: Build dashboard
         run: npm run web:build
 
+      - name: JS SDK unit tests
+        run: npm --prefix clients/js test
+
       - name: Docker build (smoke test)
         run: docker build -t arbr-control-plane:ci .
+
+  python-sdk:
+    name: Python SDK tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python SDK with dev extras
+        run: pip install -e ".[dev,langchain]"
+        working-directory: clients/python
+
+      - name: Run tests
+        run: python -m pytest -q
+        working-directory: clients/python

@@ -35,7 +35,7 @@ export default function ByDimension({ embedded = false }) {
     <div className="space-y-6">
       {!embedded && (
         <div>
-          <h1 className="text-2xl font-bold text-gyde-charcoal">By dimension</h1>
+          <h1 className="text-2xl font-bold text-arbr-charcoal">By dimension</h1>
           <p className="text-sm text-gray-500">Usage and cost, sliced the ways each audience needs to see them.</p>
         </div>
       )}

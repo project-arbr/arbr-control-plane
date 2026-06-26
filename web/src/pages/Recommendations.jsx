@@ -24,7 +24,7 @@ export default function Recommendations({ embedded = false }) {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          {!embedded && <h1 className="text-2xl font-bold text-gyde-charcoal">Recommendations</h1>}
+          {!embedded && <h1 className="text-2xl font-bold text-arbr-charcoal">Recommendations</h1>}
           <p className="text-sm text-gray-500">Costed optimisation suggestions. The system proposes; the human decides.</p>
         </div>
         <button className="btn-primary" onClick={recompute} disabled={busy}>
@@ -36,7 +36,7 @@ export default function Recommendations({ embedded = false }) {
       {recs === null ? <Spinner /> : recs.length === 0 ? (
         <Card>
           <div className="py-8 text-center text-gray-400">
-            No recommendations yet. Click <span className="font-medium text-gyde-charcoal">Recompute</span> to analyse the logged data.
+            No recommendations yet. Click <span className="font-medium text-arbr-charcoal">Recompute</span> to analyse the logged data.
           </div>
         </Card>
       ) : (
@@ -46,7 +46,7 @@ export default function Recommendations({ embedded = false }) {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold text-gyde-charcoal">{r.title}</h3>
+                    <h3 className="text-base font-semibold text-arbr-charcoal">{r.title}</h3>
                     {r.status === "accepted" && <Badge tone="green">Accepted</Badge>}
                     {r.status === "dismissed" && <Badge tone="gray">Dismissed</Badge>}
                     {r.status === "pending" && <Badge tone="amber">Pending</Badge>}
@@ -59,7 +59,7 @@ export default function Recommendations({ embedded = false }) {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="label">Projected saving</div>
-                  <div className="text-2xl font-bold text-gyde-green-600">{fmt.usd(r.projectedSavings)}</div>
+                  <div className="text-2xl font-bold text-arbr-green-600">{fmt.usd(r.projectedSavings)}</div>
                   <div className="text-xs text-gray-500">{fmt.usd(r.currentCost)} → {fmt.usd(r.projectedCost)}</div>
                 </div>
               </div>

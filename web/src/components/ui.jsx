@@ -11,8 +11,8 @@ export function Tabs({ tabs, active, onChange }) {
           onClick={() => onChange(k)}
           className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             active === k
-              ? "border-gyde-green-600 text-gyde-charcoal"
-              : "border-transparent text-gray-500 hover:text-gyde-charcoal"
+              ? "border-arbr-green-600 text-arbr-charcoal"
+              : "border-transparent text-gray-500 hover:text-arbr-charcoal"
           }`}
         >
           {label}
@@ -44,7 +44,7 @@ export function Card({ title, action, children, className = "" }) {
     <div className={`card p-6 ${className}`}>
       {(title || action) && (
         <div className="mb-4 flex items-center justify-between">
-          {title && <h3 className="text-base font-semibold text-gyde-charcoal">{title}</h3>}
+          {title && <h3 className="text-base font-semibold text-arbr-charcoal">{title}</h3>}
           {action}
         </div>
       )}
@@ -57,15 +57,15 @@ export function Stat({ label, value, sub }) {
   return (
     <div className="card p-6">
       <div className="label">{label}</div>
-      <div className="mt-2 text-3xl font-bold text-gyde-charcoal">{value}</div>
+      <div className="mt-2 text-3xl font-bold text-arbr-charcoal">{value}</div>
       {sub && <div className="mt-1 text-sm text-gray-500">{sub}</div>}
     </div>
   );
 }
 
 const BADGE_TONES = {
-  green: "bg-gyde-green-50 text-gyde-green-700 border-gyde-green-200",
-  charcoal: "bg-gray-100 text-gyde-charcoal border-gray-200",
+  green: "bg-arbr-green-50 text-arbr-green-700 border-arbr-green-200",
+  charcoal: "bg-gray-100 text-arbr-charcoal border-gray-200",
   amber: "bg-amber-50 text-amber-700 border-amber-200",
   indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
   violet: "bg-violet-50 text-violet-700 border-violet-200",
@@ -89,7 +89,7 @@ export function Table({ columns, rows, empty = "No data." }) {
         <thead>
           <tr className="border-b border-gray-200 text-left">
             {columns.map((c) => (
-              <th key={c.key} className="bg-gray-50 px-3 py-2 font-semibold text-gyde-charcoal first:rounded-tl-lg last:rounded-tr-lg">
+              <th key={c.key} className="bg-gray-50 px-3 py-2 font-semibold text-arbr-charcoal first:rounded-tl-lg last:rounded-tr-lg">
                 {c.header}
               </th>
             ))}
@@ -100,7 +100,7 @@ export function Table({ columns, rows, empty = "No data." }) {
             <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-gray-400">{empty}</td></tr>
           ) : (
             rows.map((row, i) => (
-              <tr key={i} className="border-b border-gray-100 hover:bg-gyde-green-50">
+              <tr key={i} className="border-b border-gray-100 hover:bg-arbr-green-50">
                 {columns.map((c) => (
                   <td key={c.key} className="px-3 py-2 text-gray-700">
                     {c.render ? c.render(row) : row[c.key]}
@@ -120,7 +120,7 @@ export function Toggle({ checked, onChange, label }) {
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? "bg-gyde-green-600" : "bg-gray-300"}`}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? "bg-arbr-green-600" : "bg-gray-300"}`}
       aria-pressed={checked}
       aria-label={label}
     >
@@ -137,7 +137,7 @@ export function ConfirmDialog({ title, message, confirmLabel = "Confirm", onConf
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-        <h3 className="text-base font-semibold text-gyde-charcoal">{title}</h3>
+        <h3 className="text-base font-semibold text-arbr-charcoal">{title}</h3>
         {message && <p className="mt-2 text-sm text-gray-500">{message}</p>}
         <div className="mt-5 flex justify-end gap-3">
           <button className="btn-ghost text-sm" onClick={onCancel}>Cancel</button>
@@ -159,7 +159,7 @@ export function CodeBlock({ code, lang }) {
       {lang && <span className="absolute left-3 top-2 text-[10px] uppercase tracking-wide text-gray-400">{lang}</span>}
       <button
         onClick={copy}
-        className="absolute right-2 top-2 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-500 hover:border-gyde-green-600 hover:text-gyde-charcoal"
+        className="absolute right-2 top-2 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-500 hover:border-arbr-green-600 hover:text-arbr-charcoal"
       >
         {copied ? "Copied" : "Copy"}
       </button>

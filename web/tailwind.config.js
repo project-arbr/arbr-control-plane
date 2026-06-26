@@ -1,11 +1,11 @@
 /** @type {import('tailwindcss').Config} */
-// Gyde design system, translated from the SIS MUI themes.
+// Arbr design system.
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
-        gyde: {
+        arbr: {
           green: {
             50: "#f7fee7",
             100: "#e5fe96",

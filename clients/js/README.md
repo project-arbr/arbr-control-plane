@@ -161,7 +161,7 @@ Because the response is OpenAI-compatible, it also works directly via the OpenAI
 
 ```js
 import OpenAI from "openai";
-const openai = new OpenAI({ apiKey: "ab_…", baseURL: "https://arbr.gyde.ai/v1" });
+const openai = new OpenAI({ apiKey: "ab_…", baseURL: "https://your-control-plane.example.com/v1" });
 const list = await openai.models.list();
 list.data.forEach(m => console.log(m.id));
 ```

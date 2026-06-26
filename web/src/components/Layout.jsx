@@ -24,7 +24,7 @@ const FOOTER_LINK = { to: "/docs", label: "Docs" };
 function navClass({ isActive }) {
   return `mx-1 my-0.5 flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
     isActive
-      ? "bg-gyde-green-600 text-white"
+      ? "bg-arbr-green-600 text-white"
       : "text-gray-400 hover:bg-white/8 hover:text-white"
   }`;
 }
@@ -33,7 +33,7 @@ function Wordmark() {
   return (
     <div className="flex items-baseline gap-0.5">
       <span className="text-xl font-bold tracking-tight text-white">ARBR</span>
-      <span className="text-xl font-bold text-gyde-green-400">.</span>
+      <span className="text-xl font-bold text-arbr-green-400">.</span>
     </div>
   );
 }
@@ -41,7 +41,7 @@ function Wordmark() {
 export default function Layout({ status, onSignOut, children }) {
   return (
     <div className="flex min-h-full">
-      <aside className="sticky top-0 flex h-screen w-56 flex-col bg-gyde-charcoal">
+      <aside className="sticky top-0 flex h-screen w-56 flex-col bg-arbr-charcoal">
         <div className="px-5 py-5">
           <Wordmark />
           <div className="mt-1 text-[11px] text-gray-500">Control Plane · Phase 1</div>
@@ -88,7 +88,7 @@ export default function Layout({ status, onSignOut, children }) {
                 Demo mode — no provider keys
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-md border border-gyde-green-200 bg-gyde-green-50 px-2.5 py-1 text-xs font-medium text-gyde-green-700">
+              <span className="inline-flex items-center rounded-md border border-arbr-green-200 bg-arbr-green-50 px-2.5 py-1 text-xs font-medium text-arbr-green-700">
                 Live · {(status?.liveProviders || []).join(", ")}
               </span>
             )}

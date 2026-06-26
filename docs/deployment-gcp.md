@@ -39,8 +39,8 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 ## Step 5 — Clone the repo and configure
 
 ```sh
-git clone https://github.com/shubham-gyde/arbr-ai-control-plane.git
-cd arbr-ai-control-plane
+git clone https://github.com/project-arbr/arbr-control-plane.git
+cd arbr-control-plane
 cp .env.example .env
 nano .env
 ```
