@@ -27,36 +27,84 @@ function Chevron({ open }) {
 
 // ── App-level AI policy editor ─────────────────────────────────────────────────
 
+const TIER_TONE = { premium: "violet", mid: "indigo", light: "teal" };
+
 function ModelPicker({ models, excluded, onChange }) {
+  const [query, setQuery] = useState("");
+
   const byProvider = {};
   for (const m of models) {
     if (!byProvider[m.provider]) byProvider[m.provider] = [];
     byProvider[m.provider].push(m);
   }
-  const toggle = (id) => onChange(excluded.includes(id) ? excluded.filter((x) => x !== id) : [...excluded, id]);
+
+  const q = query.toLowerCase();
+  const includedCount = models.length - excluded.length;
+
+  const toggle     = (id) => onChange(excluded.includes(id) ? excluded.filter((x) => x !== id) : [...excluded, id]);
+  const selectAll  = (ids) => onChange(excluded.filter((x) => !ids.includes(x)));
+  const deselectAll = (ids) => onChange([...new Set([...excluded, ...ids])]);
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Models to include in policy generation</div>
-      {Object.entries(byProvider).map(([prov, provModels]) => (
-        <div key={prov}>
-          <div className="label mb-1">{prov}</div>
-          <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-            {provModels.map((m) => (
-              <label key={m.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!excluded.includes(m.id)}
-                  onChange={() => toggle(m.id)}
-                  className="rounded"
-                />
-                <span className="font-mono text-xs">{m.id}</span>
-                <Badge tone={m.tier === "premium" ? "violet" : m.tier === "mid" ? "indigo" : "teal"}>{m.tier}</Badge>
-              </label>
-            ))}
-          </div>
+    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+      {/* Header + search */}
+      <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-3 py-2.5">
+        <div className="relative flex-1">
+          <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            className="input w-full pl-8 py-1 text-xs"
+            placeholder="Search models…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
-      ))}
+        <span className="shrink-0 text-xs text-gray-500">{includedCount} / {models.length} included</span>
+        <button className="btn-ghost text-xs shrink-0" onClick={() => onChange([])}>All</button>
+        <button className="btn-ghost text-xs shrink-0" onClick={() => onChange(models.map((m) => m.id))}>None</button>
+      </div>
+
+      {/* Scrollable list */}
+      <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+        {Object.entries(byProvider).map(([prov, provModels]) => {
+          const filtered = provModels.filter((m) => !q || m.id.toLowerCase().includes(q) || prov.toLowerCase().includes(q));
+          if (!filtered.length) return null;
+          const provIds = filtered.map((m) => m.id);
+          const allIncluded = provIds.every((id) => !excluded.includes(id));
+          return (
+            <div key={prov}>
+              {/* Provider row */}
+              <div className="flex items-center justify-between bg-gray-50/70 px-3 py-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">{prov}</span>
+                <div className="flex gap-2">
+                  <button className="text-xs text-gyde-green-600 hover:underline" onClick={() => selectAll(provIds)}>all</button>
+                  <button className="text-xs text-gray-400 hover:underline" onClick={() => deselectAll(provIds)}>none</button>
+                </div>
+              </div>
+              {/* Model rows */}
+              {filtered.map((m) => {
+                const included = !excluded.includes(m.id);
+                return (
+                  <label
+                    key={m.id}
+                    className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-gray-50 ${!included ? "opacity-40" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={included}
+                      onChange={() => toggle(m.id)}
+                      className="rounded shrink-0"
+                    />
+                    <span className="flex-1 font-mono text-xs text-gyde-charcoal truncate">{m.id}</span>
+                    <Badge tone={TIER_TONE[m.tier] || "gray"}>{m.tier}</Badge>
+                  </label>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
