@@ -11,6 +11,51 @@ function fmtCtx(n) {
   return `${n} tokens`;
 }
 
+// Provider display labels — covers common LiteLLM provider IDs so they show
+// a human-readable name in the sidebar. Anything not listed falls back to a
+// simple title-case transform of the provider ID.
+const PROVIDER_LABELS = {
+  "openai":       "OpenAI",
+  "anthropic":    "Anthropic",
+  "gemini":       "Google Gemini",
+  "bedrock-nova": "Amazon Bedrock",
+  "deepseek":     "DeepSeek",
+  "moonshot":     "Moonshot AI",
+  "xai":          "xAI",
+  "groq":         "Groq",
+  "mistral":      "Mistral AI",
+  "cohere":       "Cohere",
+  "azure":        "Azure OpenAI",
+  "azure-ai":     "Azure AI Studio",
+  "vertex-ai":    "Vertex AI",
+  "together-ai":  "Together AI",
+  "fireworks":    "Fireworks AI",
+  "perplexity":   "Perplexity",
+  "cerebras":     "Cerebras",
+  "sambanova":    "SambaNova",
+  "databricks":   "Databricks",
+  "deepinfra":    "DeepInfra",
+  "ollama":       "Ollama",
+  "anyscale":     "Anyscale",
+  "openrouter":   "OpenRouter",
+  "novita":       "Novita AI",
+  "replicate":    "Replicate",
+  "snowflake":    "Snowflake",
+  "dashscope":    "Alibaba (DashScope)",
+  "cloudflare":   "Cloudflare AI",
+  "watsonx":      "IBM watsonx",
+  "nebius":       "Nebius AI",
+  "lambda-ai":    "Lambda AI",
+  "hyperbolic":   "Hyperbolic",
+  "minimax":      "MiniMax",
+  "volcengine":   "Volcengine",
+};
+
+function providerLabel(id) {
+  return PROVIDER_LABELS[id] ??
+    id.split(/[-_]/).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
 function tierTone(tier) {
   return tier === "premium" ? "violet" : tier === "mid" ? "indigo" : "teal";
 }
@@ -97,9 +142,13 @@ function ModelMetaPanel({ model }) {
   ].filter(Boolean);
 
   const chips = [
-    model.supportsReasoning === true  && "Reasoning",
-    model.supportsVision    === true  && "Vision",
-    model.toolCallSupported === true  && "Tool calls",
+    model.toolCallSupported      === true && "Tools",
+    model.supportsVision         === true && "Vision",
+    model.supportsReasoning      === true && "Reasoning",
+    model.supportsPdfInput       === true && "PDF",
+    model.supportsPromptCaching  === true && "Caching",
+    model.supportsVideoInput     === true && "Video",
+    model.supportsResponseSchema === true && "Schema",
   ].filter(Boolean);
 
   if (!rows.length && !chips.length) return null;
@@ -447,19 +496,8 @@ function ModelList({ providerId, models, onRefresh }) {
         <h3 className="text-sm font-semibold text-gray-700">
           Models <span className="font-normal text-gray-400">({providerModels.length})</span>
         </h3>
-        {!adding && (
-          <button onClick={() => setAdding(true)} className={`${BTN_GHOST} text-xs`}>+ Add model</button>
-        )}
       </div>
-
-      {adding && (
-        <AddModelForm
-          providerId={providerId}
-          models={models}
-          onSave={() => { setAdding(false); onRefresh(); }}
-          onClose={() => setAdding(false)}
-        />
-      )}
+      {/* + Add model hidden for now */}
 
       {providerModels.length === 0 && !adding && (
         <p className="text-sm text-gray-400 py-4 text-center">No models registered for this provider.</p>
@@ -707,6 +745,149 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
   );
 }
 
+// ── CatalogProviderDetail ─────────────────────────────────────────────────────
+
+// Known OpenAI-compatible base URLs and hints for catalog providers.
+// url: pre-filled value (empty = account-specific, user must supply)
+// hint: shown below the Base URL field to guide the user
+const PROVIDER_ENDPOINT_INFO = {
+  "mistral":     { url: "https://api.mistral.ai/v1" },
+  "cohere":      { url: "https://api.cohere.ai/v1" },
+  "together-ai": { url: "https://api.together.xyz/v1" },
+  "fireworks":   { url: "https://api.fireworks.ai/inference/v1" },
+  "perplexity":  { url: "https://api.perplexity.ai" },
+  "cerebras":    { url: "https://api.cerebras.ai/v1" },
+  "sambanova":   { url: "https://api.sambanova.ai/v1" },
+  "deepinfra":   { url: "https://api.deepinfra.com/v1/openai" },
+  "openrouter":  { url: "https://openrouter.ai/api/v1" },
+  "novita":      { url: "https://api.novita.ai/v3/openai" },
+  "replicate":   { url: "https://api.replicate.com/v1" },
+  "nebius":      { url: "https://api.studio.nebius.ai/v1" },
+  "lambda-ai":   { url: "https://api.lambdalabs.com/v1" },
+  "hyperbolic":  { url: "https://api.hyperbolic.xyz/v1" },
+  "minimax":     { url: "https://api.minimax.io/v1" },
+  "groq":        { url: "https://api.groq.com/openai/v1" },
+  "deepseek":    { url: "https://api.deepseek.com/v1" },
+  "xai":         { url: "https://api.x.ai/v1" },
+  "moonshot":    { url: "https://api.moonshot.cn/v1" },
+  "azure-ai":    { url: "https://models.inference.ai.azure.com" },
+  "dashscope":   { url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
+  "anyscale":    { url: "https://api.endpoints.anyscale.com/v1" },
+  "volcengine":  { url: "https://ark.cn-beijing.volces.com/api/v3" },
+  "databricks":  { url: "", hint: "https://your-workspace.cloud.databricks.com/serving-endpoints — find this in your Databricks workspace settings" },
+  "snowflake":   { url: "", hint: "https://your-account.snowflakecomputing.com/api/v2 — find your account URL in Snowflake console" },
+  "cloudflare":  { url: "", hint: "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1 — replace {account_id} from your Cloudflare dashboard" },
+  "watsonx":     { url: "", hint: "https://us-south.ml.cloud.ibm.com — region varies; find your endpoint in IBM Cloud" },
+  "vertex-ai":   { url: "", hint: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi — project-specific" },
+};
+
+function CatalogProviderDetail({ provider, models, onRefresh }) {
+  const info    = PROVIDER_ENDPOINT_INFO[provider.provider] ?? { url: "", hint: null };
+  const [connecting, setConnecting] = useState(false);
+  const [form, setForm]             = useState({ baseURL: info.url, apiKey: "" });
+  const [saving, setSaving]         = useState(false);
+  const [err, setErr]               = useState("");
+
+  const s = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  async function connect(e) {
+    e.preventDefault();
+    if (!form.baseURL.trim()) { setErr("Base URL is required"); return; }
+    if (!form.apiKey.trim())  { setErr("API key is required");  return; }
+    setSaving(true); setErr("");
+    try {
+      await api.addCustomProvider({
+        id:      provider.provider,
+        label:   provider.label,
+        baseURL: form.baseURL.trim(),
+        apiKey:  form.apiKey.trim(),
+      });
+      onRefresh();
+    } catch (e) { setErr(e.message || "Failed to connect"); }
+    finally { setSaving(false); }
+  }
+
+  const modelCount = models.filter((m) => m.provider === provider.provider).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-gyde-charcoal">{provider.label}</h2>
+            <Badge tone="gray">not connected</Badge>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            {modelCount} models in catalog · add credentials to route traffic through Arbr.
+          </p>
+        </div>
+        {!connecting && (
+          <button className={BTN_PRIMARY} onClick={() => setConnecting(true)}>
+            Connect
+          </button>
+        )}
+      </div>
+
+      {connecting && (
+        <form onSubmit={connect} className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Connect {provider.label}</p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Arbr proxies requests to this provider's OpenAI-compatible endpoint using your API key.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1 text-sm">
+            <label className="font-medium text-gray-700">
+              Base URL
+              {info.url && <span className="ml-2 text-xs font-normal text-gyde-green-700">· pre-filled with official endpoint</span>}
+              {!info.url && <span className="ml-2 text-xs font-normal text-amber-600">· account-specific, see hint below</span>}
+            </label>
+            <input
+              className={INPUT}
+              value={form.baseURL}
+              onChange={s("baseURL")}
+              placeholder={info.hint ? info.hint.split(" — ")[0] : "https://api.example.com/v1"}
+              required
+            />
+            {info.hint && (
+              <p className="text-xs text-gray-400 leading-relaxed">{info.hint}</p>
+            )}
+            {!info.url && !info.hint && (
+              <p className="text-xs text-gray-400">The root URL of the provider's OpenAI-compatible API, e.g. https://api.example.com/v1</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1 text-sm">
+            <label className="font-medium text-gray-700">API Key</label>
+            <input
+              type="password"
+              className={INPUT}
+              placeholder="Paste your API key"
+              value={form.apiKey}
+              onChange={s("apiKey")}
+              required
+            />
+            <p className="text-xs text-gray-400">Stored encrypted. Never logged or sent anywhere except to the provider endpoint above.</p>
+          </div>
+
+          {err && <p className="text-sm text-red-600">{err}</p>}
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving} className={BTN_PRIMARY}>
+              {saving ? "Connecting…" : "Save & connect"}
+            </button>
+            <button type="button" onClick={() => { setConnecting(false); setErr(""); }} className={BTN_GHOST}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      <ModelList providerId={provider.provider} models={models} onRefresh={onRefresh} />
+    </div>
+  );
+}
+
 // ── AddProviderForm ───────────────────────────────────────────────────────────
 
 function AddProviderForm({ onSaved, onClose }) {
@@ -731,16 +912,18 @@ function AddProviderForm({ onSaved, onClose }) {
     <form onSubmit={submit} className="mx-2 mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Add custom provider</p>
       <Field label="Provider ID (slug)">
-        <input className={INPUT} placeholder="openrouter" value={form.id} onChange={s("id")} required />
+        <input className={INPUT} placeholder="my-provider" value={form.id} onChange={s("id")} required />
+        <span className="text-[11px] text-gray-400">Lowercase, no spaces. Used internally to match models.</span>
       </Field>
-      <Field label="Label">
-        <input className={INPUT} placeholder="OpenRouter" value={form.label} onChange={s("label")} required />
+      <Field label="Display name">
+        <input className={INPUT} placeholder="My Provider" value={form.label} onChange={s("label")} required />
       </Field>
       <Field label="Base URL">
-        <input className={INPUT} placeholder="https://openrouter.ai/api/v1" value={form.baseURL} onChange={s("baseURL")} required />
+        <input className={INPUT} placeholder="https://api.example.com/v1" value={form.baseURL} onChange={s("baseURL")} required />
+        <span className="text-[11px] text-gray-400">Root URL of the OpenAI-compatible endpoint (no trailing slash).</span>
       </Field>
       <Field label="API Key">
-        <input type="password" className={INPUT} placeholder="••••••••" value={form.apiKey} onChange={s("apiKey")} required />
+        <input type="password" className={INPUT} placeholder="Paste your API key" value={form.apiKey} onChange={s("apiKey")} required />
       </Field>
       {err && <p className="text-xs text-red-600">{err}</p>}
       <div className="flex gap-2 pt-1">
@@ -753,69 +936,71 @@ function AddProviderForm({ onSaved, onClose }) {
 
 // ── ProviderSidebar ───────────────────────────────────────────────────────────
 
-function ProviderSidebar({ builtins, customs, selected, onSelect, onRefresh }) {
+function ProviderSidebar({ allProviders, selected, onSelect, onRefresh }) {
   const [adding, setAdding] = useState(false);
-
-  function handleAdded() {
-    setAdding(false);
-    onRefresh();
-  }
 
   return (
     <aside className="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
-      <div className="p-3 border-b border-gray-200">
-        {!adding
-          ? <button onClick={() => setAdding(true)} className={`${BTN_PRIMARY} w-full text-center text-sm`}>+ Add provider</button>
-          : <AddProviderForm onSaved={handleAdded} onClose={() => setAdding(false)} />
-        }
-      </div>
+      {/* + Add provider hidden for now */}
 
       <nav className="flex-1 overflow-y-auto py-2">
-        {builtins.length > 0 && (
-          <div className="mb-2">
-            <p className="px-4 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Built-in</p>
-            {builtins.map((p) => (
-              <button
-                key={p.provider}
-                onClick={() => onSelect({ type: "builtin", ...p })}
-                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
-                  selected?.provider === p.provider && selected?.type !== "custom"
-                    ? "bg-gyde-green-50 text-gyde-charcoal font-medium"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                <StatusDot live={p.configured} />
-                <span className="truncate">{p.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {customs.length > 0 && (
-          <div>
-            <p className="px-4 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Custom</p>
-            {customs.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onSelect({ type: "custom", provider: p.id, ...p })}
-                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
-                  selected?.provider === p.id && selected?.type === "custom"
-                    ? "bg-gyde-green-50 text-gyde-charcoal font-medium"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                <StatusDot live={p.enabled} />
-                <span className="truncate">{p.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {allProviders.map((p) => (
+          <button
+            key={`${p.type}:${p.provider}`}
+            onClick={() => onSelect(p)}
+            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
+              selected?.provider === p.provider && selected?.type === p.type
+                ? "bg-gyde-green-50 text-gyde-charcoal font-medium"
+                : "text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            <StatusDot live={p.connected} />
+            <span className="truncate">{p.label}</span>
+          </button>
+        ))}
       </nav>
     </aside>
   );
 }
 
 // ── Models (page root) ────────────────────────────────────────────────────────
+
+// Build a flat unified provider list from DB models + connection data + custom providers.
+// No static list — providers are whatever is in the model registry after sync.
+function buildProviderList(models, builtinData, customData) {
+  const builtinMap = Object.fromEntries(builtinData.map((b) => [b.provider, b]));
+  const customMap  = Object.fromEntries(customData.map((c) => [c.id, c]));
+
+  // Collect unique provider IDs from the model registry
+  const providerIds = [...new Set(models.map((m) => m.provider))];
+
+  const known = providerIds.map((id) => {
+    const b = builtinMap[id];
+    const c = customMap[id];
+    if (c) {
+      return { provider: id, label: c.label, type: "custom", connected: c.enabled ?? false, ...c };
+    }
+    return {
+      provider:  id,
+      label:     b?.label ?? providerLabel(id),
+      type:      b ? "builtin" : "catalog",
+      connected: b?.configured ?? false,
+      ...(b || {}),
+    };
+  });
+
+  // Also include custom providers that have no models yet
+  for (const c of customData) {
+    if (!known.find((p) => p.provider === c.id)) {
+      known.push({ provider: c.id, label: c.label, type: "custom", connected: c.enabled ?? false, ...c });
+    }
+  }
+
+  return known.sort((a, b) => {
+    if (a.connected !== b.connected) return a.connected ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+}
 
 export default function Models() {
   const [builtins, setBuiltins]     = useState([]);
@@ -846,19 +1031,21 @@ export default function Models() {
   }, []);
 
   const syncBenchmarks = async () => {
-    setSyncing(true); setSyncMsg("Syncing benchmarks…");
+    setSyncing(true); setSyncMsg("Syncing models…");
     try {
       const result = await api.syncBenchmarks();
       setBenchStatus({ lastSyncedAt: new Date().toISOString() });
-      const lb    = result.livebench?.matched ?? 0;
-      const ls    = result.lmsys?.matched    ?? 0;
-      const lt    = result.litellm?.matched  ?? 0;
-      const added = result.litellm?.added    ?? 0;
+      const lb      = result.livebench?.matched ?? 0;
+      const ls      = result.lmsys?.matched    ?? 0;
+      const lt      = result.litellm?.matched  ?? 0;
+      const added   = result.litellm?.added    ?? 0;
+      const removed = result.litellm?.removed  ?? 0;
       const parts = [
         `${lt} models refreshed`,
-        added > 0 && `${added} new models added`,
-        `${lb} benchmark scores`,
-        ls > 0 && `${ls} LMSYS scores`,
+        added   > 0 && `${added} new`,
+        removed > 0 && `${removed} removed`,
+        lb > 0      && `${lb} benchmark scores`,
+        ls > 0      && `${ls} LMSYS scores`,
       ].filter(Boolean);
       setSyncMsg(parts.join(" · "));
       await load();
@@ -871,18 +1058,15 @@ export default function Models() {
 
   useEffect(() => { load(); loadBenchStatus(); }, [load, loadBenchStatus]);
 
-  // Auto-select first provider once loaded
+  const allProviders = buildProviderList(models, builtins, customs);
+
+  // Auto-select first connected provider once loaded
   const didAutoSelect = useRef(false);
   useEffect(() => {
     if (didAutoSelect.current || loading) return;
-    if (builtins.length > 0) {
-      didAutoSelect.current = true;
-      setSelected({ type: "builtin", ...builtins[0] });
-    } else if (customs.length > 0) {
-      didAutoSelect.current = true;
-      setSelected({ type: "custom", provider: customs[0].id, ...customs[0] });
-    }
-  }, [builtins, customs, loading]);
+    const first = allProviders.find((p) => p.connected) || allProviders[0];
+    if (first) { didAutoSelect.current = true; setSelected(first); }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div className="py-12"><Spinner /></div>;
 
@@ -897,7 +1081,7 @@ export default function Models() {
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
           <button className={BTN_GHOST} disabled={syncing} onClick={syncBenchmarks}>
-            {syncing ? "Syncing…" : "Sync Benchmarks"}
+            {syncing ? "Syncing…" : "Sync Models"}
           </button>
           {syncMsg
             ? <span className="text-xs text-gray-500 text-right">{syncMsg}</span>
@@ -912,8 +1096,7 @@ export default function Models() {
 
       <div className="flex min-h-[600px] rounded-xl border border-gray-200 bg-white overflow-hidden">
         <ProviderSidebar
-          builtins={builtins}
-          customs={customs}
+          allProviders={allProviders}
           selected={selected}
           onSelect={setSelected}
           onRefresh={load}
@@ -941,7 +1124,16 @@ export default function Models() {
               provider={selected}
               models={models}
               onRefresh={load}
-              onDeleted={() => { setSelected(null); didAutoSelect.current = false; load(); }}
+              onDeleted={() => { setSelected(null); load(); }}
+            />
+          )}
+
+          {selected?.type === "catalog" && (
+            <CatalogProviderDetail
+              key={selected.provider}
+              provider={selected}
+              models={models}
+              onRefresh={load}
             />
           )}
         </main>

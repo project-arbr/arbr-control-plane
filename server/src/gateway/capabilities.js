@@ -1,6 +1,8 @@
 // Shared capability helpers used by both the gateway (/v1/models) and admin (/api/models)
 // endpoints so toolCallSupported computation stays in one place.
 
+const pricing = require("../pricing/registry");
+
 const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
 
 // Bedrock models that support tool use via the Converse API.
@@ -19,11 +21,12 @@ const BEDROCK_TOOL_PATTERNS = [
   /writer\.palmyra-x5/i,      // Palmyra X5 (agentic capabilities)
 ];
 
-// Returns true when Arbr can route tool/function calls to this model:
-//   • OpenAI-compat providers: proxied verbatim — upstream handles tools natively.
-//   • bedrock-nova: matched against BEDROCK_TOOL_PATTERNS (Converse API tool use).
-//   • Everything else (gemini, anthropic direct, etc.): no tool support today.
+// Returns true when Arbr can route tool/function calls to this model.
+// Checks DB flag first (populated by LiteLLM sync), falls back to pattern matching.
 function supportsTools(provider, modelId) {
+  const entry = pricing.getModel(modelId);
+  if (entry?.supportsFunctionCalling != null) return entry.supportsFunctionCalling;
+
   if (OPENAI_COMPAT_PROVIDERS.has(provider)) return true;
   if (provider === "bedrock-nova") {
     const id = modelId || "";

@@ -26,9 +26,14 @@ const modelEntrySchema = new mongoose.Schema(
     livebenchModelName: { type: String, default: null },
     lmsysSyncedAt:      { type: Date,   default: null },
     lmsysModelName:     { type: String, default: null },
-    litellmSyncedAt:    { type: Date,   default: null },
-    supportsVision:     { type: Boolean, default: null },
-    supportsReasoning:  { type: Boolean, default: null },
+    litellmSyncedAt:         { type: Date,    default: null },
+    supportsVision:          { type: Boolean, default: null },
+    supportsReasoning:       { type: Boolean, default: null },
+    supportsFunctionCalling: { type: Boolean, default: null },
+    supportsPdfInput:        { type: Boolean, default: null },
+    supportsPromptCaching:   { type: Boolean, default: null },
+    supportsResponseSchema:  { type: Boolean, default: null },
+    supportsVideoInput:      { type: Boolean, default: null },
   },
   { timestamps: true }
 );
