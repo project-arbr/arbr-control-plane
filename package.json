@@ -33,7 +33,7 @@
   "dependencies": {
     "@langchain/anthropic": "^0.3.0",
     "@langchain/aws": "^0.1.0",
-    "@langchain/core": "^0.3.0",
+    "@langchain/core": "^1.2.1",
     "@langchain/google-genai": "^0.1.0",
     "@langchain/openai": "^0.3.0",
     "cors": "^2.8.5",
