@@ -62,17 +62,20 @@ export default function Layout({ status, onSignOut, children }) {
           ))}
         </nav>
 
-        <div className="border-t border-white/8 px-2 py-3">
+        <div className="px-2 pb-2">
           <NavLink to={FOOTER_LINK.to} className={navClass}>{FOOTER_LINK.label}</NavLink>
-        </div>
-
-        <div className="px-5 py-4 text-[11px] text-gray-600">
-          A human approves the policy; rules always override.
           {getAdminToken() && onSignOut && (
-            <button onClick={onSignOut} className="mt-2 block text-gray-500 hover:text-gray-300 underline">
+            <button
+              onClick={onSignOut}
+              className="mx-1 mt-0.5 flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-white/8 hover:text-gray-300"
+            >
               Sign out
             </button>
           )}
+        </div>
+
+        <div className="px-5 pb-4 pt-1 text-[11px] text-gray-600">
+          A human approves the policy; rules always override.
         </div>
       </aside>
 
