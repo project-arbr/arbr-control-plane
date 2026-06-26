@@ -12,15 +12,15 @@ Get Arbr running and make your first routed AI call in under five minutes.
 ::: code-group
 
 ```sh [Docker (recommended)]
-git clone https://github.com/gyde-ai/arbr
-cd arbr/control-plane
+git clone https://github.com/project-arbr/arbr-control-plane
+cd arbr-control-plane
 cp .env.example .env
 docker compose up
 ```
 
 ```sh [Local — Node + MongoDB]
-git clone https://github.com/gyde-ai/arbr
-cd arbr/control-plane
+git clone https://github.com/project-arbr/arbr-control-plane
+cd arbr-control-plane
 npm run setup   # install deps + seed built-in models + demo request records
 npm run dev     # server on :4100, dashboard on :5173
 ```

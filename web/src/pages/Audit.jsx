@@ -48,7 +48,7 @@ export default function Audit() {
       render: (r) => (
         <span className="flex items-center gap-2">
           <Badge tone={ENTITY_TONE[r.entity] || "gray"}>{r.entity}</Badge>
-          <span className="text-sm text-gyde-charcoal">{ACTION_LABELS[r.action] || r.action}</span>
+          <span className="text-sm text-arbr-charcoal">{ACTION_LABELS[r.action] || r.action}</span>
         </span>
       ),
     },
@@ -76,7 +76,7 @@ export default function Audit() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gyde-charcoal">Audit log</h1>
+        <h1 className="text-2xl font-bold text-arbr-charcoal">Audit log</h1>
         <p className="text-sm text-gray-500">
           Immutable record of every admin action — rule changes, budget edits, key creation/revocation,
           governance settings.

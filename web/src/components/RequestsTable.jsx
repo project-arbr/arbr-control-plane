@@ -31,7 +31,7 @@ function StatCard({ label, value, sub, highlight }) {
   return (
     <div className={`card px-5 py-4 ${highlight ? "border-red-200 bg-red-50" : ""}`}>
       <div className="label">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${highlight ? "text-red-600" : "text-gyde-charcoal"}`}>{value}</div>
+      <div className={`mt-1 text-2xl font-bold ${highlight ? "text-red-600" : "text-arbr-charcoal"}`}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-gray-400">{sub}</div>}
     </div>
   );
@@ -121,7 +121,7 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
               key={p.label}
               onClick={() => { setPage(1); setActivePeriod(i); }}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activePeriod === i ? "bg-white text-gyde-charcoal shadow-sm border border-gray-200" : "text-gray-500 hover:text-gyde-charcoal"
+                activePeriod === i ? "bg-white text-arbr-charcoal shadow-sm border border-gray-200" : "text-gray-500 hover:text-arbr-charcoal"
               }`}
             >
               {p.label}

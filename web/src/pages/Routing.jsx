@@ -280,7 +280,7 @@ function AiPolicyEditor({ models }) {
               >
                 <div className="flex items-center gap-3">
                   <Badge tone={badge}>{label}</Badge>
-                  <span className="text-sm font-medium text-gyde-charcoal">{tasks.length} tasks</span>
+                  <span className="text-sm font-medium text-arbr-charcoal">{tasks.length} tasks</span>
                   <span className="hidden text-xs text-gray-400 sm:inline">{desc}</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -302,7 +302,7 @@ function AiPolicyEditor({ models }) {
                     <tbody>
                       {tasks.map((task) => (
                         <tr key={task.id} className="border-t border-gray-100">
-                          <td className="px-4 py-2 font-medium text-gyde-charcoal">{task.label}</td>
+                          <td className="px-4 py-2 font-medium text-arbr-charcoal">{task.label}</td>
                           <td className="px-4 py-2 text-xs text-gray-500">{task.description}</td>
                           <td className="px-4 py-2">
                             <select
@@ -341,7 +341,7 @@ function AiPolicyEditor({ models }) {
             >
               <div className="flex items-center gap-3">
                 <Badge tone="charcoal">Custom</Badge>
-                <span className="text-sm font-medium text-gyde-charcoal">{pol.customTaskTypes.length} tasks</span>
+                <span className="text-sm font-medium text-arbr-charcoal">{pol.customTaskTypes.length} tasks</span>
                 <span className="hidden text-xs text-gray-400 sm:inline">Task types seen in traffic, not in the built-in catalog</span>
               </div>
               <div className="flex items-center gap-3">
@@ -362,7 +362,7 @@ function AiPolicyEditor({ models }) {
                   <tbody>
                     {pol.customTaskTypes.map((taskId) => (
                       <tr key={taskId} className="border-t border-gray-100">
-                        <td className="px-4 py-2 font-mono text-sm font-medium text-gyde-charcoal">{taskId}</td>
+                        <td className="px-4 py-2 font-mono text-sm font-medium text-arbr-charcoal">{taskId}</td>
                         <td className="px-4 py-2 text-xs text-gray-500">
                           {assignments[taskId]
                             ? "AI-evaluated · scored as mid tier"
@@ -421,7 +421,7 @@ export default function Routing({ onChange }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gyde-charcoal">Routing</h1>
+        <h1 className="text-2xl font-bold text-arbr-charcoal">Routing</h1>
         <p className="text-sm text-gray-500">
           How requests are routed. A developer-pinned, connected model is honored as-is. When the model is
           <code className="mx-1 rounded bg-gray-100 px-1">auto</code>/omitted/unavailable, the router decides:
@@ -475,10 +475,10 @@ export default function Routing({ onChange }) {
             </p>
             <div className="space-y-2">
               {MODE_OPTIONS.map(([k, label, desc]) => (
-                <label key={k} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${mode === k ? "border-gyde-green-600 bg-gyde-green-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <label key={k} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${mode === k ? "border-arbr-green-600 bg-arbr-green-50" : "border-gray-200 hover:border-gray-300"}`}>
                   <input type="radio" name="routingMode" className="mt-1" checked={mode === k} onChange={() => changeMode(k)} />
                   <div>
-                    <div className="text-sm font-medium text-gyde-charcoal">{label}</div>
+                    <div className="text-sm font-medium text-arbr-charcoal">{label}</div>
                     <div className="text-xs text-gray-500">{desc}</div>
                   </div>
                 </label>

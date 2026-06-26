@@ -24,7 +24,7 @@ export default function Governance() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gyde-charcoal">Governance</h1>
+        <h1 className="text-2xl font-bold text-arbr-charcoal">Governance</h1>
         <p className="text-sm text-gray-500">
           Safety controls, data lifecycle, and alerting for responsible AI usage.
         </p>
@@ -42,7 +42,7 @@ export default function Governance() {
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium text-gyde-charcoal">Enable maintenance mode</div>
+                  <div className="text-sm font-medium text-arbr-charcoal">Enable maintenance mode</div>
                   <div className="mt-0.5 text-xs text-gray-500">All gateway calls return 503 while this is on.</div>
                 </div>
                 <Toggle
@@ -125,7 +125,7 @@ export default function Governance() {
             </p>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-gyde-charcoal">Enable PII masking in logs</div>
+                <div className="text-sm font-medium text-arbr-charcoal">Enable PII masking in logs</div>
                 <div className="mt-0.5 text-xs text-gray-500">
                   Applies to: credit card, SSN, Aadhaar, email addresses, phone numbers.
                 </div>
@@ -142,7 +142,7 @@ export default function Governance() {
             <button className="btn-secondary" disabled={saving} onClick={save}>
               {saving ? "Saving…" : "Save"}
             </button>
-            {ok  && <span className="text-sm text-gyde-green-600">Saved.</span>}
+            {ok  && <span className="text-sm text-arbr-green-600">Saved.</span>}
             {err && <span className="text-sm text-red-600">{err}</span>}
           </div>
         </>

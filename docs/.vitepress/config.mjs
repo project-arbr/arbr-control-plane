@@ -13,7 +13,7 @@ export default defineConfig({
       { text: 'Docs', link: '/quickstart' },
       { text: 'SDKs', link: '/sdk/js' },
       { text: 'API Reference', link: '/api-reference' },
-      { text: 'GitHub', link: 'https://github.com/gyde-ai/arbr' },
+      { text: 'GitHub', link: 'https://github.com/project-arbr/arbr-control-plane' },
     ],
 
     sidebar: [
@@ -74,7 +74,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/gyde-ai/arbr' }
+      { icon: 'github', link: 'https://github.com/project-arbr/arbr-control-plane' }
     ],
 
     search: {
@@ -83,11 +83,11 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2024 Gyde AI'
+      copyright: 'Copyright © 2026 Project Arbr Contributors'
     },
 
     editLink: {
-      pattern: 'https://github.com/gyde-ai/arbr/edit/main/control-plane/docs/:path',
+      pattern: 'https://github.com/project-arbr/arbr-control-plane/edit/main/docs/:path',
       text: 'Edit this page on GitHub'
     }
   }

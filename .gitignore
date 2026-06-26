@@ -1,5 +1,8 @@
 node_modules/
 .env
+# Internal / environment-specific deploy overrides — never commit to the public repo.
+docker-compose.gcp.yml
+docker-compose.*.local.yml
 .DS_Store
 dist/
 *.log

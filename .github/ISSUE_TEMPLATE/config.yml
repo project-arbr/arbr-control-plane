@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/project-arbr/arbr-control-plane/security/advisories/new
+    about: Please report security issues privately via GitHub Security Advisories, not public issues.
+  - name: Questions & discussion
+    url: https://github.com/project-arbr/arbr-control-plane/discussions
+    about: Ask questions, share ideas, and get help from the community.

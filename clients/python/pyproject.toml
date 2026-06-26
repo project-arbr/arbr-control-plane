@@ -8,8 +8,8 @@ version = "0.3.1"
 description = "Official Python client for the Arbr AI control-plane gateway — one function to route, observe, and govern every LLM call."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
-authors = [{ name = "Gyde" }]
+license = { text = "MIT" }
+authors = [{ name = "Project Arbr Contributors" }]
 keywords = [
   "llm", "ai", "gateway", "routing", "control-plane",
   "openai", "anthropic", "gemini", "bedrock", "cost",
@@ -25,6 +25,11 @@ classifiers = [
 ]
 # Zero runtime dependencies — stdlib only (urllib + asyncio).
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/project-arbr/arbr-control-plane/tree/main/clients/python#readme"
+Repository = "https://github.com/project-arbr/arbr-control-plane"
+Issues = "https://github.com/project-arbr/arbr-control-plane/issues"
 
 [project.optional-dependencies]
 # Optional LangChain integration (arbr_client.langchain.ArbrChatModel).

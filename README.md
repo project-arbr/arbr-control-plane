@@ -30,7 +30,7 @@ work out of the box. Adding a provider key unlocks live gateway calls.
 ### Option A — Docker (one command)
 
 ```sh
-git clone https://github.com/shubham-gyde/arbr-ai-control-plane.git && cd arbr-ai-control-plane
+git clone https://github.com/project-arbr/arbr-control-plane.git && cd arbr-control-plane
 cp .env.example .env          # ready to run; no keys needed for the demo
 docker compose up             # Mongo + seeded app, dashboard at http://localhost:4100
 ```
@@ -437,13 +437,12 @@ control-plane/
 │   ├── recommend/engine.js     premium-overuse recommendation
 │   ├── api/routes.js           dashboard / admin API (incl. /api/models CRUD)
 │   └── index.js                boot: mongoose → registry.init() → express
-└── web/                        React + Vite + Tailwind dashboard (Gyde theme)
+└── web/                        React + Vite + Tailwind dashboard
                                 Settings → Models tab: add / edit / delete model entries
 ```
 
-This service is **standalone** — it has no dependency on the rest of the Arbr monorepo.
-The provider router is vendored under `server/src/providers/llm-router/` (originally from
-`@gyde/llm-router`), so the folder can be lifted into its own repo as-is.
+This service is **standalone**. The provider router is vendored under
+`server/src/providers/llm-router/`, so the folder can be lifted into its own repo as-is.
 
 ---
 
