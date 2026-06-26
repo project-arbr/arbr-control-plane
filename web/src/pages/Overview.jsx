@@ -2,10 +2,12 @@ import React, { useEffect, useState } from "react";
 import { api, fmt } from "../api.js";
 import { Stat, Card, Table, Spinner, Tabs, useTabParam } from "../components/ui.jsx";
 import ByDimension from "./ByDimension.jsx";
+import RequestsTable from "../components/RequestsTable.jsx";
 
 const TABS = [
-  ["summary", "Summary"],
+  ["summary",    "Summary"],
   ["dimensions", "By dimension"],
+  ["requests",   "Requests"],
 ];
 
 function Summary() {
@@ -72,6 +74,7 @@ export default function Overview() {
 
       {tab === "summary" && <Summary />}
       {tab === "dimensions" && <ByDimension embedded />}
+      {tab === "requests" && <RequestsTable />}
     </div>
   );
 }

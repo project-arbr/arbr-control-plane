@@ -119,6 +119,11 @@ export const api = {
   auditLog: (params) => req(`/audit${qs(params)}`),
 
   providerHealth: () => req("/analytics/provider-health"),
+
+  appConfigs: () => req("/app-configs"),
+  appConfig: (app) => req(`/app-configs/${encodeURIComponent(app)}`),
+  setAppConfig: (app, body) => req(`/app-configs/${encodeURIComponent(app)}`, { method: "PUT", body: JSON.stringify(body) }),
+  setAppDefaultPolicy: (app) => req(`/app-configs/${encodeURIComponent(app)}/set-default-policy`, { method: "POST" }),
 };
 
 export const fmt = {

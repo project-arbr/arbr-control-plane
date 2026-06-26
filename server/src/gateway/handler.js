@@ -19,6 +19,18 @@ const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
 const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
+const ApplicationConfig = require("../models/ApplicationConfig");
+
+// Short-lived cache to avoid a DB hit per request for app configs.
+const _appConfigCache = new Map(); // appName → { cfg, expiresAt }
+async function getAppConfig(appName) {
+  if (!appName || appName === "unknown") return null;
+  const cached = _appConfigCache.get(appName);
+  if (cached && cached.expiresAt > Date.now()) return cached.cfg;
+  const cfg = await ApplicationConfig.findOne({ applicationName: appName }).lean().catch(() => null);
+  _appConfigCache.set(appName, { cfg, expiresAt: Date.now() + 30_000 });
+  return cfg;
+}
 
 // An explicit, honorable model pin → { provider, model, knownPricing } to use
 // as-is, or null to defer to the router. Defers when the model is "auto"/absent
@@ -80,7 +92,7 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
 // Shared routing resolution: classify task + decide served {provider, model}.
 // Returns { served, routingDecision, taskType, classifiedBy, cls }.
 // Callers are responsible for budget enforcement (it may short-circuit the response).
-async function resolveRoute(body, { router, eff, application, workflow, appConfig = {} }) {
+async function resolveRoute(body, { router, eff, application, workflow, appConfig = {}, appDbConfig = null }) {
   const routingMode = await ruleEngine.getRoutingMode();
   const explicit = resolveExplicit(body, eff);
   const autoMode = !explicit;
@@ -114,7 +126,9 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
       served = { provider: route.provider, model: route.model };
       routingDecision = "rule";
     } else if (routingMode === "ai") {
-      const aiMap = await aiPolicy.getEffective();
+      const aiMap = appDbConfig?.aiPolicyAssignments
+        ? appDbConfig.aiPolicyAssignments
+        : await aiPolicy.getEffective();
       const hit = aiPolicy.lookup(aiMap, taskType);
       if (hit && eff.liveIds.includes(hit.provider)) {
         served = { provider: hit.provider, model: hit.model };
@@ -145,6 +159,16 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
     }
   }
 
+  // Per-app model opt-out: if the resolved model is explicitly blocked for this app,
+  // fall back to the default provider's default model.
+  if (appDbConfig?.modelOptOut?.length > 0 && appDbConfig.modelOptOut.includes(served.model)) {
+    const fallback = resolveDefault(body, eff);
+    if (!appDbConfig.modelOptOut.includes(fallback.model)) {
+      served = fallback;
+      routingDecision = "passthrough";
+    }
+  }
+
   return { served, routingDecision, taskType, classifiedBy, cls };
 }
 
@@ -162,6 +186,17 @@ async function handleChat(req, res) {
     return res.status(503).json({
       error: "maintenance_mode",
       message: settings.maintenanceMode.message || "Service temporarily unavailable.",
+    });
+  }
+
+  // Per-application kill switch — checked before attribution is fully resolved,
+  // using the body's application claim (key binding happens later).
+  const earlyApp = req.apiKey?.application || body.application || "unknown";
+  const appCfg = await getAppConfig(earlyApp);
+  if (appCfg?.killSwitchEnabled) {
+    return res.status(503).json({
+      error: "app_kill_switch",
+      message: appCfg.killSwitchMessage || `Application "${earlyApp}" is temporarily disabled.`,
     });
   }
 
@@ -203,7 +238,7 @@ async function handleChat(req, res) {
   let served, routingDecision, taskType, classifiedBy, cls;
   try {
     ({ served, routingDecision, taskType, classifiedBy, cls } =
-      await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, appConfig }));
+      await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
       return res.status(403).json({ error: err.message, code: "model_not_allowed" });

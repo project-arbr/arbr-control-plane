@@ -6,7 +6,7 @@ import { getAdminToken } from "../api.js";
 const NAV_GROUPS = [
   { section: "Monitor", items: [
     { to: "/", label: "Overview", end: true },
-    { to: "/requests", label: "Requests" },
+    { to: "/applications", label: "Applications" },
   ] },
   { section: "Control", items: [
     { to: "/routing",  label: "Routing" },

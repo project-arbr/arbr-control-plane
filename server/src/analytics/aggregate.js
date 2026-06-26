@@ -52,6 +52,7 @@ async function groupBy(dimension, filter, extra = {}) {
     requests: 1,
     cost: 1,
     avgLatency: 1,
+    failures: 1,
     ...extra.project,
   };
   return RequestRecord.aggregate([
@@ -62,6 +63,7 @@ async function groupBy(dimension, filter, extra = {}) {
         requests: { $sum: 1 },
         cost: { $sum: "$totalCost" },
         avgLatency: { $avg: "$latencyMs" },
+        failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
         ...extra.group,
       },
     },

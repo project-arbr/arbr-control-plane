@@ -798,4 +798,52 @@ router.get("/analytics/provider-health", async (_req, res, next) => {
   try { res.json(await analytics.providerHealth()); } catch (e) { next(e); }
 });
 
+// ── Per-application config (kill switch, model opt-out, AI policy override) ──
+const ApplicationConfig = require("../models/ApplicationConfig");
+
+const DEFAULT_APP_CONFIG = { killSwitchEnabled: false, killSwitchMessage: null, modelOptOut: [], aiPolicyAssignments: null };
+
+router.get("/app-configs", async (_req, res, next) => {
+  try {
+    const configs = await ApplicationConfig.find().lean();
+    res.json(configs);
+  } catch (e) { next(e); }
+});
+
+router.get("/app-configs/:app", async (req, res, next) => {
+  try {
+    const cfg = await ApplicationConfig.findOne({ applicationName: req.params.app }).lean();
+    res.json(cfg ? cfg : { applicationName: req.params.app, ...DEFAULT_APP_CONFIG });
+  } catch (e) { next(e); }
+});
+
+router.put("/app-configs/:app", async (req, res, next) => {
+  try {
+    const { killSwitchEnabled, killSwitchMessage, modelOptOut, aiPolicyAssignments } = req.body || {};
+    const update = {};
+    if (typeof killSwitchEnabled === "boolean") update.killSwitchEnabled = killSwitchEnabled;
+    if ("killSwitchMessage" in req.body) update.killSwitchMessage = killSwitchMessage ? String(killSwitchMessage).trim() : null;
+    if (Array.isArray(modelOptOut)) update.modelOptOut = modelOptOut.filter(Boolean);
+    if ("aiPolicyAssignments" in req.body) update.aiPolicyAssignments = aiPolicyAssignments || null;
+    const cfg = await ApplicationConfig.findOneAndUpdate(
+      { applicationName: req.params.app },
+      { $set: update },
+      { new: true, upsert: true }
+    ).lean();
+    setImmediate(() => logAction("appConfig.update", "appConfig", req.params.app, update));
+    res.json(cfg);
+  } catch (e) { next(e); }
+});
+
+router.post("/app-configs/:app/set-default-policy", async (req, res, next) => {
+  try {
+    const cfg = await ApplicationConfig.findOne({ applicationName: req.params.app }).lean();
+    if (!cfg?.aiPolicyAssignments) return res.status(400).json({ error: "No custom policy set for this application." });
+    await Settings.updateOne({ key: "global" }, { $set: { aiPolicy: cfg.aiPolicyAssignments } }, { upsert: true });
+    aiPolicy.invalidate?.();
+    setImmediate(() => logAction("appConfig.setDefaultPolicy", "settings", "global", { from: req.params.app }));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

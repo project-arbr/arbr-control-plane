@@ -385,7 +385,7 @@ function AiPolicyEditor({ models }) {
 const MODE_OPTIONS = [
   ["off", "Off", "Auto-mode requests just use the default model (after any matching rule)."],
   ["guardrail", "Cost guardrail", "Heuristic: downgrade premium models on cheap task types per the policy below."],
-  ["ai", "AI policy", "An AI-generated task → model map decides; per-request AI classification when no task type is sent."],
+  ["ai", "Default AI policy", "An AI-generated task → model map decides; per-request AI classification when no task type is sent."],
 ];
 
 export default function Routing({ onChange }) {
@@ -492,11 +492,12 @@ export default function Routing({ onChange }) {
           )}
 
           {mode === "ai" && (
-            <Card title="AI routing policy">
+            <Card title="Default AI routing policy">
               <p className="mb-4 text-sm text-gray-600">
                 The AI assigns a model to each task type from your available models. Regenerate to refresh (it's also
                 given any custom task types seen in traffic), or edit any row by hand. When a request arrives without a
-                task type, the AI classifies it per-call using the <em>default model</em>.
+                task type, the AI classifies it per-call using the <em>default model</em>. Applications can override
+                this policy with their own — see the Applications page.
               </p>
               {models.length === 0 ? <Spinner /> : <AiPolicyEditor models={models} />}
             </Card>

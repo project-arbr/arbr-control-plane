@@ -12,6 +12,8 @@ import Models from "./pages/Models.jsx";
 import Budgets from "./pages/Budgets.jsx";
 import Audit from "./pages/Audit.jsx";
 import Governance from "./pages/Governance.jsx";
+import Applications from "./pages/Applications.jsx";
+import ApplicationDetail from "./pages/ApplicationDetail.jsx";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -33,6 +35,8 @@ export default function App() {
     <Layout status={status} onSignOut={signOut}>
       <Routes>
         <Route path="/" element={<Overview />} />
+        <Route path="/applications" element={<Applications />} />
+        <Route path="/applications/:name" element={<ApplicationDetail />} />
         <Route path="/requests" element={<Requests />} />
         <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
         <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
