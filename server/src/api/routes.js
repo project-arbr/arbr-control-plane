@@ -840,14 +840,15 @@ router.post("/app-configs/:app/generate-policy", async (req, res, next) => {
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "no live providers — cannot generate policy" });
     const excludeModels = Array.isArray(req.body?.excludeModels) ? req.body.excludeModels : [];
-    const result = await aiPolicy.regenerateForApp({ router: r, eff, excludeModels });
+    const { assignments, generatorModel } = await aiPolicy.computeAssignments({ router: r, eff, excludeModels });
+    const generatedAt = new Date();
     const cfg = await ApplicationConfig.findOneAndUpdate(
       { applicationName: req.params.app },
-      { $set: { aiPolicyAssignments: result.assignments } },
+      { $set: { aiPolicyAssignments: assignments } },
       { new: true, upsert: true }
     ).lean();
     setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels }));
-    res.json({ ...result, cfg });
+    res.json({ assignments, generatedAt, generatorModel: generatorModel.id, cfg });
   } catch (e) { next(e); }
 });
 

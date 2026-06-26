@@ -306,12 +306,6 @@ async function regenerate({ router, eff }) {
   return s.aiPolicy;
 }
 
-// Per-app variant: returns raw assignments (caller saves to ApplicationConfig).
-async function regenerateForApp({ router, eff, excludeModels = [] }) {
-  const { assignments, generatorModel } = await _computeAssignments({ router, eff, excludeModels });
-  return { assignments, generatedAt: new Date(), generatorModel: generatorModel.id };
-}
-
 // Full view for the editor: assignments + catalogs + what's unmapped/custom.
 async function describe() {
   const s = await Settings.get();
@@ -335,4 +329,4 @@ async function describe() {
   };
 }
 
-module.exports = { getEffective, lookup, setAssignments, regenerate, regenerateForApp, describe, invalidate, CAPABILITY_VERSION };
+module.exports = { getEffective, lookup, setAssignments, regenerate, computeAssignments: _computeAssignments, describe, invalidate, CAPABILITY_VERSION };
