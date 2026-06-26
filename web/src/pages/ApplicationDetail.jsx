@@ -406,7 +406,7 @@ export default function ApplicationDetail() {
       .catch((e) => setErr(e.message));
 
   useEffect(() => {
-    Promise.all([loadConfig(), api.models().then(setModels).catch(() => {})]);
+    Promise.all([loadConfig(), api.models({ live: true }).then(setModels).catch(() => {})]);
   }, [appName]);
 
   const toggleKill = async (enabled) => {

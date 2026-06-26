@@ -55,7 +55,7 @@ export const api = {
   acceptRecommendation: (id) => req(`/recommendations/${id}/accept`, { method: "POST" }),
   dismissRecommendation: (id) => req(`/recommendations/${id}/dismiss`, { method: "POST" }),
 
-  models: () => req("/models"),
+  models: ({ live } = {}) => req(`/models${live ? "?live=true" : ""}`),
   createModel: (body) => req("/models", { method: "POST", body: JSON.stringify(body) }),
   updateModel: (id, body) => req(`/models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteModel: (id) => req(`/models/${encodeURIComponent(id)}`, { method: "DELETE" }),

@@ -354,12 +354,18 @@ router.post("/custom-providers/:id/test", async (req, res) => {
 });
 
 // ── model registry ──
-router.get("/models", (_req, res) => {
+router.get("/models", async (req, res) => {
   // eslint-disable-next-line no-unused-vars
-  res.json(pricing.listModels().map(({ _id, __v, ...m }) => ({
+  let models = pricing.listModels().map(({ _id, __v, ...m }) => ({
     ...m,
     toolCallSupported: supportsTools(m.provider, m.id),
-  })));
+  }));
+  if (req.query.live === "true") {
+    const { eff } = await getRouter();
+    const liveIds = new Set(eff?.liveIds || []);
+    models = models.filter((m) => liveIds.has(m.provider));
+  }
+  res.json(models);
 });
 
 // Live test — send a user message to a specific model and return the response.
