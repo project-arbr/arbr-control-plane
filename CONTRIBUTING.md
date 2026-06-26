@@ -35,6 +35,10 @@ clients/        — JS and Python SDKs (published separately)
 docs/           — VitePress documentation site
 ```
 
+For the boot sequence, request lifecycle, and data model, see
+[ARCHITECTURE.md](ARCHITECTURE.md). For where the project is heading and where help is
+welcome, see [ROADMAP.md](ROADMAP.md).
+
 ## Commit format
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):
