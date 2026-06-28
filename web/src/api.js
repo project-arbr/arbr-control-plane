@@ -46,6 +46,7 @@ export const api = {
 
   overview: (filter) => req(`/analytics/overview${qs(filter)}`),
   by: (dimension, filter) => req(`/analytics/by/${dimension}${qs(filter)}`),
+  realisedSavings: (filter) => req(`/analytics/realised-savings${qs(filter)}`),
   facets: () => req("/analytics/facets"),
 
   requests: (filter) => req(`/requests${qs(filter)}`),

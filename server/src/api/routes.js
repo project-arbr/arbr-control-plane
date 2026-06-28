@@ -465,6 +465,7 @@ const VIEWS = {
   model: analytics.byModel,
   provider: analytics.byProvider,
   taskType: analytics.byTaskType,
+  user: analytics.byUser,
 };
 router.get("/analytics/by/:dimension", async (req, res, next) => {
   try {
@@ -472,6 +473,10 @@ router.get("/analytics/by/:dimension", async (req, res, next) => {
     if (!fn) return res.status(404).json({ error: "unknown dimension" });
     res.json(await fn(req.query));
   } catch (e) { next(e); }
+});
+
+router.get("/analytics/realised-savings", async (req, res, next) => {
+  try { res.json(await analytics.realisedSavings(req.query)); } catch (e) { next(e); }
 });
 
 router.get("/analytics/facets", async (_req, res, next) => {

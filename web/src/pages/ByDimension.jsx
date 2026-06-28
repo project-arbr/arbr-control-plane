@@ -5,6 +5,7 @@ import { Card, Table, Spinner } from "../components/ui.jsx";
 const DIMENSIONS = [
   { key: "application", label: "Application" },
   { key: "team", label: "Team" },
+  { key: "user", label: "User" },
   { key: "workflow", label: "Workflow" },
   { key: "model", label: "Model" },
   { key: "provider", label: "Provider" },
@@ -22,7 +23,8 @@ export default function ByDimension({ embedded = false }) {
   }, [dim]);
 
   const columns = [
-    { key: "key", header: DIMENSIONS.find((d) => d.key === dim)?.label || dim, render: (r) => r.key || "—" },
+    { key: "key", header: DIMENSIONS.find((d) => d.key === dim)?.label || dim,
+      render: (r) => r.key || (dim === "user" ? "(unattributed)" : "—") },
     { key: "requests", header: "Requests", render: (r) => fmt.num(r.requests) },
     { key: "cost", header: "Cost", render: (r) => fmt.usd(r.cost) },
     { key: "avgLatency", header: "Avg latency", render: (r) => fmt.ms(r.avgLatency) },

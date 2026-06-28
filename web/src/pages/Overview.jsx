@@ -14,11 +14,12 @@ function Summary() {
   const [data, setData] = useState(null);
   const [byProvider, setByProvider] = useState([]);
   const [byTask, setByTask] = useState([]);
+  const [savings, setSavings] = useState(null);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.overview(), api.by("provider"), api.by("taskType")])
-      .then(([o, p, t]) => { setData(o); setByProvider(p); setByTask(t); })
+    Promise.all([api.overview(), api.by("provider"), api.by("taskType"), api.realisedSavings()])
+      .then(([o, p, t, s]) => { setData(o); setByProvider(p); setByTask(t); setSavings(s); })
       .catch((e) => setErr(e.message));
   }, []);
 
@@ -31,7 +32,7 @@ function Summary() {
         <Stat label="Total requests" value={fmt.num(data.totalRequests)} />
         <Stat label="Total cost" value={fmt.usd(data.totalCost)} />
         <Stat label="Avg cost / request" value={fmt.usd(data.avgCostPerRequest)} />
-        <Stat label="Avg latency" value={fmt.ms(data.avgLatency)} />
+        <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -39,6 +40,25 @@ function Summary() {
         <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
         <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />
       </div>
+
+      {savings?.rows?.length > 0 && (
+        <Card title="Realised savings by substitution">
+          <p className="mb-3 text-sm text-gray-500">
+            Requests that asked for one model but were served a different one (downgrades, rules,
+            opt-outs). Savings re-price the served tokens at the requested model. Excludes
+            <span className="font-mono"> auto</span> requests (no requested baseline).
+          </p>
+          <Table
+            columns={[
+              { key: "requested", header: "Requested", render: (r) => r.requested },
+              { key: "served", header: "Served", render: (r) => r.served },
+              { key: "requests", header: "Requests", render: (r) => fmt.num(r.requests) },
+              { key: "saved", header: "Saved", render: (r) => fmt.usd(r.saved) },
+            ]}
+            rows={savings.rows}
+          />
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Spend by provider">

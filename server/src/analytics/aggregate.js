@@ -1,6 +1,7 @@
 // MongoDB aggregation pipelines producing the scope's dashboard views.
 // All views accept the same filter object (date range + dimensions).
 const RequestRecord = require("../models/RequestRecord");
+const { computeRealisedSavings } = require("./savings");
 
 // Build a $match stage from filter query params.
 function buildMatch(filter = {}) {
@@ -10,7 +11,7 @@ function buildMatch(filter = {}) {
     if (filter.from) m.timestamp.$gte = new Date(filter.from);
     if (filter.to) m.timestamp.$lte = new Date(filter.to);
   }
-  for (const f of ["application", "workflow", "department", "model", "provider", "taskType"]) {
+  for (const f of ["application", "workflow", "department", "model", "provider", "taskType", "userId"]) {
     if (filter[f]) m[f] = filter[f];
   }
   return m;
@@ -91,6 +92,35 @@ const byProvider = (f) =>
     project: { tokens: 1 },
   });
 const byTaskType = (f) => groupBy("taskType", f);
+const byUser = (f) => groupBy("userId", f); // per-person spend (null userId = unattributed)
+
+// Realised savings from model SUBSTITUTIONS: requests where a specific model was requested but a
+// different one was served (budget downgrades, rule/opt-out/allowed-model fallbacks). Re-prices the
+// served tokens at the requested model and compares to what was actually paid. The pure math lives
+// in ./savings so it's testable without a DB.
+async function realisedSavings(filter) {
+  const pricing = require("../pricing/registry");
+  const match = buildMatch(filter);
+  const grouped = await RequestRecord.aggregate([
+    { $match: { ...match, status: "success", $expr: { $ne: ["$modelRequested", "$model"] } } },
+    {
+      $group: {
+        _id: { requested: "$modelRequested", served: "$model" },
+        requests: { $sum: 1 },
+        promptTokens: { $sum: "$promptTokens" },
+        completionTokens: { $sum: "$completionTokens" },
+        actualCost: { $sum: "$totalCost" },
+      },
+    },
+  ]);
+  const groups = grouped.map((g) => ({
+    requested: g._id.requested, served: g._id.served, requests: g.requests,
+    promptTokens: g.promptTokens, completionTokens: g.completionTokens, actualCost: g.actualCost,
+  }));
+  const priceOf = (modelId, p, c) =>
+    pricing.getModel(modelId) ? pricing.costFor(modelId, p, c).totalCost : null;
+  return computeRealisedSavings(groups, priceOf);
+}
 
 // Total cost for a scope over a window — powers cost caps. dimension/value are
 // optional (omit both for global spend); from/to bound the window.
@@ -109,15 +139,16 @@ async function spend({ dimension, value, from, to } = {}) {
 
 // Distinct values for filter dropdowns.
 async function facets() {
-  const [applications, workflows, departments, models, providers, taskTypes] = await Promise.all([
+  const [applications, workflows, departments, models, providers, taskTypes, users] = await Promise.all([
     RequestRecord.distinct("application"),
     RequestRecord.distinct("workflow"),
     RequestRecord.distinct("department"),
     RequestRecord.distinct("model"),
     RequestRecord.distinct("provider"),
     RequestRecord.distinct("taskType"),
+    RequestRecord.distinct("userId"),
   ]);
-  return { applications, workflows, departments, models, providers, taskTypes };
+  return { applications, workflows, departments, models, providers, taskTypes, users };
 }
 
 // Per-provider health over the last 24h: error rate and average latency.
@@ -153,6 +184,8 @@ module.exports = {
   byModel,
   byProvider,
   byTaskType,
+  byUser,
+  realisedSavings,
   facets,
   providerHealth,
 };
