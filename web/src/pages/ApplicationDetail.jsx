@@ -121,6 +121,7 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   const [expanded, setExpanded]       = useState({ light: false, mid: false, premium: false, custom: true });
   const [busy, setBusy]               = useState(false);
   const [msg, setMsg]                 = useState(null);
+  const [allowedMsg, setAllowedMsg]   = useState(null);
   const [confirmGen, setConfirmGen]   = useState(false);
 
   useEffect(() => { api.aiPolicy().then(setGlobalPol).catch((e) => setMsg(e.message)); }, []);
@@ -133,6 +134,10 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   for (const task of catalog) { if (byTier[task.tier]) byTier[task.tier].push(task); }
 
   const effectiveAssignments = usingGlobal ? (globalPol.assignments || {}) : assignments;
+
+  // True when the allowed-models selection differs from what's persisted.
+  const allowedDirty =
+    JSON.stringify([...excluded].sort()) !== JSON.stringify([...(initialModelOptOut || [])].sort());
 
   function dominantModel(tier) {
     const counts = {};
@@ -155,6 +160,18 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
       setMsg("Saved"); setTimeout(() => setMsg(null), 1500);
       onSaved?.();
     } catch (e) { setMsg(e.message); }
+    finally { setBusy(false); }
+  };
+
+  // Save the allowed-models opt-out on its own. Independent of the routing policy,
+  // so it works even when the app is on the global default policy (no Save button there).
+  const saveAllowed = async () => {
+    setBusy(true); setAllowedMsg(null);
+    try {
+      await api.setAppConfig(appName, { modelOptOut: excluded });
+      setAllowedMsg("Saved"); setTimeout(() => setAllowedMsg(null), 1500);
+      onSaved?.();
+    } catch (e) { setAllowedMsg(e.message); }
     finally { setBusy(false); }
   };
 
@@ -192,6 +209,13 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
           Models deselected here are blocked for this application at the gateway and excluded from AI policy generation.
         </p>
         <ModelPicker models={models} excluded={excluded} onChange={setExcluded} />
+        <div className="mt-3 flex items-center gap-3">
+          <button className="btn-secondary text-xs" disabled={busy || !allowedDirty} onClick={saveAllowed}>
+            {busy ? "Saving…" : "Save allowed models"}
+          </button>
+          {allowedDirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
+          {allowedMsg && <span className="text-xs text-gray-500">{allowedMsg}</span>}
+        </div>
       </Card>
 
       {/* ── Section 2: Routing policy ── */}
