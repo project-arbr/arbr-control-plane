@@ -72,7 +72,8 @@ export const api = {
 
   aiPolicy: () => req("/ai-policy"),
   setAiPolicy: (assignments) => req("/ai-policy", { method: "PUT", body: JSON.stringify({ assignments }) }),
-  regenerateAiPolicy: () => req("/ai-policy/regenerate", { method: "POST" }),
+  regenerateAiPolicy: (goal = "balanced", windowDays) => req("/ai-policy/regenerate", { method: "POST", body: JSON.stringify({ goal, windowDays }) }),
+  simulatePolicy: (assignments, windowDays) => req("/ai-policy/simulate", { method: "POST", body: JSON.stringify({ assignments, windowDays }) }),
 
   syncBenchmarks:   () => req("/benchmarks/sync",  { method: "POST" }),
   benchmarksStatus: () => req("/benchmarks/status"),
@@ -124,7 +125,8 @@ export const api = {
   appConfigs: () => req("/app-configs"),
   appConfig: (app) => req(`/app-configs/${encodeURIComponent(app)}`),
   setAppConfig: (app, body) => req(`/app-configs/${encodeURIComponent(app)}`, { method: "PUT", body: JSON.stringify(body) }),
-  generateAppPolicy: (app, excludeModels = []) => req(`/app-configs/${encodeURIComponent(app)}/generate-policy`, { method: "POST", body: JSON.stringify({ excludeModels }) }),
+  generateAppPolicy: (app, excludeModels = [], goal = "balanced", windowDays) => req(`/app-configs/${encodeURIComponent(app)}/generate-policy`, { method: "POST", body: JSON.stringify({ excludeModels, goal, windowDays }) }),
+  simulateAppPolicy: (app, assignments, windowDays) => req(`/app-configs/${encodeURIComponent(app)}/simulate`, { method: "POST", body: JSON.stringify({ assignments, windowDays }) }),
   setAppDefaultPolicy: (app) => req(`/app-configs/${encodeURIComponent(app)}/set-default-policy`, { method: "POST" }),
 };
 

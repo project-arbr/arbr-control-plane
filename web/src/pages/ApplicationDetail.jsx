@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, fmt } from "../api.js";
-import { Card, Badge, Spinner, Toggle, Tabs, useTabParam, ConfirmDialog } from "../components/ui.jsx";
+import { Card, Badge, Spinner, Toggle, Tabs, useTabParam, ConfirmDialog, Stat, Table } from "../components/ui.jsx";
 import RequestsTable from "../components/RequestsTable.jsx";
 
 const TABS = [
@@ -123,6 +123,8 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   const [msg, setMsg]                 = useState(null);
   const [allowedMsg, setAllowedMsg]   = useState(null);
   const [confirmGen, setConfirmGen]   = useState(false);
+  const [goal, setGoal]               = useState("balanced"); // cost | balanced | quality
+  const [sim, setSim]                 = useState(null);        // impact simulation result
 
   useEffect(() => { api.aiPolicy().then(setGlobalPol).catch((e) => setMsg(e.message)); }, []);
 
@@ -138,6 +140,16 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   // True when the allowed-models selection differs from what's persisted.
   const allowedDirty =
     JSON.stringify([...excluded].sort()) !== JSON.stringify([...(initialModelOptOut || [])].sort());
+
+  // Simulator delta labels. Cost is a real projection; capability index is a heuristic proxy.
+  const pctChange = (cur, proj) => (cur > 0 ? Math.round(((proj - cur) / cur) * 100) : 0);
+  const costDeltaLabel = (s) => { const p = pctChange(s.current?.cost || 0, s.projected?.cost || 0); return `${p > 0 ? "+" : ""}${p}% vs current`; };
+  const capLabel = (x) => (x == null ? "—" : Number(x).toFixed(2));
+  const capDeltaLabel = (s) => {
+    const c = s.current?.capabilityIndex, p = s.projected?.capabilityIndex;
+    if (c == null || p == null) return null;
+    const d = p - c; return `${d >= 0 ? "+" : ""}${d.toFixed(2)} vs current`;
+  };
 
   function dominantModel(tier) {
     const counts = {};
@@ -175,17 +187,26 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
     finally { setBusy(false); }
   };
 
-  // Generate uses excluded as the exclusion list automatically.
+  // Generate uses excluded as the exclusion list automatically, optimizing for the chosen goal.
   const generate = async () => {
     setConfirmGen(false);
-    setBusy(true); setMsg("Generating with AI…");
+    setBusy(true); setMsg(`Generating (goal: ${goal})…`); setSim(null);
     try {
-      const result = await api.generateAppPolicy(appName, excluded);
+      const result = await api.generateAppPolicy(appName, excluded, goal);
       setAssignments(result.assignments);
+      setSim(result.simulation || null);
       setMsg(result.generatorModel ? `Done — via ${result.generatorModel}` : "Done");
       setTimeout(() => setMsg(null), 3000);
       onSaved?.();
     } catch (e) { setMsg(e.message); }
+    finally { setBusy(false); }
+  };
+
+  // Re-project impact for the current (possibly hand-edited) assignments over recent traffic.
+  const resimulate = async () => {
+    setBusy(true);
+    try { setSim(await api.simulateAppPolicy(appName, effectiveAssignments)); }
+    catch (e) { setMsg(e.message); }
     finally { setBusy(false); }
   };
 
@@ -230,6 +251,17 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
           />
         )}
         <div className="space-y-4">
+          {/* Goal selector — generation optimizes the cost/capability blend for this goal */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-500">Optimize for:</span>
+            {["cost", "balanced", "quality"].map((g) => (
+              <button key={g} type="button"
+                className={goal === g ? "btn-secondary text-xs" : "btn-outline text-xs"}
+                disabled={busy} onClick={() => setGoal(g)}>
+                {g[0].toUpperCase() + g.slice(1)}
+              </button>
+            ))}
+          </div>
           {/* Action bar */}
           <div className="flex flex-wrap items-center gap-3">
             {usingGlobal ? (
@@ -252,6 +284,37 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
             )}
             {msg && <span className="text-xs text-gray-500">{msg}</span>}
           </div>
+
+          {/* Impact simulator — projected cost (real) + capability index (heuristic proxy) over recent traffic */}
+          {sim && (
+            <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  Projected impact{" "}
+                  <span className="text-xs font-normal text-gray-400">
+                    (last {sim.windowDays}d · cost is real, capability is an estimate)
+                  </span>
+                </span>
+                <button className="btn-ghost text-xs" disabled={busy} onClick={resimulate}>Re-simulate</button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Stat label="Projected cost" value={fmt.usd(sim.projected?.cost)} sub={costDeltaLabel(sim)} />
+                <Stat label="Current cost" value={fmt.usd(sim.current?.cost)} />
+                <Stat label="Capability index" value={capLabel(sim.projected?.capabilityIndex)} sub={capDeltaLabel(sim)} />
+              </div>
+              {sim.rows?.length > 0 && (
+                <Table
+                  columns={[
+                    { key: "taskType", header: "Task", render: (r) => r.taskType },
+                    { key: "proposedModel", header: "Model", render: (r) => r.proposedModel || "—" },
+                    { key: "requests", header: "Reqs", render: (r) => fmt.num(r.requests) },
+                    { key: "saved", header: "Saved", render: (r) => fmt.usd(r.saved) },
+                  ]}
+                  rows={sim.rows.slice(0, 8)}
+                />
+              )}
+            </div>
+          )}
 
           {/* Tier accordions */}
           <div className="space-y-2">

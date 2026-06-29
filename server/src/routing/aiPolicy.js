@@ -5,6 +5,7 @@ const Settings = require("../models/Settings");
 const RequestRecord = require("../models/RequestRecord");
 const pricing = require("../pricing/registry");
 const { TASK_TYPES, TASK_CATALOG } = require("../classify/classifier");
+const { projectImpact } = require("./policySim");
 
 // Increment when MODEL_CAPABILITIES or TASK_CAPABILITIES change.
 // GET /api/ai-policy auto-regenerates if the stored version is behind.
@@ -222,6 +223,14 @@ function parseJsonBlock(text) {
 // For general tasks the gap is small (~0.12) so the cheap model still wins.
 const COST_SENSITIVITY = { light: 0.20, mid: 0.25, premium: 0.10 };
 
+// Goal-driven cost-vs-capability weight. "balanced" (default) keeps today's per-tier behavior;
+// "cost" weights cost heavily (cheapest capable model); "quality" weights capability (best model).
+function goalWeight(goal, tier) {
+  if (goal === "cost") return 0.6;
+  if (goal === "quality") return 0.05;
+  return COST_SENSITIVITY[tier] || 0.25; // "balanced" / unset
+}
+
 // Scoring function: returns weighted capability score and cost efficiency ratio.
 // costScore = cheapestInPool / model.cost  →  cheapest model = 1.0, expensive → near 0.
 function scoreModel(taskCaps, model, cheapestCost) {
@@ -242,7 +251,7 @@ function scoreModel(taskCaps, model, cheapestCost) {
 
 // Core scoring engine — shared by regenerate() and computeAssignments().
 // excludeModels: array of model IDs to exclude from consideration.
-async function _computeAssignments({ router, eff, excludeModels = [] }) {
+async function _computeAssignments({ router, eff, excludeModels = [], goal = "balanced" }) {
   if (!eff) throw new Error("no effective config");
 
   const excludeSet = new Set(excludeModels);
@@ -283,7 +292,13 @@ async function _computeAssignments({ router, eff, excludeModels = [] }) {
       `Rules:\n` +
       `- Use light-tier models for simple/cheap tasks, premium for complex reasoning\n` +
       `- Vary assignments — don't give every task the same model\n` +
-      `- Choose the model best suited for each task's requirements\n\n` +
+      `- Choose the model best suited for each task's requirements\n` +
+      (goal === "cost"
+        ? `- GOAL: minimize cost — prefer the cheapest model that can do each task acceptably\n`
+        : goal === "quality"
+        ? `- GOAL: maximize quality — prefer the most capable model for each task, cost is secondary\n`
+        : `- GOAL: balance capability and cost\n`) +
+      `\n` +
       `Return ONLY a valid JSON object mapping each task ID to one model ID. Example:\n` +
       `{"faq":"model-a","coding":"model-b","translation":"model-c"}`;
 
@@ -301,7 +316,7 @@ async function _computeAssignments({ router, eff, excludeModels = [] }) {
       for (const task of tasks) {
         const assigned = raw[task];
         // accept the LLM's choice only if it picked a valid live model
-        assignments[task] = validIds.has(assigned) ? assigned : _scoringFallback(task, liveModels, catalogMap, eff);
+        assignments[task] = validIds.has(assigned) ? assigned : _scoringFallback(task, liveModels, catalogMap, eff, undefined, goal);
       }
       return { assignments, generatorModel };
     }
@@ -310,12 +325,12 @@ async function _computeAssignments({ router, eff, excludeModels = [] }) {
   // ── Scoring matrix fallback ───────────────────────────────────────────────
   const assignments = {};
   for (const task of tasks) {
-    assignments[task] = _scoringFallback(task, liveModels, catalogMap, eff);
+    assignments[task] = _scoringFallback(task, liveModels, catalogMap, eff, undefined, goal);
   }
   return { assignments, generatorModel };
 }
 
-function _scoringFallback(task, liveModels, catalogMap, eff, tierOverride) {
+function _scoringFallback(task, liveModels, catalogMap, eff, tierOverride, goal) {
   const byTier = { light: [], mid: [], premium: [] };
   for (const m of liveModels) { if (byTier[m.tier]) byTier[m.tier].push(m); }
   const hardFallback = liveModels[0].id;
@@ -332,7 +347,7 @@ function _scoringFallback(task, liveModels, catalogMap, eff, tierOverride) {
   const taskCaps = TASK_CAPABILITIES[task] || { coding:0.3, reasoning:0.3, writing:0.3, analysis:0.3, language:0.1, general:0.5, data:0.2 };
   const pool     = poolFor(tier);
   const cheapest = Math.min(...pool.map((m) => m.inputPer1M || 0.001));
-  const cs       = COST_SENSITIVITY[tier] || 0.25;
+  const cs       = goalWeight(goal, tier);
   let best = pool[0], bestScore = -1;
   for (const m of pool) {
     const { capScore, costScore } = scoreModel(taskCaps, m, cheapest);
@@ -343,14 +358,46 @@ function _scoringFallback(task, liveModels, catalogMap, eff, tierOverride) {
 }
 
 // Policy engine — saves global AI policy to Settings.
-async function regenerate({ router, eff }) {
-  const { assignments, generatorModel } = await _computeAssignments({ router, eff });
+async function regenerate({ router, eff, goal }) {
+  const { assignments, generatorModel } = await _computeAssignments({ router, eff, goal });
   const s = await Settings.get();
   s.aiPolicy = { assignments, generatedAt: new Date(), generatorModel: generatorModel.id, capabilityVersion: CAPABILITY_VERSION };
   s.markModified("aiPolicy");
   await s.save();
   invalidate();
   return s.aiPolicy;
+}
+
+// Project a proposed taskType->model policy over recent traffic. Cost is a real re-pricing of the
+// logged tokens; `capabilityIndex` is a heuristic PROXY (capability scores, not measured quality).
+async function simulate({ assignments = {}, application = null, windowDays = 14 } = {}) {
+  const since = new Date(Date.now() - windowDays * 86400000);
+  const match = { status: "success", timestamp: { $gte: since } };
+  if (application) match.application = application;
+  const agg = await RequestRecord.aggregate([
+    { $match: match },
+    { $group: {
+        _id: { taskType: "$taskType", model: "$model" },
+        requests: { $sum: 1 },
+        promptTokens: { $sum: "$promptTokens" },
+        completionTokens: { $sum: "$completionTokens" },
+        actualCost: { $sum: "$totalCost" },
+      } },
+  ]);
+  const groups = agg.map((r) => ({
+    taskType: r._id.taskType, servedModel: r._id.model, requests: r.requests,
+    promptTokens: r.promptTokens, completionTokens: r.completionTokens, actualCost: r.actualCost,
+  }));
+  const priceOf = (modelId, p, c) =>
+    pricing.getModel(modelId) ? pricing.costFor(modelId, p, c).totalCost : null;
+  const capOf = (taskType, modelId) => {
+    const model = pricing.getModel(modelId);
+    if (!model) return null;
+    const taskCaps = TASK_CAPABILITIES[String(taskType || "").toLowerCase()]
+      || { coding: 0.3, reasoning: 0.3, writing: 0.3, analysis: 0.3, language: 0.1, general: 0.5, data: 0.2 };
+    return scoreModel(taskCaps, model, model.inputPer1M || 0.001).capScore;
+  };
+  return { windowDays, ...projectImpact(groups, assignments, priceOf, capOf) };
 }
 
 // Full view for the editor: assignments + catalogs + what's unmapped/custom.
@@ -376,4 +423,4 @@ async function describe() {
   };
 }
 
-module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, describe, invalidate, CAPABILITY_VERSION };
+module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION };

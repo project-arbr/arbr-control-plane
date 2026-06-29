@@ -627,12 +627,25 @@ router.put("/ai-policy", async (req, res, next) => {
   } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
 });
 
-router.post("/ai-policy/regenerate", async (_req, res, next) => {
+router.post("/ai-policy/regenerate", async (req, res, next) => {
   try {
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "demo_mode", message: "Add a provider key to generate an AI policy." });
-    await aiPolicy.regenerate({ router: r, eff });
-    res.json(await aiPolicy.describe());
+    const goal = String(req.body?.goal || "balanced");
+    const pol = await aiPolicy.regenerate({ router: r, eff, goal });
+    const simulation = await aiPolicy.simulate({ assignments: pol.assignments, windowDays: Number(req.body?.windowDays) || 14 });
+    res.json({ ...(await aiPolicy.describe()), simulation });
+  } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
+});
+
+// Project a proposed policy's cost + capability over recent global traffic (no persist).
+router.post("/ai-policy/simulate", async (req, res, next) => {
+  try {
+    const simulation = await aiPolicy.simulate({
+      assignments: req.body?.assignments || {},
+      windowDays: Number(req.body?.windowDays) || 14,
+    });
+    res.json(simulation);
   } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
 });
 
@@ -851,15 +864,29 @@ router.post("/app-configs/:app/generate-policy", async (req, res, next) => {
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "no live providers — cannot generate policy" });
     const excludeModels = Array.isArray(req.body?.excludeModels) ? req.body.excludeModels : [];
-    const { assignments, generatorModel } = await aiPolicy.computeAssignments({ router: r, eff, excludeModels });
+    const goal = String(req.body?.goal || "balanced");
+    const { assignments, generatorModel } = await aiPolicy.computeAssignments({ router: r, eff, excludeModels, goal });
     const generatedAt = new Date();
     const cfg = await ApplicationConfig.findOneAndUpdate(
       { applicationName: req.params.app },
       { $set: { aiPolicyAssignments: assignments } },
       { new: true, upsert: true }
     ).lean();
-    setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels }));
-    res.json({ assignments, generatedAt, generatorModel: generatorModel.id, cfg });
+    setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels, goal }));
+    const simulation = await aiPolicy.simulate({ assignments, application: req.params.app, windowDays: Number(req.body?.windowDays) || 14 });
+    res.json({ assignments, generatedAt, generatorModel: generatorModel.id, cfg, simulation });
+  } catch (e) { next(e); }
+});
+
+// Project a proposed policy's cost + capability over this app's recent traffic (no persist).
+router.post("/app-configs/:app/simulate", async (req, res, next) => {
+  try {
+    const simulation = await aiPolicy.simulate({
+      assignments: req.body?.assignments || {},
+      application: req.params.app,
+      windowDays: Number(req.body?.windowDays) || 14,
+    });
+    res.json(simulation);
   } catch (e) { next(e); }
 });
 

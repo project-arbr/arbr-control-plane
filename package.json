@@ -29,6 +29,7 @@
     "smoke:classify": "node server/scripts/classify-smoke.js",
     "smoke:cache": "node server/scripts/cache-smoke.js",
     "smoke:savings": "node server/scripts/savings-smoke.js",
+    "smoke:simulate": "node server/scripts/simulate-smoke.js",
     "lint": "eslint server/src",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

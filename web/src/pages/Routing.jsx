@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api.js";
-import { Card, Table, Toggle, Badge, Spinner, Tabs, useTabParam, ConfirmDialog } from "../components/ui.jsx";
+import { api, fmt } from "../api.js";
+import { Card, Table, Stat, Toggle, Badge, Spinner, Tabs, useTabParam, ConfirmDialog } from "../components/ui.jsx";
 import Recommendations from "./Recommendations.jsx";
 
 const TABS = [
@@ -193,23 +193,34 @@ function AiPolicyEditor({ models }) {
   const [msg, setMsg] = useState(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [expanded, setExpanded] = useState({ light: false, mid: false, premium: false, custom: true });
+  const [goal, setGoal] = useState("balanced"); // cost | balanced | quality
+  const [sim, setSim] = useState(null);
   const load = () => api.aiPolicy().then((p) => { setPol(p); setAssignments({ ...p.assignments }); }).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, []);
   if (!pol) return <Spinner />;
 
   const regen = async () => {
     setConfirmRegen(false);
-    setBusy(true); setMsg("Generating policy with AI…");
+    setBusy(true); setMsg(`Generating (goal: ${goal})…`); setSim(null);
     try {
-      const p = await api.regenerateAiPolicy();
+      const p = await api.regenerateAiPolicy(goal);
       setPol(p);
       setAssignments({ ...p.assignments });
+      setSim(p.simulation || null);
       setMsg(p.generatorModel ? `Done — via ${p.generatorModel}` : "Done");
       setTimeout(() => setMsg(null), 3000);
     }
     catch (e) { setMsg(e.message); }
     finally { setBusy(false); }
   };
+  const resimulate = async () => {
+    setBusy(true);
+    try { setSim(await api.simulatePolicy(assignments)); }
+    catch (e) { setMsg(e.message); }
+    finally { setBusy(false); }
+  };
+  const costDeltaLabel = (s) => { const c = s.current?.cost || 0, p = s.projected?.cost || 0; const pc = c > 0 ? Math.round(((p - c) / c) * 100) : 0; return `${pc > 0 ? "+" : ""}${pc}% vs current`; };
+  const capDeltaLabel = (s) => { const c = s.current?.capabilityIndex, p = s.projected?.capabilityIndex; if (c == null || p == null) return null; const d = p - c; return `${d >= 0 ? "+" : ""}${d.toFixed(2)} vs current`; };
   const save = async () => {
     setBusy(true); setMsg(null);
     try { const p = await api.setAiPolicy(assignments); setPol(p); setAssignments({ ...p.assignments }); setMsg("Saved"); setTimeout(() => setMsg(null), 1500); }
@@ -248,6 +259,16 @@ function AiPolicyEditor({ models }) {
           onCancel={() => setConfirmRegen(false)}
         />
       )}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-gray-500">Optimize for:</span>
+        {["cost", "balanced", "quality"].map((g) => (
+          <button key={g} type="button"
+            className={goal === g ? "btn-secondary text-xs" : "btn-outline text-xs"}
+            disabled={busy} onClick={() => setGoal(g)}>
+            {g[0].toUpperCase() + g.slice(1)}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn-secondary" disabled={busy} onClick={() => setConfirmRegen(true)}>{busy ? "Generating…" : "Generate with AI"}</button>
         <button className="btn-outline" disabled={busy} onClick={save}>Save edits</button>
@@ -258,6 +279,37 @@ function AiPolicyEditor({ models }) {
         )}
         {msg && <span className="text-xs text-gray-500">{msg}</span>}
       </div>
+
+      {/* Impact simulator — projected cost (real) + capability index (heuristic proxy) over recent traffic */}
+      {sim && (
+        <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">
+              Projected impact{" "}
+              <span className="text-xs font-normal text-gray-400">
+                (last {sim.windowDays}d · cost is real, capability is an estimate)
+              </span>
+            </span>
+            <button className="btn-ghost text-xs" disabled={busy} onClick={resimulate}>Re-simulate</button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Stat label="Projected cost" value={fmt.usd(sim.projected?.cost)} sub={costDeltaLabel(sim)} />
+            <Stat label="Current cost" value={fmt.usd(sim.current?.cost)} />
+            <Stat label="Capability index" value={sim.projected?.capabilityIndex == null ? "—" : Number(sim.projected.capabilityIndex).toFixed(2)} sub={capDeltaLabel(sim)} />
+          </div>
+          {sim.rows?.length > 0 && (
+            <Table
+              columns={[
+                { key: "taskType", header: "Task", render: (r) => r.taskType },
+                { key: "proposedModel", header: "Model", render: (r) => r.proposedModel || "—" },
+                { key: "requests", header: "Reqs", render: (r) => fmt.num(r.requests) },
+                { key: "saved", header: "Saved", render: (r) => fmt.usd(r.saved) },
+              ]}
+              rows={sim.rows.slice(0, 8)}
+            />
+          )}
+        </div>
+      )}
 
       {pol.unmapped.length > 0 && (
         <div className="text-xs text-amber-700">
