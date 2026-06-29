@@ -7,6 +7,11 @@ const modelEntrySchema = new mongoose.Schema(
     label:        { type: String, default: "" },
     inputPer1M:   { type: Number, required: true, min: 0 },
     outputPer1M:  { type: Number, required: true, min: 0 },
+    // Per-1M rates for provider prompt caching. null = unknown (cost falls back to inputPer1M).
+    // cacheRead = billing for tokens served from the provider's prompt cache (much cheaper);
+    // cacheWrite = billing to populate the cache (Anthropic charges a premium for this).
+    cacheReadPer1M:  { type: Number, default: null },
+    cacheWritePer1M: { type: Number, default: null },
     tier:         { type: String, enum: ["light", "mid", "premium"], required: true },
     builtIn:       { type: Boolean, default: false },
     enabled:       { type: Boolean, default: true },

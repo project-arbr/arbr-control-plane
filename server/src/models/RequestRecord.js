@@ -21,9 +21,14 @@ const requestRecordSchema = new mongoose.Schema(
     taskType: { type: String, index: true },
 
     // usage
-    promptTokens: { type: Number, default: 0 },
+    promptTokens: { type: Number, default: 0 },      // TOTAL input, including any cached tokens
     completionTokens: { type: Number, default: 0 },
     totalTokens: { type: Number, default: 0 },
+    // Provider prompt-cache breakdown (subset of promptTokens) + the $ saved on cached reads
+    // vs paying full input rate. Lets analytics show cache hit-rate and cache ROI.
+    cachedReadTokens: { type: Number, default: 0 },
+    cacheWriteTokens: { type: Number, default: 0 },
+    cacheSavingUsd: { type: Number, default: 0 },
 
     // cost (USD)
     inputCost: { type: Number, default: 0 },

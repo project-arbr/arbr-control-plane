@@ -27,6 +27,7 @@
     "dev": "concurrently -n server,web -c blue,green \"npm run server:dev\" \"npm run web\"",
     "smoke:router": "node server/scripts/smoke-router.js",
     "smoke:classify": "node server/scripts/classify-smoke.js",
+    "smoke:cache": "node server/scripts/cache-smoke.js",
     "lint": "eslint server/src",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

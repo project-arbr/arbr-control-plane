@@ -392,6 +392,8 @@ async function handleChat(req, res) {
       promptTokens: result.usage?.inputTokens || 0,
       completionTokens: result.usage?.outputTokens || 0,
       totalTokens: result.usage?.totalTokens || 0,
+      cachedReadTokens: result.usage?.cachedReadTokens || 0,
+      cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
       latencyMs: result.latencyMs, status: "success",
       routingDecision, cacheHit: false,
       knownPricing: served.knownPricing,

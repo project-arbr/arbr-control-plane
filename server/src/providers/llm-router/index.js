@@ -211,12 +211,35 @@ function extractText(response) {
 }
 
 function extractUsage(response) {
-  const meta = (response && (response.usage_metadata
-    || (response.response_metadata && response.response_metadata.usage))) || {};
+  const um = (response && response.usage_metadata) || {};
+  const rm = (response && response.response_metadata && response.response_metadata.usage) || {};
+  const d  = um.input_token_details || {};
+
+  // Provider prompt-cache tokens. LangChain standardizes them into input_token_details;
+  // fall back to raw provider fields (Anthropic cache_read/creation_input_tokens, OpenAI
+  // prompt_tokens_details.cached_tokens). `??` so a real 0 is kept, not skipped.
+  const cachedReadTokens =
+    d.cache_read
+    ?? rm.cache_read_input_tokens
+    ?? (rm.prompt_tokens_details && rm.prompt_tokens_details.cached_tokens)
+    ?? 0;
+  const cacheWriteTokens = d.cache_creation ?? rm.cache_creation_input_tokens ?? 0;
+
+  // LangChain's input_tokens is TOTAL input (incl. cached). Raw OpenAI prompt_tokens is too.
+  // Raw Anthropic input_tokens EXCLUDES cache, so add it back to keep a consistent total.
+  let inputTokens = um.input_tokens ?? um.inputTokens ?? rm.prompt_tokens;
+  if (inputTokens == null && rm.input_tokens != null) {
+    inputTokens = rm.input_tokens + (Number(cachedReadTokens) || 0) + (Number(cacheWriteTokens) || 0);
+  }
+  const outputTokens = um.output_tokens ?? um.outputTokens ?? rm.completion_tokens ?? rm.output_tokens;
+  const totalTokens  = um.total_tokens  ?? um.totalTokens  ?? rm.total_tokens;
+
   return {
-    inputTokens:  meta.input_tokens  || meta.inputTokens  || meta.prompt_tokens     || undefined,
-    outputTokens: meta.output_tokens || meta.outputTokens || meta.completion_tokens || undefined,
-    totalTokens:  meta.total_tokens  || meta.totalTokens                            || undefined,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cachedReadTokens: Number(cachedReadTokens) || 0,
+    cacheWriteTokens: Number(cacheWriteTokens) || 0,
   };
 }
 
@@ -238,4 +261,4 @@ function extractFinishReason(response) {
   return "stop";
 }
 
-module.exports = { createRouter, SUPPORTED_PROVIDERS, extractFinishReason };
+module.exports = { createRouter, SUPPORTED_PROVIDERS, extractFinishReason, extractUsage };

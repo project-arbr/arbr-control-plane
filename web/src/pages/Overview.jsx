@@ -34,6 +34,12 @@ function Summary() {
         <Stat label="Avg latency" value={fmt.ms(data.avgLatency)} />
       </div>
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
+        <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
+        <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Spend by provider">
           <Table

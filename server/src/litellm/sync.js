@@ -48,6 +48,12 @@ function normalizeProvider(prefix) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Per-token cost (USD) → per-1M rate, or null when absent/non-positive.
+function per1M(costPerToken) {
+  const c = parseFloat(costPerToken);
+  return isFinite(c) && c > 0 ? +(c * 1_000_000).toFixed(4) : null;
+}
+
 function deriveTier(inputPer1M, outputPer1M) {
   const avg = (inputPer1M + outputPer1M) / 2;
   if (avg >= 8)   return "premium";
@@ -173,6 +179,8 @@ async function run() {
       label:         toLabel(id),
       inputPer1M,
       outputPer1M,
+      cacheReadPer1M:  per1M(ltEntry.cache_read_input_token_cost),
+      cacheWritePer1M: per1M(ltEntry.cache_creation_input_token_cost),
       tier:          deriveTier(inputPer1M, outputPer1M),
       builtIn:       false,
       enabled:       true,
@@ -221,6 +229,10 @@ async function run() {
     const outputCost = parseFloat(ltEntry.output_cost_per_token);
     if (isFinite(inputCost)  && inputCost  > 0) update.inputPer1M  = +(inputCost  * 1_000_000).toFixed(4);
     if (isFinite(outputCost) && outputCost > 0) update.outputPer1M = +(outputCost * 1_000_000).toFixed(4);
+    const cacheRead  = per1M(ltEntry.cache_read_input_token_cost);
+    const cacheWrite = per1M(ltEntry.cache_creation_input_token_cost);
+    if (cacheRead  !== null) update.cacheReadPer1M  = cacheRead;
+    if (cacheWrite !== null) update.cacheWritePer1M = cacheWrite;
 
     const maxIn = parseInt(ltEntry.max_input_tokens, 10);
     if (isFinite(maxIn) && maxIn > 0) update.contextWindow = maxIn;

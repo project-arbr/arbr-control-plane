@@ -83,10 +83,20 @@ function isCheapTask(taskType) {
   return CHEAP_TASK_TYPES.has(String(taskType || "").toLowerCase());
 }
 
-function costFor(modelId, promptTokens = 0, completionTokens = 0) {
+// promptTokens is TOTAL input (including any cached tokens). `cache` optionally splits out
+// cached-read and cache-write tokens so they bill at the provider's cache rates. Omitting cache
+// (or a model with no cache rates) prices everything at inputPer1M — identical to before.
+function costFor(modelId, promptTokens = 0, completionTokens = 0, cache = {}) {
   const m = _cache[modelId];
   if (!m) return { inputCost: 0, outputCost: 0, totalCost: 0 };
-  const inputCost  = (Number(promptTokens)    / 1e6) * m.inputPer1M;
+  const cachedRead = Number(cache.cachedReadTokens) || 0;
+  const cacheWrite = Number(cache.cacheWriteTokens) || 0;
+  const uncached   = Math.max(0, Number(promptTokens) - cachedRead - cacheWrite);
+  const readRate   = m.cacheReadPer1M  != null ? m.cacheReadPer1M  : m.inputPer1M;
+  const writeRate  = m.cacheWritePer1M != null ? m.cacheWritePer1M : m.inputPer1M;
+  const inputCost  = (uncached / 1e6) * m.inputPer1M
+                   + (cachedRead / 1e6) * readRate
+                   + (cacheWrite / 1e6) * writeRate;
   const outputCost = (Number(completionTokens) / 1e6) * m.outputPer1M;
   return { inputCost, outputCost, totalCost: inputCost + outputCost };
 }

@@ -18,9 +18,17 @@ async function write(record) {
     const promptTokens = record.promptTokens || 0;
     const completionTokens = record.completionTokens || 0;
     const totalTokens = record.totalTokens || promptTokens + completionTokens;
+    const cachedReadTokens = record.cachedReadTokens || 0;
+    const cacheWriteTokens = record.cacheWriteTokens || 0;
     const { inputCost, outputCost, totalCost } = record.knownPricing === false
       ? { inputCost: 0, outputCost: 0, totalCost: 0 }
-      : costFor(record.model, promptTokens, completionTokens);
+      : costFor(record.model, promptTokens, completionTokens, { cachedReadTokens, cacheWriteTokens });
+    // Estimated $ saved by cached reads vs paying full input rate for them.
+    let cacheSavingUsd = 0;
+    if (record.knownPricing !== false && cachedReadTokens > 0) {
+      const full = costFor(record.model, promptTokens, completionTokens);
+      cacheSavingUsd = Math.max(0, full.totalCost - totalCost);
+    }
 
     // PII masking: check setting lazily (cached by Settings.get's singleton pattern).
     // Only applied to the logged copy — the model already received the original text.
@@ -36,6 +44,9 @@ async function write(record) {
       promptTokens,
       completionTokens,
       totalTokens,
+      cachedReadTokens,
+      cacheWriteTokens,
+      cacheSavingUsd,
       inputCost,
       outputCost,
       totalCost,

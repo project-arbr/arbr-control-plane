@@ -205,6 +205,7 @@ async function proxyOpenAICompat(ctx) {
       promptTokens: u.prompt_tokens || 0,
       completionTokens: u.completion_tokens || 0,
       totalTokens: u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0),
+      cachedReadTokens: (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0,
       latencyMs, status: "success",
     });
     return;
@@ -218,7 +219,7 @@ async function proxyOpenAICompat(ctx) {
     "X-Accel-Buffering": "no",
   });
   res.flushHeaders(); // send headers immediately so the client/proxy knows it's SSE
-  let promptTokens = 0, completionTokens = 0;
+  let promptTokens = 0, completionTokens = 0, cachedReadTokens = 0;
   try {
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => "");
@@ -244,6 +245,7 @@ async function proxyOpenAICompat(ctx) {
           if (j.usage) {
             promptTokens = j.usage.prompt_tokens || promptTokens;
             completionTokens = j.usage.completion_tokens || completionTokens;
+            cachedReadTokens = (j.usage.prompt_tokens_details && j.usage.prompt_tokens_details.cached_tokens) || cachedReadTokens;
           }
         } catch { /* partial/non-JSON keepalive line */ }
       }
@@ -251,6 +253,7 @@ async function proxyOpenAICompat(ctx) {
     res.end();
     logRecord({
       promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
+      cachedReadTokens,
       latencyMs: Date.now() - start, status: "success",
     });
   } catch (err) {
@@ -419,6 +422,9 @@ async function handleOpenAICompat(req, res) {
       const promptTokens = um.input_tokens || 0;
       const completionTokens = um.output_tokens || 0;
       const totalTokens = um.total_tokens || (promptTokens + completionTokens);
+      const _utd = um.input_token_details || {};
+      const cachedReadTokens = _utd.cache_read || 0;
+      const cacheWriteTokens = _utd.cache_creation || 0;
 
       if (body.stream) {
         // Emit result as SSE so streaming clients receive the turn in OpenAI chunk format.
@@ -494,7 +500,7 @@ async function handleOpenAICompat(req, res) {
           requestId, timestamp, ...meta,
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, difficulty, confidence,
-          promptTokens, completionTokens, totalTokens,
+          promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
           latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
           knownPricing: served.knownPricing,
         })
@@ -575,6 +581,8 @@ async function handleOpenAICompat(req, res) {
     const promptTokens = result.usage?.inputTokens || 0;
     const completionTokens = result.usage?.outputTokens || 0;
     const totalTokens = result.usage?.totalTokens || (promptTokens + completionTokens);
+    const cachedReadTokens = result.usage?.cachedReadTokens || 0;
+    const cacheWriteTokens = result.usage?.cacheWriteTokens || 0;
 
     // Role delta on the first chunk (OpenAI protocol).
     res.write(`data: ${JSON.stringify({
@@ -609,7 +617,7 @@ async function handleOpenAICompat(req, res) {
         requestId, timestamp, ...meta,
         provider: result.providerId, model: result.modelId, modelRequested,
         taskType, classifiedBy, difficulty, confidence,
-        promptTokens, completionTokens, totalTokens,
+        promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
         latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
         knownPricing: served.knownPricing,
       })
@@ -671,6 +679,8 @@ async function handleOpenAICompat(req, res) {
       promptTokens:     result.usage?.inputTokens  || 0,
       completionTokens: result.usage?.outputTokens || 0,
       totalTokens:      result.usage?.totalTokens  || 0,
+      cachedReadTokens: result.usage?.cachedReadTokens || 0,
+      cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
       latencyMs: result.latencyMs, status: "success", routingDecision, cacheHit: false,
       knownPricing: served.knownPricing,
     })

@@ -28,11 +28,15 @@ async function overview(filter) {
         avgLatency: { $avg: "$latencyMs" },
         totalTokens: { $sum: "$totalTokens" },
         failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
+        cacheHits: { $sum: { $cond: ["$cacheHit", 1, 0] } },
+        cachedReadTokens: { $sum: "$cachedReadTokens" },
+        cacheSavingUsd: { $sum: "$cacheSavingUsd" },
       },
     },
   ]);
   const totalRequests = row?.totalRequests || 0;
   const totalCost = row?.totalCost || 0;
+  const cacheHits = row?.cacheHits || 0;
   return {
     totalRequests,
     totalCost,
@@ -40,6 +44,11 @@ async function overview(filter) {
     avgLatency: row?.avgLatency || 0,
     totalTokens: row?.totalTokens || 0,
     failures: row?.failures || 0,
+    // Caching observability: response-cache hit rate + provider prompt-cache reuse and savings.
+    cacheHits,
+    cacheHitRate: totalRequests ? cacheHits / totalRequests : 0,
+    cachedReadTokens: row?.cachedReadTokens || 0,
+    cacheSavingUsd: row?.cacheSavingUsd || 0,
   };
 }
 
