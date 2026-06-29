@@ -53,6 +53,9 @@ const requestRecordSchema = new mongoose.Schema(
     // Estimated difficulty of this instance (drives difficulty-aware model selection) and the
     // classifier's confidence (0-1) in the taskType. Null when not estimated (e.g. provided taskType).
     difficulty: { type: String, enum: ["light", "mid", "premium", null], default: null },
+    // Finer 1-10 difficulty estimate (the tier above is derived from it). Captured for analysis;
+    // routing still uses the tier. Null when not estimated.
+    difficultyScore: { type: Number, default: null },
     confidence: { type: Number, default: null },
     cacheHit: { type: Boolean, default: false },
   },
