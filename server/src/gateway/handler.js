@@ -401,4 +401,4 @@ async function handleChat(req, res) {
   });
 }
 
-module.exports = { handleChat, resolveRoute, invokeWithFallback };
+module.exports = { handleChat, resolveRoute, invokeWithFallback, getAppConfig };
