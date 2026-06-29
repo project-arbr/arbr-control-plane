@@ -155,7 +155,7 @@ function translateToolCalls(toolCalls) {
 async function proxyOpenAICompat(ctx) {
   const {
     res, body, served, modelRequested, meta, requestId, timestamp,
-    taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, eff, baseURL,
+    taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, eff, baseURL,
   } = ctx;
 
   const apiKey = eff.providers[served.provider]?.credential?.apiKey || "none";
@@ -168,7 +168,7 @@ async function proxyOpenAICompat(ctx) {
       logger.write({
         requestId, timestamp, ...meta,
         provider: served.provider, model: served.model, modelRequested,
-        taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, cacheHit: false,
+        taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages,
         ...extra,
@@ -330,9 +330,9 @@ async function handleOpenAICompat(req, res) {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
   };
-  let served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence;
+  let served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain;
   try {
-    ({ served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence } =
+    ({ served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain } =
       await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
@@ -359,7 +359,11 @@ async function handleOpenAICompat(req, res) {
       return res.status(429).json(errBody);
     }
     const target = pricing.suggestLightTarget(served.model);
-    if (target) { served = { provider: target.provider, model: target.model }; routingDecision = "budget"; }
+    if (target) {
+      if (explain) explain.override = { type: "budget", action: "downgrade", from: served.model, to: target.model,
+        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
+      served = { provider: target.provider, model: target.model }; routingDecision = "budget";
+    }
   }
 
   // Per-model output clamp: cap max_tokens to the SERVED model's known ceiling. Tool agents
@@ -411,7 +415,7 @@ async function handleOpenAICompat(req, res) {
       routing: routingDecision, taskType });
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,
-      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, eff, baseURL: compatBaseURL,
+      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, eff, baseURL: compatBaseURL,
     });
   }
 
@@ -525,7 +529,7 @@ async function handleOpenAICompat(req, res) {
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, difficulty, difficultyScore, confidence,
           promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
-          latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
+          latencyMs: Date.now() - start, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
           knownPricing: served.knownPricing,
           messages: body.messages, responseText: chunkText(aiMsg) || null,
         })
@@ -537,7 +541,7 @@ async function handleOpenAICompat(req, res) {
           requestId, timestamp, ...meta,
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
-          status: "failure", routingDecision, cacheHit: false, errorMessage,
+          status: "failure", routingDecision, routingExplain: explain, cacheHit: false, errorMessage,
         })
       );
       if (body.stream) {
@@ -594,14 +598,14 @@ async function handleOpenAICompat(req, res) {
           requestId, timestamp, ...meta,
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
-          status: "failure", routingDecision, cacheHit: false, errorMessage,
+          status: "failure", routingDecision, routingExplain: explain, cacheHit: false, errorMessage,
         })
       );
       return;
     }
 
     const { result, usedFallback } = invocation;
-    if (usedFallback) routingDecision = "fallback";
+    if (usedFallback) { routingDecision = "fallback"; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
 
     const promptTokens = result.usage?.inputTokens || 0;
     const completionTokens = result.usage?.outputTokens || 0;
@@ -643,7 +647,7 @@ async function handleOpenAICompat(req, res) {
         provider: result.providerId, model: result.modelId, modelRequested,
         taskType, classifiedBy, difficulty, difficultyScore, confidence,
         promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
-        latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
+        latencyMs: Date.now() - start, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages, responseText: result.text,
       })
@@ -670,7 +674,7 @@ async function handleOpenAICompat(req, res) {
         requestId, timestamp, ...meta,
         provider: served.provider, model: served.model, modelRequested,
         taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision,
-        errorMessage,
+        errorMessage, routingExplain: explain,
       })
     );
     return res.status(502).json({
@@ -679,7 +683,7 @@ async function handleOpenAICompat(req, res) {
   }
 
   const { result, usedFallback } = invocation;
-  if (usedFallback) routingDecision = "fallback";
+  if (usedFallback) { routingDecision = "fallback"; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
 
   res.json({
     id: `chatcmpl-${requestId}`,
@@ -707,7 +711,7 @@ async function handleOpenAICompat(req, res) {
       totalTokens:      result.usage?.totalTokens  || 0,
       cachedReadTokens: result.usage?.cachedReadTokens || 0,
       cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
-      latencyMs: result.latencyMs, status: "success", routingDecision, cacheHit: false,
+      latencyMs: result.latencyMs, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
     })

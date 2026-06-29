@@ -59,6 +59,12 @@ const requestRecordSchema = new mongoose.Schema(
     confidence: { type: Number, default: null },
     cacheHit: { type: Boolean, default: false },
 
+    // WHY this model was served — the non-derivable reasoning captured at decision time
+    // (which rule matched, the AI-policy source/base, a breached budget cap, a fallback
+    // origin). The UI narrates from this plus the flat fields above. Null on older records.
+    // Shape: { basis, classificationUsed, rule?, policy?, defaultScope?, override? }
+    routingExplain: { type: mongoose.Schema.Types.Mixed, default: null },
+
     // Captured context (full prompt + response). PII-masked at write time when
     // Settings.piiMaskingEnabled is on, and size-capped. Headers are intentionally NOT
     // stored (they carry Authorization/API keys). Governed by retentionDays auto-purge.
