@@ -10,13 +10,87 @@ const CLASSIFY = {
   ai:       { tone: "violet", label: "AI" },
 };
 
-// One node in the request-flow strip.
+// One node in the request-flow strip. Caps width + wraps so long model ids
+// (e.g. "moonshotai.kimi-k2.5") don't push the strip off the drawer.
 function FlowNode({ label, value, sub }) {
   return (
-    <div className="flex shrink-0 flex-col items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center">
+    <div className="flex max-w-[150px] shrink-0 flex-col items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center">
       <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
-      <div className="text-sm font-medium text-arbr-charcoal">{value}</div>
-      {sub && <div className="text-[10px] text-gray-400">{sub}</div>}
+      <div className="break-words text-sm font-medium text-arbr-charcoal">{value}</div>
+      {sub && <div className="break-words text-[10px] text-gray-400">{sub}</div>}
+    </div>
+  );
+}
+
+// Plain-English narration of WHY this model was served, built from routingExplain
+// (captured at decision time) plus the flat record fields. Falls back gracefully on
+// older records that predate routingExplain.
+function explainRouting(r) {
+  const x = r.routingExplain || {};
+  const d = r.routingDecision;
+  const lines = [];
+  const clsBits = [
+    r.taskType,
+    r.difficulty ? `${r.difficulty}${r.difficultyScore ? ` ${r.difficultyScore}/10` : ""}` : null,
+    r.confidence != null ? `confidence ${Number(r.confidence).toFixed(2)}` : null,
+  ].filter(Boolean).join(", ");
+
+  if (d === "explicit") {
+    lines.push(`The client explicitly requested ${r.model}, so Arbr served it directly without applying a routing policy.`);
+  } else if (d === "rule") {
+    const c = x.rule?.condition || {};
+    const on = [c.taskType && `task ${c.taskType}`, c.application && `app ${c.application}`, c.workflow && `workflow ${c.workflow}`].filter(Boolean).join(", ");
+    lines.push(`A routing rule${on ? ` (matching ${on})` : ""} directed this request to ${r.model}.`);
+    if (x.rule?.note) lines.push(`Rule note: ${x.rule.note}`);
+  } else if (d === "ai") {
+    lines.push(`Auto-routing: Arbr classified this as ${clsBits || "unknown"}, and the ${x.policy?.source || "global"} AI policy mapped it to ${r.model}.`);
+    if (x.policy?.adjustedByDifficulty && x.policy?.base) {
+      lines.push(`The policy's base pick was ${x.policy.base}; difficulty${x.policy.effDifficulty ? ` (${x.policy.effDifficulty})` : ""} adjusted it to ${r.model}.`);
+    }
+  } else if (d === "auto") {
+    lines.push(`Guardrail auto-routing substituted ${r.model} based on the task type (${r.taskType || "—"}).`);
+  } else if (d === "cache") {
+    lines.push(`Served from Arbr's response cache — an identical earlier request to ${r.model} was reused, with no new model call.`);
+  } else if (d === "fallback") {
+    lines.push(`The primary model failed, so Arbr fell back to ${r.model}.`);
+  } else if (d === "budget") {
+    lines.push(`A budget cap was breached, so Arbr overrode the routing.`);
+  } else {
+    lines.push(x.defaultScope === "app"
+      ? `No rule or policy matched, so Arbr served this application's default model, ${r.model}.`
+      : `No model was pinned and no rule or policy matched, so Arbr served the default model, ${r.model}.`);
+  }
+
+  const ov = x.override;
+  if (ov?.type === "budget" && ov.action === "downgrade") {
+    lines.push(`Budget override: cap "${ov.cap?.scope}" (${ov.cap?.period}, $${ov.cap?.limit}) was over limit, so ${ov.from} was downgraded to ${ov.to}.`);
+  } else if (ov?.type === "budget" && ov.action === "block") {
+    lines.push(`Budget cap "${ov.cap?.scope}" (${ov.cap?.period}, $${ov.cap?.limit}) was over limit; the request was blocked.`);
+  } else if (ov?.type === "fallback") {
+    lines.push(`Fallback: ${ov.from} failed, so Arbr retried on ${ov.to}.`);
+  } else if (ov?.type === "allowed") {
+    lines.push(`${ov.from} is not in this API key's allowed-model set, so Arbr served the key's default, ${ov.to}.`);
+  } else if (ov?.type === "optout") {
+    lines.push(`${ov.from} is opted out for this application, so Arbr served ${ov.to} instead.`);
+  }
+
+  if (x.classificationUsed === false && r.taskType && (d === "explicit" || d === "passthrough" || d === "cache")) {
+    lines.push(`Classification ran (${r.taskType}${r.difficulty ? `, ${r.difficulty}` : ""}) but did not influence routing.`);
+  }
+  return lines;
+}
+
+function RoutingExplanation({ r }) {
+  const lines = explainRouting(r);
+  return (
+    <div className="rounded-lg border border-arbr-green-200 bg-arbr-green-50 p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="label">Why this routing</span>
+        <Badge tone={ROUTING_TONE[r.routingDecision]}>{r.routingDecision}</Badge>
+      </div>
+      <ul className="space-y-1 text-sm text-arbr-charcoal">
+        {lines.map((l, i) => <li key={i}>{l}</li>)}
+      </ul>
     </div>
   );
 }
@@ -243,13 +317,11 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
             <div className="text-sm text-red-600">{detail._error}</div>
           ) : (
             <div className="space-y-5">
+              <RoutingExplanation r={detail} />
               <RequestFlow r={detail} />
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-3">
                 <Stat label="Status" value={detail.status} />
-                <Stat label="Routing" value={detail.routingDecision} />
                 <Stat label="Latency" value={fmt.ms(detail.latencyMs)} />
-                <Stat label="Requested → Served" value={detail.modelRequested === detail.model ? detail.model : `${detail.modelRequested} → ${detail.model}`} />
-                <Stat label="Task" value={detail.taskType || "—"} sub={`${detail.classifiedBy || "—"}${detail.difficulty ? ` · ${detail.difficulty}${detail.difficultyScore ? ` (${detail.difficultyScore}/10)` : ""}` : ""}${detail.confidence != null ? ` · conf ${Number(detail.confidence).toFixed(2)}` : ""}`} />
                 <Stat label="Cost" value={fmt.usd(detail.totalCost)} />
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

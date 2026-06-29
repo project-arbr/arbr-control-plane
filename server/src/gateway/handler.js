@@ -110,24 +110,34 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
   const difficultyScore = typeof cls.difficultyScore === "number" ? cls.difficultyScore : null;
   const confidence = typeof cls.confidence === "number" ? cls.confidence : null;
 
+  // routingExplain captures the non-derivable "why" (rule matched, policy source/base,
+  // default scope, later overrides). The UI narrates from this + the flat fields.
+  const explain = { basis: null, classificationUsed: false };
+
   let served, routingDecision;
   if (explicit) {
     served = explicit;
     routingDecision = "explicit";
+    explain.basis = "explicit";
   } else {
     served = resolveDefault(body, eff);
     routingDecision = "passthrough";
+    explain.basis = "passthrough";
+    explain.defaultScope = "global";
     // Per-app default: override the global default model when the key specifies one.
     if (appConfig.defaultModel) {
       const known = pricing.getModel(appConfig.defaultModel);
       if (known && eff.liveIds.includes(known.provider)) {
         served = { provider: known.provider, model: appConfig.defaultModel, knownPricing: true };
+        explain.defaultScope = "app";
       }
     }
     const route = await ruleEngine.findRoute({ taskType, application, workflow });
     if (route) {
       served = { provider: route.provider, model: route.model };
       routingDecision = "rule";
+      explain.basis = "rule";
+      explain.rule = { condition: route.condition || null, note: route.note || null };
     } else if (routingMode === "ai") {
       const aiMap = appDbConfig?.aiPolicyAssignments
         ? appDbConfig.aiPolicyAssignments
@@ -135,10 +145,18 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
       // A low-confidence classification shouldn't drive a difficulty-based downgrade;
       // fall back to the task's default policy pick when we're unsure.
       const effDifficulty = (confidence == null || confidence >= 0.5) ? difficulty : null;
+      const base = aiPolicy.lookup(aiMap, taskType);
       const hit = aiPolicy.resolveModel({ map: aiMap, taskType, difficulty: effDifficulty, eff });
       if (hit && eff.liveIds.includes(hit.provider)) {
         served = { provider: hit.provider, model: hit.model };
         routingDecision = "ai";
+        explain.basis = "ai";
+        explain.policy = {
+          source: appDbConfig?.aiPolicyAssignments ? "app" : "global",
+          base: base ? base.model : null,
+          adjustedByDifficulty: !!(base && base.model !== hit.model),
+          effDifficulty: effDifficulty || null,
+        };
       }
     } else if (routingMode === "guardrail") {
       const policy = await policyEngine.getEffective();
@@ -146,15 +164,20 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
       if (auto) {
         served = { provider: auto.provider, model: auto.model };
         routingDecision = "auto";
+        explain.basis = "auto";
       }
     }
   }
+  explain.classificationUsed =
+    explain.basis === "ai" || explain.basis === "auto" ||
+    (explain.basis === "rule" && !!explain.rule?.condition?.taskType);
 
   // Per-app allowed-model enforcement: if the key restricts which models it can reach
   // and routing landed outside that set, fall back to the key's default or reject.
   if (appConfig.allowedModels?.length > 0 && !appConfig.allowedModels.includes(served.model)) {
     const fallbackKnown = appConfig.defaultModel ? pricing.getModel(appConfig.defaultModel) : null;
     if (fallbackKnown && eff.liveIds.includes(fallbackKnown.provider)) {
+      explain.override = { type: "allowed", from: served.model, to: appConfig.defaultModel };
       served = { provider: fallbackKnown.provider, model: appConfig.defaultModel, knownPricing: true };
       routingDecision = "passthrough";
     } else {
@@ -170,12 +193,13 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
   if (appDbConfig?.modelOptOut?.length > 0 && appDbConfig.modelOptOut.includes(served.model)) {
     const fallback = resolveDefault(body, eff);
     if (!appDbConfig.modelOptOut.includes(fallback.model)) {
+      explain.override = { type: "optout", from: served.model, to: fallback.model };
       served = fallback;
       routingDecision = "passthrough";
     }
   }
 
-  return { served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence };
+  return { served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain };
 }
 
 async function handleChat(req, res) {
@@ -241,9 +265,9 @@ async function handleChat(req, res) {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
   };
-  let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence;
+  let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain;
   try {
-    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence } =
+    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain } =
       await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
@@ -275,12 +299,14 @@ async function handleChat(req, res) {
   const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
   if (enf) {
     if (enf.action === "block") {
+      explain.override = { type: "budget", action: "block",
+        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: 0, status: "blocked",
-          routingDecision: "budget", cacheHit: false,
+          routingDecision: "budget", cacheHit: false, routingExplain: explain,
         })
       );
       return res.status(429).json({
@@ -291,6 +317,8 @@ async function handleChat(req, res) {
     // downgrade
     const target = pricing.suggestLightTarget(served.model);
     if (target) {
+      explain.override = { type: "budget", action: "downgrade", from: served.model, to: target.model,
+        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
       served = { provider: target.provider, model: target.model };
       routingDecision = "budget";
     }
@@ -331,7 +359,7 @@ async function handleChat(req, res) {
           completionTokens: cached.usage?.outputTokens || 0,
           totalTokens: cached.usage?.totalTokens || 0,
           latencyMs: 0, status: "success",
-          routingDecision: "cache", cacheHit: true,
+          routingDecision: "cache", cacheHit: true, routingExplain: explain,
           messages: body.messages, responseText: cached.text,
         })
       );
@@ -356,14 +384,17 @@ async function handleChat(req, res) {
         requestId, timestamp, ...meta,
         provider: served.provider, model: served.model, modelRequested,
         taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision,
-        errorMessage,
+        errorMessage, routingExplain: explain,
       })
     );
     return res.status(502).json({ error: "provider_error", message: errorMessage });
   }
 
   const { result, usedFallback } = invocation;
-  if (usedFallback) routingDecision = "fallback";
+  if (usedFallback) {
+    routingDecision = "fallback";
+    explain.override = { type: "fallback", from: served.model, to: result.modelId };
+  }
 
   // 4 · RETURN — response on its way back immediately.
   res.set({
@@ -395,7 +426,7 @@ async function handleChat(req, res) {
     logger.write({
       requestId, timestamp, ...meta,
       provider: result.providerId, model: result.modelId, modelRequested,
-      taskType, classifiedBy, difficulty, difficultyScore, confidence,
+      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingExplain: explain,
       promptTokens: result.usage?.inputTokens || 0,
       completionTokens: result.usage?.outputTokens || 0,
       totalTokens: result.usage?.totalTokens || 0,

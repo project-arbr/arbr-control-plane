@@ -42,7 +42,8 @@ async function findRoute(ctx) {
   const rules = await getEnabledRules();
   for (const rule of rules) {
     if (matches(rule, ctx)) {
-      return { provider: rule.target.provider, model: rule.target.model, ruleId: rule._id };
+      return { provider: rule.target.provider, model: rule.target.model, ruleId: rule._id,
+               condition: rule.condition, note: rule.note };
     }
   }
   return null;
