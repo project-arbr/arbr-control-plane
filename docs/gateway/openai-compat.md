@@ -138,3 +138,5 @@ client.chat.completions.create(
 ## Chat UI integration (LibreChat, OpenWebUI, etc.)
 
 Set the base URL to `http://your-arbr-host:4100` and your gateway key as the API key. The UI works immediately — every message is now routed, logged, and governed by Arbr.
+
+For terminal-based coding agents, see [Connect OpenCode](/integrations/opencode).

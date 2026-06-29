@@ -33,6 +33,12 @@ export default defineConfig({
         ]
       },
       {
+        text: 'Integrations',
+        items: [
+          { text: 'Connect OpenCode', link: '/integrations/opencode' },
+        ]
+      },
+      {
         text: 'Providers',
         collapsed: false,
         items: [
