@@ -6,6 +6,7 @@
 const ModelEntry = require("../models/ModelEntry");
 const Settings = require("../models/Settings");
 const { run: seedModels, SEED_VERSION } = require("../seed/seedModels");
+const { clampMaxTokens } = require("./clamp");
 
 // Task types that are "cheap work" — safe candidates for a lighter model.
 const CHEAP_TASK_TYPES = new Set([
@@ -101,6 +102,13 @@ function costFor(modelId, promptTokens = 0, completionTokens = 0, cache = {}) {
   return { inputCost, outputCost, totalCost: inputCost + outputCost };
 }
 
+// Max completion tokens the model accepts, or null when unknown. The gateway uses this
+// to clamp an over-large client max_tokens to the served model's ceiling.
+function maxOutputFor(modelId) {
+  const m = _cache[modelId];
+  return m && m.maxOutputTokens ? m.maxOutputTokens : null;
+}
+
 function suggestLightTarget(modelId) {
   const m = _cache[modelId];
   if (!m) return null;
@@ -122,5 +130,7 @@ module.exports = {
   isPremium,
   isCheapTask,
   costFor,
+  maxOutputFor,
+  clampMaxTokens,
   suggestLightTarget,
 };

@@ -18,6 +18,9 @@ const modelEntrySchema = new mongoose.Schema(
     bestUsedFor:   { type: String, default: "" },
     releaseDate:   { type: String, default: "" },
     contextWindow: { type: Number, default: null },
+    // Max completion (output) tokens the model accepts. Populated from LiteLLM's
+    // max_output_tokens. null = unknown → the gateway leaves client max_tokens untouched.
+    maxOutputTokens: { type: Number, default: null },
     capabilities: {
       coding:    { type: Number, default: null },
       reasoning: { type: Number, default: null },

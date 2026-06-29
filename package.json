@@ -31,6 +31,7 @@
     "smoke:savings": "node server/scripts/savings-smoke.js",
     "smoke:simulate": "node server/scripts/simulate-smoke.js",
     "smoke:logging": "node server/scripts/logging-smoke.js",
+    "smoke:maxtokens": "node server/scripts/maxtokens-smoke.js",
     "lint": "eslint server/src",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

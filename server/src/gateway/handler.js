@@ -296,6 +296,11 @@ async function handleChat(req, res) {
     }
   }
 
+  // Per-model output clamp: cap maxTokens to the SERVED model's known ceiling, so an
+  // over-large client value doesn't 400 upstream. Only clamps when the cap is known
+  // (populated by the LiteLLM sync); unknown → left untouched.
+  body.maxTokens = pricing.clampMaxTokens(body.maxTokens, pricing.maxOutputFor(served.model));
+
   // Response cache, keyed by the decided served model.
   {
     const cached = responseCache.get(served.model, body.messages);
