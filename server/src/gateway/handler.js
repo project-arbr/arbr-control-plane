@@ -107,6 +107,7 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
   const taskType = cls.taskType;
   const classifiedBy = cls.method;
   const difficulty = cls.difficulty || null;
+  const difficultyScore = typeof cls.difficultyScore === "number" ? cls.difficultyScore : null;
   const confidence = typeof cls.confidence === "number" ? cls.confidence : null;
 
   let served, routingDecision;
@@ -174,7 +175,7 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
     }
   }
 
-  return { served, routingDecision, taskType, classifiedBy, cls, difficulty, confidence };
+  return { served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence };
 }
 
 async function handleChat(req, res) {
@@ -240,9 +241,9 @@ async function handleChat(req, res) {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
   };
-  let served, routingDecision, taskType, classifiedBy, cls, difficulty, confidence;
+  let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence;
   try {
-    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, confidence } =
+    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence } =
       await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
@@ -320,7 +321,7 @@ async function handleChat(req, res) {
         logger.write({
           requestId, timestamp, ...meta,
           provider: cached.provider, model: cached.model, modelRequested,
-          taskType, classifiedBy, difficulty, confidence,
+          taskType, classifiedBy, difficulty, difficultyScore, confidence,
           promptTokens: cached.usage?.inputTokens || 0,
           completionTokens: cached.usage?.outputTokens || 0,
           totalTokens: cached.usage?.totalTokens || 0,
@@ -388,7 +389,7 @@ async function handleChat(req, res) {
     logger.write({
       requestId, timestamp, ...meta,
       provider: result.providerId, model: result.modelId, modelRequested,
-      taskType, classifiedBy, difficulty, confidence,
+      taskType, classifiedBy, difficulty, difficultyScore, confidence,
       promptTokens: result.usage?.inputTokens || 0,
       completionTokens: result.usage?.outputTokens || 0,
       totalTokens: result.usage?.totalTokens || 0,

@@ -146,6 +146,34 @@ function estimateDifficulty(text, taskType) {
   return TIER_ORDER[idx];
 }
 
+// ── 1-10 difficulty score ─────────────────────────────────────────────────────
+// The LLM path emits a genuine 1-10 spectrum; the keyword path can only estimate coarsely.
+// Routing still consumes the 3 TIERS — `scoreToTier` is the single place that buckets the score,
+// so `scoreToTier(estimateDifficultyScore(...))` is guaranteed to equal the old tier (routing parity).
+const TIER_BAND = { light: [1, 3], mid: [4, 7], premium: [8, 10] };
+function scoreToTier(score) {
+  const n = Number(score);
+  if (!isFinite(n)) return "mid";
+  if (n <= 3) return "light";
+  if (n <= 7) return "mid";
+  return "premium";
+}
+// Normalize an LLM-provided difficulty into a 1-10 integer. Accepts a number, or a tier word
+// (light/mid/premium and synonyms) mapped to a representative score; null if unrecognized.
+function normalizeDifficultyScore(v) {
+  const n = Number(v);
+  if (isFinite(n)) return Math.max(1, Math.min(10, Math.round(n)));
+  const tier = normalizeDifficulty(v);
+  return tier ? { light: 2, mid: 5, premium: 9 }[tier] : null;
+}
+// Keyword-path score: derive the tier the existing way, then place WITHIN that tier's band by
+// prompt length. Stays inside the band, so it always buckets back to the same tier (parity).
+function estimateDifficultyScore(text, taskType) {
+  const [lo, hi] = TIER_BAND[estimateDifficulty(text, taskType)] || TIER_BAND.mid;
+  const frac = Math.max(0, Math.min(1, (text || "").length / 2000));
+  return Math.round(lo + frac * (hi - lo));
+}
+
 // Last complete {...} JSON block in text. Local copy (a require on aiPolicy would be circular,
 // since aiPolicy imports this module for TASK_TYPES/TASK_CATALOG).
 function parseJsonBlock(text) {
@@ -175,16 +203,18 @@ function pickClassifierModel(eff) {
 // confidence: manual = 1.0, a keyword hit = 0.9, the safe-default fallthrough = 0.3.
 function classify({ taskType, messages }) {
   if (taskType && String(taskType).trim()) {
-    return { taskType: String(taskType).trim().toLowerCase(), source: "manual", confidence: 1.0, difficulty: null };
+    return { taskType: String(taskType).trim().toLowerCase(), source: "manual", confidence: 1.0, difficulty: null, difficultyScore: null };
   }
   const text = lastUserText(messages).toLowerCase();
   for (const [type, keywords] of RULES) {
     if (keywords.some((kw) => text.includes(kw))) {
-      return { taskType: type, source: "auto", confidence: 0.9, difficulty: estimateDifficulty(text, type) };
+      const difficultyScore = estimateDifficultyScore(text, type);
+      return { taskType: type, source: "auto", confidence: 0.9, difficultyScore, difficulty: scoreToTier(difficultyScore) };
     }
   }
   // safe default
-  return { taskType: "content generation", source: "auto", confidence: 0.3, difficulty: estimateDifficulty(text, "content generation") };
+  const difficultyScore = estimateDifficultyScore(text, "content generation");
+  return { taskType: "content generation", source: "auto", confidence: 0.3, difficultyScore, difficulty: scoreToTier(difficultyScore) };
 }
 
 // ── LLM fallback ──────────────────────────────────────────────────────────────
@@ -212,8 +242,8 @@ async function classifyWithLLM({ messages, router, eff }) {
   const prompt =
     `You are a task classifier for an AI gateway. Classify the user request and rate its difficulty.\n` +
     `taskType MUST be EXACTLY ONE of: ${TASK_TYPES.join(", ")}\n` +
-    `difficulty: "light" = trivial/short, "mid" = moderate, "premium" = complex, multi-step, or deep reasoning.\n` +
-    `Return ONLY a JSON object: {"taskType": "...", "difficulty": "light|mid|premium", "confidence": 0-1}\n\n` +
+    `difficulty: an integer 1-10 (1 = trivial/short, 5 = moderate, 10 = very complex, multi-step, or deep reasoning).\n` +
+    `Return ONLY a JSON object: {"taskType": "...", "difficulty": <1-10>, "confidence": <0-1>}\n\n` +
     `Request:\n"""${text}"""`;
   const m = pickClassifierModel(eff);
   const result = await router.complete({
@@ -225,14 +255,15 @@ async function classifyWithLLM({ messages, router, eff }) {
   });
   const parsed = parseJsonBlock(result.text || "");
   let label = parsed ? normalizeLabel(parsed.taskType) : null;
-  const difficulty = parsed ? normalizeDifficulty(parsed.difficulty) : null;
+  const difficultyScore = parsed ? normalizeDifficultyScore(parsed.difficulty) : null;
   const confidence = parsed && parsed.confidence != null && !isNaN(Number(parsed.confidence))
     ? clamp01(parsed.confidence) : null;
   if (!label) label = normalizeLabel(result.text); // fallback: substring scan of raw text
   if (!label) return null;
   return {
     label,
-    difficulty,
+    difficultyScore,
+    difficulty: difficultyScore != null ? scoreToTier(difficultyScore) : null, // tier for routing
     confidence,
     provider: result.providerId || m.provider,
     model: result.modelId || m.model,
@@ -249,16 +280,16 @@ async function classifyWithLLM({ messages, router, eff }) {
 // is off, the keyword heuristic decides.
 async function classifyTask({ taskType, messages, router, eff, useLLM }) {
   if (taskType && String(taskType).trim()) {
-    return { taskType: String(taskType).trim().toLowerCase(), method: "provided", confidence: 1.0, difficulty: null, llm: null };
+    return { taskType: String(taskType).trim().toLowerCase(), method: "provided", confidence: 1.0, difficulty: null, difficultyScore: null, llm: null };
   }
   if (useLLM && router && eff && (eff.liveIds || []).length) {
     const key = cacheKey(messages);
     const hit = _llmCache.get(key);
-    if (hit) return { taskType: hit.taskType, method: "ai", confidence: hit.confidence ?? 0.8, difficulty: hit.difficulty || null, llm: null };
+    if (hit) return { taskType: hit.taskType, method: "ai", confidence: hit.confidence ?? 0.8, difficulty: hit.difficulty || null, difficultyScore: hit.difficultyScore ?? null, llm: null };
     try {
       const r = await classifyWithLLM({ messages, router, eff });
       if (r && r.label) {
-        const entry = { taskType: r.label, difficulty: r.difficulty || null, confidence: r.confidence };
+        const entry = { taskType: r.label, difficulty: r.difficulty || null, difficultyScore: r.difficultyScore ?? null, confidence: r.confidence };
         if (_llmCache.size >= LLM_CACHE_MAX) _llmCache.delete(_llmCache.keys().next().value);
         _llmCache.set(key, entry);
         return {
@@ -266,6 +297,7 @@ async function classifyTask({ taskType, messages, router, eff, useLLM }) {
           method: "ai",
           confidence: r.confidence ?? 0.8,
           difficulty: r.difficulty || null,
+          difficultyScore: r.difficultyScore ?? null,
           llm: { provider: r.provider, model: r.model, usage: r.usage, latencyMs: r.latencyMs },
         };
       }
@@ -274,10 +306,11 @@ async function classifyTask({ taskType, messages, router, eff, useLLM }) {
     }
   }
   const kw = classify({ taskType: null, messages });
-  return { taskType: kw.taskType, method: "keyword", confidence: kw.confidence, difficulty: kw.difficulty || null, llm: null };
+  return { taskType: kw.taskType, method: "keyword", confidence: kw.confidence, difficulty: kw.difficulty || null, difficultyScore: kw.difficultyScore ?? null, llm: null };
 }
 
 module.exports = {
   classify, classifyTask, classifyWithLLM, TASK_TYPES, TASK_CATALOG,
-  firstUserText, lastUserText, estimateDifficulty, normalizeDifficulty, tierForTask,
+  firstUserText, lastUserText, estimateDifficulty, estimateDifficultyScore,
+  normalizeDifficulty, normalizeDifficultyScore, scoreToTier, tierForTask,
 };
