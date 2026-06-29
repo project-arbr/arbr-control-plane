@@ -51,6 +51,7 @@ Environment variables take **precedence** over dashboard-stored keys.
 | Variable | Default | Description |
 |---|---|---|
 | `DEFAULT_PROVIDER` | first live provider | Initial default-provider preference. Runtime-selectable in Settings → Connections (takes precedence). |
+| `ARBR_DEFAULT_MAX_TOKENS` | `4096` | Completion token ceiling applied when the caller omits `max_tokens`. The gateway also clamps this value to each model's known output ceiling (e.g. 8192 for `nova-lite`), so setting a higher value is safe — it is capped per-model automatically. |
 
 ## Docker / seeding
 

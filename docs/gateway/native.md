@@ -62,7 +62,9 @@ curl -X POST http://localhost:4100/v1/chat \
   "usage": {
     "inputTokens": 28,
     "outputTokens": 1,
-    "totalTokens": 29
+    "totalTokens": 29,
+    "cachedReadTokens": 0,
+    "cacheWriteTokens": 0
   }
 }
 ```
@@ -78,10 +80,15 @@ curl -X POST http://localhost:4100/v1/chat \
 | `provider` | Provider that served the response |
 | `routingDecision` | `explicit` \| `passthrough` \| `rule` \| `auto` \| `ai` \| `cache` \| `fallback` \| `budget` |
 | `classifiedBy` | How `taskType` was determined: `provided` \| `keyword` \| `ai` |
-| `cacheHit` | Whether the response was served from cache |
-| `usage.inputTokens` | Prompt tokens |
+| `cacheHit` | Whether the response was served from Arbr's response cache |
+| `usage.inputTokens` | Total prompt tokens (includes any cached tokens) |
 | `usage.outputTokens` | Completion tokens |
 | `usage.totalTokens` | Total tokens |
+| `usage.cachedReadTokens` | Prompt tokens served from the provider's prompt cache (billed at cache-read rate) |
+| `usage.cacheWriteTokens` | Prompt tokens written to the provider's prompt cache (billed at cache-write rate) |
+
+**Fields logged but not returned to the caller** (visible in the Requests drilldown):
+`difficulty`, `difficultyScore`, `confidence`, `routingExplain`, `cacheSavingUsd`, `messages`, `responseText`.
 
 ## Pass-through routing
 

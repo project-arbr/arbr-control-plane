@@ -57,6 +57,10 @@ costed, and governable from the dashboard.
 why (`explicit / rule / auto / ai / cache / fallback / passthrough`), and `res.classified_by` how
 the task type was determined (`provided / keyword / ai`).
 
+When AI routing is on, the gateway also classifies **difficulty** (easy / normal / hard) and may
+adjust the model pick within the tier. The difficulty score and routing explanation are logged
+per-request and visible in the dashboard Requests drilldown.
+
 ## API
 
 ### `create_client(base_url=None, *, application=None, workflow=None, department=None, user_id=None, api_key=None, timeout_s=60, retries=2) → Client`
@@ -69,9 +73,12 @@ merged into every call (per-call kwargs override them).
 ### `Client.chat(messages, *, model=None, provider=None, task_type=None, temperature=None, max_tokens=None, ...) → ChatResponse`
 
 `messages` accepts a bare string, `{"role", "content"}` dicts, or LangChain message objects.
-`ChatResponse` is a frozen dataclass: `text`, `usage` (`input_tokens/output_tokens/total_tokens`),
+`ChatResponse` is a frozen dataclass: `text`, `usage` (`input_tokens/output_tokens/total_tokens/cached_read_tokens/cache_write_tokens`),
 `model`, `model_requested`, `provider`, `routing_decision`, `classified_by`, `cache_hit`,
 `request_id`, plus `.raw` (the unmodified gateway payload).
+
+`usage.cached_read_tokens` and `usage.cache_write_tokens` are non-zero when the provider's prompt
+cache was active (Anthropic, OpenAI). The gateway prices these at provider cache rates automatically.
 
 ### `Client.achat(...)` / `Client.astream(...)` / `Client.astatus()`
 

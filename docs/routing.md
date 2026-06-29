@@ -63,7 +63,7 @@ Create rules in **Settings → Routing rules** or accept them from **Recommendat
 
 ## Task classification
 
-When `taskType` is not sent by the caller, Arbr classifies it:
+When `taskType` is not sent by the caller, Arbr classifies it against the **latest user turn** (not the first, so classification stays current in multi-turn conversations):
 
 | Method | When | `classifiedBy` |
 |---|---|---|
@@ -72,6 +72,24 @@ When `taskType` is not sent by the caller, Arbr classifies it:
 | AI | AI routing mode + no keyword match | `"ai"` |
 
 Known cheap task types: `classification`, `extraction`, `summarisation`, `translation`, `faq`, `support response`.
+
+The classifier also outputs a **difficulty score (1–10)** and a **confidence (0–1)**. Both are stored on the `RequestRecord` for observability. Low-confidence results (`< 0.5`) do not drive difficulty-based routing changes.
+
+## Difficulty-aware routing
+
+Within a task type, not all requests are equally hard. Once AI routing mode is on, Arbr adjusts the model pick based on difficulty:
+
+| Difficulty | Routing adjustment |
+|---|---|
+| Easy (score ≤ 3) | Re-picks within the task type's tier toward a **cheaper** model |
+| Normal (4–7) | Uses the policy's default pick as-is |
+| Hard (score ≥ 8) | Re-picks toward a **stronger** model within the available set |
+
+This only applies when the AI policy has a pick for the task type; unmapped tasks are pass-through as before.
+
+## Routing explainability
+
+Every `RequestRecord` includes a `routingExplain` object that captures the non-derivable "why" behind the decision — which rule matched, which policy entry was used, whether a difficulty adjustment overrode the default, and what fallback was taken. This is visible in the **Requests** drilldown on the dashboard.
 
 ## AI routing policy
 
@@ -98,4 +116,4 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{ "model": "auto", "messages": "Classify: card was declined." }'
 ```
 
-The **Requests** page shows `routingDecision` and `classifiedBy` for every call.
+The **Requests** page shows `routingDecision`, `classifiedBy`, `difficulty`, and `routingExplain` for every call via the request drilldown.

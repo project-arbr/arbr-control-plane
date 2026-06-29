@@ -57,6 +57,11 @@ costed, and governable from the dashboard.
 If you don't send a `taskType`, the gateway infers one (keyword heuristic, or an AI classifier
 when AI routing is enabled) — `res.classifiedBy` tells you which (`provided` / `keyword` / `ai`).
 
+When AI routing is on, the gateway also classifies **difficulty** (easy / normal / hard) and may
+adjust the model pick within the tier — easy requests can route to a cheaper model, hard ones to
+a stronger one. The difficulty score and routing explanation are logged per-request and visible in
+the dashboard Requests drilldown.
+
 ## API
 
 ### `createClient(options) → client`
@@ -86,7 +91,10 @@ Request fields: `messages` (required), `model`, `provider`, `taskType`, `tempera
 ```
 
 Response: `{ requestId, model, modelRequested, provider, routingDecision, classifiedBy,
-cacheHit, text, usage: { inputTokens, outputTokens, totalTokens } }`.
+cacheHit, text, usage: { inputTokens, outputTokens, totalTokens, cachedReadTokens, cacheWriteTokens } }`.
+
+`usage.cachedReadTokens` and `usage.cacheWriteTokens` are non-zero when the provider's prompt
+cache was active (Anthropic, OpenAI). The gateway prices these at provider cache rates automatically.
 
 ### Streaming
 

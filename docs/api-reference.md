@@ -230,15 +230,30 @@ Regenerate the AI routing policy using the default model.
 
 ### `GET /api/analytics/overview`
 
-Aggregated cost, token, and request counts.
+Aggregated cost, token, and request counts. Includes:
+- `cacheHitRate`, `cachedReadTokens`, `cacheSavingUsd` — prompt-cache observability
+- `totalSaved` — realised savings from model substitutions (requests served cheaper than requested)
 
 ### `GET /api/analytics/by-dimension`
 
-Breakdown by `application`, `model`, `provider`, `department`, `workflow`, or `taskType`. Pass `?dimension=model&from=2024-01-01`.
+Breakdown by `application`, `model`, `provider`, `department`, `workflow`, `taskType`, or `user`. Pass `?dimension=user&from=2024-01-01`. Null `userId` groups as `(unattributed)`.
+
+### `GET /api/analytics/realised-savings`
+
+Groups successful requests where the served model differed from the requested model, re-prices the served tokens at the requested model's rate, and returns the delta. Excludes `auto` requests (no requested baseline) and requests with unknown pricing.
+
+```json
+{
+  "totalSaved": 1.23,
+  "rows": [
+    { "requested": "gpt-4o", "served": "gpt-4o-mini", "requests": 142, "saved": 1.23 }
+  ]
+}
+```
 
 ### `GET /api/requests`
 
-Paginated request log. Supports filtering by application, model, provider, status, date range.
+Paginated request log. Supports filtering by application, model, provider, status, date range. Each record includes `routingExplain`, `difficulty`, `difficultyScore`, `confidence`, and `cacheSavingUsd`.
 
 ---
 
