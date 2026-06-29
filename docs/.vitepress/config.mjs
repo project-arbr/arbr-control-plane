@@ -35,6 +35,7 @@ export default defineConfig({
       {
         text: 'Integrations',
         items: [
+          { text: 'Connect LibreChat', link: '/integrations/librechat' },
           { text: 'Connect OpenCode', link: '/integrations/opencode' },
         ]
       },
