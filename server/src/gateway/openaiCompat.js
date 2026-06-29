@@ -362,6 +362,12 @@ async function handleOpenAICompat(req, res) {
     if (target) { served = { provider: target.provider, model: target.model }; routingDecision = "budget"; }
   }
 
+  // Per-model output clamp: cap max_tokens to the SERVED model's known ceiling. Tool agents
+  // (e.g. OpenCode) request very large output budgets; without this, an over-large value is
+  // forwarded verbatim and the upstream 400s ("max_tokens is too large"). Only clamps when the
+  // model's cap is known (populated by the LiteLLM sync); unknown → left untouched.
+  body.max_tokens = pricing.clampMaxTokens(body.max_tokens, pricing.maxOutputFor(served.model));
+
   // Transparent passthrough for OpenAI-compatible providers (e.g. LiteLLM): forward the raw
   // body so tools/tool_calls/vision/response_format/streaming survive intact. Native providers
   // (anthropic/gemini/bedrock) fall through to the LangChain path below.

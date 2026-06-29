@@ -185,6 +185,7 @@ async function run() {
       builtIn:       false,
       enabled:       true,
       contextWindow: parseInt(ltEntry.max_input_tokens, 10) || null,
+      maxOutputTokens: parseInt(ltEntry.max_output_tokens, 10) || null,
       litellmSyncedAt: now,
       ...extractFlags(ltEntry),
     });
@@ -236,6 +237,8 @@ async function run() {
 
     const maxIn = parseInt(ltEntry.max_input_tokens, 10);
     if (isFinite(maxIn) && maxIn > 0) update.contextWindow = maxIn;
+    const maxOut = parseInt(ltEntry.max_output_tokens, 10);
+    if (isFinite(maxOut) && maxOut > 0) update.maxOutputTokens = maxOut;
 
     const flags = extractFlags(ltEntry);
     for (const [k, v] of Object.entries(flags)) {
