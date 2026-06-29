@@ -4,6 +4,7 @@
 // Streaming (stream: true) uses SSE: "data: {...}\n\n" chunks, ending with "data: [DONE]\n\n".
 const { v4: uuidv4 } = require("uuid");
 const { getRouter } = require("../providers/router");
+const { extractFinishReason } = require("../providers/llm-router");
 const { resolveRoute, invokeWithFallback } = require("./handler");
 const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
@@ -413,7 +414,7 @@ async function handleOpenAICompat(req, res) {
       const aiMsg = await boundModel.invoke(lcMessages);
       // Only parse tool_calls on turn 1; turn 2 always produces a text answer.
       const toolCalls = hasTurnTools ? translateToolCalls(aiMsg.tool_calls) : undefined;
-      const finishReason = toolCalls?.length ? "tool_calls" : "stop";
+      const finishReason = toolCalls?.length ? "tool_calls" : (extractFinishReason(aiMsg) || "stop");
       const um = aiMsg.usage_metadata || {};
       const promptTokens = um.input_tokens || 0;
       const completionTokens = um.output_tokens || 0;
@@ -596,7 +597,7 @@ async function handleOpenAICompat(req, res) {
       id: `chatcmpl-${requestId}`,
       object: "chat.completion.chunk",
       model: result.modelId,
-      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      choices: [{ index: 0, delta: {}, finish_reason: result.finishReason || "stop" }],
       usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: totalTokens },
     })}\n\n`);
 
@@ -653,7 +654,7 @@ async function handleOpenAICompat(req, res) {
     choices: [{
       index: 0,
       message: { role: "assistant", content: result.text },
-      finish_reason: "stop",
+      finish_reason: result.finishReason || "stop",
     }],
     usage: {
       prompt_tokens:     result.usage?.inputTokens  || 0,

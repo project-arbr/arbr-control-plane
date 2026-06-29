@@ -14,6 +14,14 @@
 
 const SUPPORTED_PROVIDERS = ["gemini", "bedrock-nova", "openai", "anthropic", "deepseek", "moonshot", "xai", "groq", "litellm"];
 
+// Output cap applied ONLY when neither the caller nor the provider config specifies
+// max_tokens. The old default of 1024 silently truncated normal completions mid-sentence
+// (providers reported stop_reason "max_tokens", which the gateway then masked as "stop").
+// Kept high so a missing client max_tokens does not cut answers short; clients should still
+// pass their own value, and the global maxTokensGuardrail setting clamps the ceiling.
+// Override with ARBR_DEFAULT_MAX_TOKENS.
+const DEFAULT_MAX_TOKENS = Number(process.env.ARBR_DEFAULT_MAX_TOKENS) || 4096;
+
 function createRouter(options) {
   if (!options || typeof options !== "object") {
     throw new Error("createRouter: options is required");
@@ -73,6 +81,7 @@ function createRouter(options) {
           modelId: cfg.model,
           latencyMs,
           usage: extractUsage(response),
+          finishReason: extractFinishReason(response),
         };
         if (onTrace) {
           try { onTrace({ ...result, ok: true }); } catch { /* swallow trace errors */ }
@@ -113,7 +122,7 @@ function rejectsSamplingParams(modelId) {
 
 function loadProviderModel(providerId, cfg, { temperature, maxTokens }) {
   const t = temperature != null ? temperature : (cfg.temperature != null ? cfg.temperature : 0.3);
-  const mx = maxTokens != null ? maxTokens : (cfg.maxTokens != null ? cfg.maxTokens : 1024);
+  const mx = maxTokens != null ? maxTokens : (cfg.maxTokens != null ? cfg.maxTokens : DEFAULT_MAX_TOKENS);
   if (providerId === "gemini") {
     const { ChatGoogleGenerativeAI } = require("@langchain/google-genai");
     return new ChatGoogleGenerativeAI({
@@ -211,4 +220,22 @@ function extractUsage(response) {
   };
 }
 
-module.exports = { createRouter, SUPPORTED_PROVIDERS };
+// Normalize a provider's native stop/finish reason into an OpenAI finish_reason value
+// ("stop" | "length" | "tool_calls" | "content_filter"). Each SDK names the field
+// differently: Bedrock Converse → stopReason, Anthropic → stop_reason, OpenAI →
+// finish_reason, Gemini → finishReason. Returns undefined when none is present so callers
+// can fall back to their own default.
+function extractFinishReason(response) {
+  const rm = (response && response.response_metadata) || {};
+  const ak = (response && response.additional_kwargs) || {};
+  const raw = rm.stopReason || rm.stop_reason || rm.finishReason || rm.finish_reason || ak.stop_reason;
+  if (!raw) return undefined;
+  const s = String(raw).toLowerCase();
+  if (s === "max_tokens" || s === "length" || s === "model_length" || s === "max_output_tokens") return "length";
+  if (s.includes("tool") || s.includes("function")) return "tool_calls";
+  if (s.includes("content") || s === "safety" || s === "recitation" || s === "blocklist") return "content_filter";
+  // end_turn, stop, stop_sequence, eos, complete, etc. → normal completion.
+  return "stop";
+}
+
+module.exports = { createRouter, SUPPORTED_PROVIDERS, extractFinishReason };
