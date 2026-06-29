@@ -58,6 +58,12 @@ const requestRecordSchema = new mongoose.Schema(
     difficultyScore: { type: Number, default: null },
     confidence: { type: Number, default: null },
     cacheHit: { type: Boolean, default: false },
+
+    // Captured context (full prompt + response). PII-masked at write time when
+    // Settings.piiMaskingEnabled is on, and size-capped. Headers are intentionally NOT
+    // stored (they carry Authorization/API keys). Governed by retentionDays auto-purge.
+    messages: { type: mongoose.Schema.Types.Mixed, default: null }, // request payload (OpenAI messages)
+    responseText: { type: String, default: null },                   // model output text
   },
   { collection: "request_records" }
 );

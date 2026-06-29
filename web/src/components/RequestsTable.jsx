@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api, fmt } from "../api.js";
-import { Card, Table, Badge } from "./ui.jsx";
+import { Card, Table, Badge, Drawer, Stat, CodeBlock } from "./ui.jsx";
 
 const ROUTING_TONE = { passthrough: "gray", explicit: "teal", rule: "green", auto: "indigo", ai: "violet", budget: "red", cache: "charcoal", fallback: "amber" };
 
@@ -47,6 +47,13 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
   const [stats, setStats]     = useState(null);
   const [page, setPage]       = useState(1);
   const [err, setErr]         = useState(null);
+  const [detail, setDetail]   = useState(null);   // full record for the drilldown
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const openDetail = (row) => {
+    setDetailOpen(true); setDetail(null);
+    api.request(row.requestId).then(setDetail).catch((e) => setDetail({ _error: e.message }));
+  };
 
   useEffect(() => { api.facets().then(setFacets).catch(() => {}); }, []);
 
@@ -166,7 +173,7 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
           <div className="py-8 text-center text-sm text-gray-400">Loading…</div>
         ) : (
           <>
-            <Table columns={columns} rows={data.items} empty="No matching requests." />
+            <Table columns={columns} rows={data.items} empty="No matching requests." onRowClick={openDetail} />
             <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
               <span>{fmt.num(data.total)} records</span>
               <div className="flex items-center gap-2">
@@ -180,6 +187,49 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
       </Card>
 
       {err && <div className="text-red-600 text-sm">{err}</div>}
+
+      {detailOpen && (
+        <Drawer title="Request detail" onClose={() => setDetailOpen(false)}>
+          {detail === null ? (
+            <div className="py-8 text-center text-sm text-gray-400">Loading…</div>
+          ) : detail._error ? (
+            <div className="text-sm text-red-600">{detail._error}</div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Stat label="Status" value={detail.status} />
+                <Stat label="Routing" value={detail.routingDecision} />
+                <Stat label="Latency" value={fmt.ms(detail.latencyMs)} />
+                <Stat label="Requested → Served" value={detail.modelRequested === detail.model ? detail.model : `${detail.modelRequested} → ${detail.model}`} />
+                <Stat label="Task" value={detail.taskType || "—"} sub={`${detail.classifiedBy || "—"}${detail.difficulty ? ` · ${detail.difficulty}${detail.difficultyScore ? ` (${detail.difficultyScore}/10)` : ""}` : ""}${detail.confidence != null ? ` · conf ${Number(detail.confidence).toFixed(2)}` : ""}`} />
+                <Stat label="Cost" value={fmt.usd(detail.totalCost)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Stat label="Prompt tok" value={fmt.num(detail.promptTokens)} sub={detail.cachedReadTokens ? `${fmt.num(detail.cachedReadTokens)} cached` : null} />
+                <Stat label="Completion tok" value={fmt.num(detail.completionTokens)} />
+                <Stat label="Total tok" value={fmt.num(detail.totalTokens)} />
+                <Stat label="Cache saving" value={fmt.usd(detail.cacheSavingUsd)} />
+              </div>
+              {detail.errorMessage && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{detail.errorMessage}</div>
+              )}
+              <div>
+                <div className="label mb-1">Request payload</div>
+                {detail.messages
+                  ? <CodeBlock lang="json" code={JSON.stringify(detail.messages, null, 2)} />
+                  : <div className="text-xs text-gray-400">(not captured)</div>}
+              </div>
+              <div>
+                <div className="label mb-1">Response</div>
+                {detail.responseText
+                  ? <CodeBlock code={detail.responseText} />
+                  : <div className="text-xs text-gray-400">(not captured)</div>}
+              </div>
+              <div className="text-xs text-gray-400">{detail.requestId} · {fmt.date(detail.timestamp)}</div>
+            </div>
+          )}
+        </Drawer>
+      )}
     </div>
   );
 }

@@ -170,6 +170,7 @@ async function proxyOpenAICompat(ctx) {
         provider: served.provider, model: served.model, modelRequested,
         taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, cacheHit: false,
         knownPricing: served.knownPricing,
+        messages: body.messages,
         ...extra,
       })
     );
@@ -206,6 +207,7 @@ async function proxyOpenAICompat(ctx) {
       completionTokens: u.completion_tokens || 0,
       totalTokens: u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0),
       cachedReadTokens: (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0,
+      responseText: data.choices?.[0]?.message?.content || null,
       latencyMs, status: "success",
     });
     return;
@@ -219,7 +221,7 @@ async function proxyOpenAICompat(ctx) {
     "X-Accel-Buffering": "no",
   });
   res.flushHeaders(); // send headers immediately so the client/proxy knows it's SSE
-  let promptTokens = 0, completionTokens = 0, cachedReadTokens = 0;
+  let promptTokens = 0, completionTokens = 0, cachedReadTokens = 0, respText = "";
   try {
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => "");
@@ -247,6 +249,8 @@ async function proxyOpenAICompat(ctx) {
             completionTokens = j.usage.completion_tokens || completionTokens;
             cachedReadTokens = (j.usage.prompt_tokens_details && j.usage.prompt_tokens_details.cached_tokens) || cachedReadTokens;
           }
+          const piece = j.choices?.[0]?.delta?.content;
+          if (typeof piece === "string") respText += piece;
         } catch { /* partial/non-JSON keepalive line */ }
       }
     }
@@ -254,6 +258,7 @@ async function proxyOpenAICompat(ctx) {
     logRecord({
       promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
       cachedReadTokens,
+      responseText: respText || null,
       latencyMs: Date.now() - start, status: "success",
     });
   } catch (err) {
@@ -516,6 +521,7 @@ async function handleOpenAICompat(req, res) {
           promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
           latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
           knownPricing: served.knownPricing,
+          messages: body.messages, responseText: chunkText(aiMsg) || null,
         })
       );
     } catch (err) {
@@ -633,6 +639,7 @@ async function handleOpenAICompat(req, res) {
         promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
         latencyMs: Date.now() - start, status: "success", routingDecision, cacheHit: false,
         knownPricing: served.knownPricing,
+        messages: body.messages, responseText: result.text,
       })
     );
     return;
@@ -696,6 +703,7 @@ async function handleOpenAICompat(req, res) {
       cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
       latencyMs: result.latencyMs, status: "success", routingDecision, cacheHit: false,
       knownPricing: served.knownPricing,
+      messages: body.messages, responseText: result.text,
     })
   );
 }

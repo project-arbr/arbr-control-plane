@@ -327,6 +327,7 @@ async function handleChat(req, res) {
           totalTokens: cached.usage?.totalTokens || 0,
           latencyMs: 0, status: "success",
           routingDecision: "cache", cacheHit: true,
+          messages: body.messages, responseText: cached.text,
         })
       );
       return;
@@ -398,6 +399,7 @@ async function handleChat(req, res) {
       latencyMs: result.latencyMs, status: "success",
       routingDecision, cacheHit: false,
       knownPricing: served.knownPricing,
+      messages: body.messages, responseText: result.text,
     });
   });
 }

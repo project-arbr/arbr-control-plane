@@ -45,4 +45,10 @@ function maskMessages(messages) {
   });
 }
 
-module.exports = { maskPii, maskMessages };
+// Cap a string to `max` chars so a huge prompt/response can't bloat a Mongo doc.
+function clampText(str, max = 200000) {
+  if (typeof str !== "string") return str;
+  return str.length > max ? str.slice(0, max) + "…[truncated]" : str;
+}
+
+module.exports = { maskPii, maskMessages, clampText };

@@ -2,7 +2,7 @@
 // way back. Must never throw into the request path — errors are swallowed + logged.
 const RequestRecord = require("../models/RequestRecord");
 const { costFor } = require("../pricing/registry");
-const { maskMessages } = require("./piiFilter");
+const { maskMessages, maskPii, clampText } = require("./piiFilter");
 const Settings = require("../models/Settings");
 
 // record: {
@@ -30,17 +30,24 @@ async function write(record) {
       cacheSavingUsd = Math.max(0, full.totalCost - totalCost);
     }
 
-    // PII masking: check setting lazily (cached by Settings.get's singleton pattern).
-    // Only applied to the logged copy — the model already received the original text.
+    // Captured context (prompt + response): PII-mask when enabled, then size-cap. Only the
+    // logged copy is masked — the model already received the original text. Setting is read
+    // lazily (cached by Settings.get's singleton pattern).
     let messages = record.messages;
-    if (messages) {
+    let responseText = typeof record.responseText === "string" ? record.responseText : null;
+    if (messages || responseText) {
       const s = await Settings.get().catch(() => null);
-      if (s?.piiMaskingEnabled) messages = maskMessages(messages);
+      if (s?.piiMaskingEnabled) {
+        if (messages) messages = maskMessages(messages);
+        if (responseText) responseText = maskPii(responseText);
+      }
     }
+    if (responseText) responseText = clampText(responseText);
 
     await RequestRecord.create({
       ...record,
       messages,
+      responseText,
       promptTokens,
       completionTokens,
       totalTokens,

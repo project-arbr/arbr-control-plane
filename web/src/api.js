@@ -50,6 +50,7 @@ export const api = {
   facets: () => req("/analytics/facets"),
 
   requests: (filter) => req(`/requests${qs(filter)}`),
+  request: (id) => req(`/requests/${encodeURIComponent(id)}`),
 
   recommendations: (status) => req(`/recommendations${qs({ status })}`),
   recompute: () => req("/recommendations/recompute", { method: "POST" }),

@@ -82,7 +82,7 @@ export function Badge({ tone = "gray", children }) {
   );
 }
 
-export function Table({ columns, rows, empty = "No data." }) {
+export function Table({ columns, rows, empty = "No data.", onRowClick }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -100,7 +100,9 @@ export function Table({ columns, rows, empty = "No data." }) {
             <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-gray-400">{empty}</td></tr>
           ) : (
             rows.map((row, i) => (
-              <tr key={i} className="border-b border-gray-100 hover:bg-arbr-green-50">
+              <tr key={i}
+                className={`border-b border-gray-100 hover:bg-arbr-green-50${onRowClick ? " cursor-pointer" : ""}`}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}>
                 {columns.map((c) => (
                   <td key={c.key} className="px-3 py-2 text-gray-700">
                     {c.render ? c.render(row) : row[c.key]}
@@ -143,6 +145,24 @@ export function ConfirmDialog({ title, message, confirmLabel = "Confirm", onConf
           <button className="btn-ghost text-sm" onClick={onCancel}>Cancel</button>
           <button className="btn-secondary text-sm" onClick={onConfirm}>{confirmLabel}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Right-side slide-over panel. Click the backdrop or Close to dismiss.
+export function Drawer({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="h-full w-full max-w-2xl overflow-y-auto border-l border-gray-200 bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
+          <h3 className="text-base font-semibold text-arbr-charcoal">{title}</h3>
+          <button className="btn-ghost text-sm" onClick={onClose}>Close</button>
+        </div>
+        <div className="space-y-4 p-5">{children}</div>
       </div>
     </div>
   );

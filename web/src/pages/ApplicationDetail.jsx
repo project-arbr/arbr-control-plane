@@ -6,7 +6,6 @@ import RequestsTable from "../components/RequestsTable.jsx";
 
 const TABS = [
   ["overview",  "Overview"],
-  ["requests",  "Requests"],
   ["policy",    "Routing policy"],
 ];
 
@@ -557,14 +556,15 @@ export default function ApplicationDetail() {
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
-      {tab === "overview" && <AppOverview appName={appName} />}
-
-      {tab === "requests" && (
-        <RequestsTable
-          fixedFilters={{ application: appName }}
-          hiddenFilterKeys={["application"]}
-          showStats={false}
-        />
+      {tab === "overview" && (
+        <div className="space-y-6">
+          <AppOverview appName={appName} />
+          <RequestsTable
+            fixedFilters={{ application: appName }}
+            hiddenFilterKeys={["application"]}
+            showStats={false}
+          />
+        </div>
       )}
 
       {tab === "policy" && (
