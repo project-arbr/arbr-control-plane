@@ -5,7 +5,7 @@
 const { v4: uuidv4 } = require("uuid");
 const { getRouter } = require("../providers/router");
 const { extractFinishReason } = require("../providers/llm-router");
-const { resolveRoute, invokeWithFallback } = require("./handler");
+const { resolveRoute, invokeWithFallback, getAppConfig } = require("./handler");
 const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
@@ -308,6 +308,19 @@ async function handleOpenAICompat(req, res) {
   const normalized = { ...body, maxTokens: body.max_tokens };
   const modelRequested = (body.model || "auto").trim();
 
+  // Per-application config (kill switch, modelOptOut, generated aiPolicyAssignments). Without this
+  // the app's own policy + allowed-models opt-out are ignored and routing falls back to the global
+  // policy / default — exactly the /v1/chat path's behavior. (parity with handleChat)
+  const appCfg = await getAppConfig(meta.application);
+  if (appCfg?.killSwitchEnabled) {
+    return res.status(503).json({
+      error: {
+        message: appCfg.killSwitchMessage || `Application "${meta.application}" is temporarily disabled.`,
+        type: "server_error", code: "app_kill_switch",
+      },
+    });
+  }
+
   const appConfig = {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
@@ -315,7 +328,7 @@ async function handleOpenAICompat(req, res) {
   let served, routingDecision, taskType, classifiedBy, difficulty, confidence;
   try {
     ({ served, routingDecision, taskType, classifiedBy, difficulty, confidence } =
-      await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, appConfig }));
+      await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
       return res.status(403).json({ error: { message: err.message, type: "invalid_request_error", code: "model_not_allowed" } });
