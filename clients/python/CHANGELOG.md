@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 (2026-06-30)
+
+- **`Usage` dataclass**: gains `cached_read_tokens` and `cache_write_tokens` — populated from the gateway's prompt-cache token breakdown when Anthropic or OpenAI caching is active (`res.usage.cached_read_tokens`, `res.usage.cache_write_tokens`).
+- **Docs**: updated README with difficulty-aware routing behaviour, cache token fields, and per-user spend / realised-savings analytics.
+
+## 0.3.1 (2026-06-26)
+
+- `task_types()` / `atask_types()` — list all supported task types with tier and description (`GET /v1/task-types`). Pass the returned `id` as `task_type` in `chat()` calls to enable smart routing.
+
 ## 0.2.0 (2026-06-19)
 
 - `models()` / `amodels()` — list all models available on this Arbr instance (`GET /v1/models`). Returns OpenAI-compatible format with Arbr extensions: `provider`, `label`, `tier`, `inputPer1M`, `outputPer1M`.

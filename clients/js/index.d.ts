@@ -33,6 +33,10 @@ export interface Usage {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  /** Tokens served from the provider's prompt cache (billed at cache-read rate). */
+  cachedReadTokens?: number;
+  /** Tokens written to the provider's prompt cache (billed at cache-write rate). */
+  cacheWriteTokens?: number;
 }
 
 export interface ChatResponse {

@@ -76,6 +76,8 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    cached_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,8 @@ class ChatResponse:
                 input_tokens=int(u.get("inputTokens") or 0),
                 output_tokens=int(u.get("outputTokens") or 0),
                 total_tokens=int(u.get("totalTokens") or 0),
+                cached_read_tokens=int(u.get("cachedReadTokens") or 0),
+                cache_write_tokens=int(u.get("cacheWriteTokens") or 0),
             )
             if isinstance(u, dict)
             else None

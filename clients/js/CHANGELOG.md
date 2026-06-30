@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (2026-06-30)
+
+- **TypeScript**: `Usage` interface gains `cachedReadTokens` and `cacheWriteTokens` — now typed for prompt-cache token breakdown returned by the gateway when Anthropic or OpenAI prompt caching is active.
+- **Docs**: updated README with difficulty-aware routing behaviour, cache token fields, and per-user spend / realised-savings analytics.
+
+## 0.3.1 (2026-06-26)
+
+- `taskTypes()` — list all supported task types with tier and description (`GET /v1/task-types`). Pass the returned `id` as `taskType` in `chat()` calls to enable smart routing without manual classification.
+- TypeScript: added `TaskType`, `TaskTypesResponse` interfaces.
+
 ## 0.2.0 (2026-06-19)
 
 - `models()` — list all models available on this Arbr instance (`GET /v1/models`). Returns OpenAI-compatible format with Arbr extensions: `provider`, `label`, `tier`, `inputPer1M`, `outputPer1M`. Works with the OpenAI Node.js SDK `openai.models.list()` too.
