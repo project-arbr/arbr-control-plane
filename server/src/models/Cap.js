@@ -14,6 +14,9 @@ const capSchema = new mongoose.Schema(
     // alert = flag only; downgrade = force the provider's light model while breached;
     // block = reject requests in scope (429) until the window rolls past.
     action: { type: String, enum: ["alert", "downgrade", "block"], default: "alert" },
+    // Fraction of limit at which a cap_warning webhook fires (0 = disabled, default 0.8 = 80%).
+    // Only applies to block/downgrade caps — alert caps are display-only.
+    warningThreshold: { type: Number, default: 0.8 },
     enabled: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
   },

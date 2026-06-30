@@ -36,7 +36,7 @@ function SpendBar({ cap }) {
 function CapRow({ cap, onRefresh }) {
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [form, setForm] = useState({ limit: cap.limit, period: cap.period, action: cap.action });
+  const [form, setForm] = useState({ limit: cap.limit, period: cap.period, action: cap.action, warningThreshold: Math.round((cap.warningThreshold ?? 0.8) * 100) });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -52,7 +52,7 @@ function CapRow({ cap, onRefresh }) {
     if (!lim || lim <= 0) return setErr("Limit must be a positive number.");
     setBusy(true);
     setErr(null);
-    try { await api.updateCap(cap._id, { limit: lim, period: form.period, action: form.action }); await onRefresh(); setEditing(false); }
+    try { await api.updateCap(cap._id, { limit: lim, period: form.period, action: form.action, warningThreshold: Number(form.warningThreshold) / 100 }); await onRefresh(); setEditing(false); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -110,9 +110,17 @@ function CapRow({ cap, onRefresh }) {
                   <option value="alert">Alert only (no enforcement)</option>
                 </select>
               </div>
+              {form.action !== "alert" && (
+                <div>
+                  <div className="label mb-1">Warn at (%)</div>
+                  <input className="input w-20" type="number" min="0" max="99" step="5"
+                    value={form.warningThreshold} onChange={(e) => setForm({ ...form, warningThreshold: e.target.value })}
+                    title="Fire a webhook warning before the cap is reached (0 = disabled)" />
+                </div>
+              )}
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={save} disabled={busy}>Save</button>
-                <button className="btn-outline" onClick={() => { setEditing(false); setErr(null); setForm({ limit: cap.limit, period: cap.period, action: cap.action }); }}>
+                <button className="btn-outline" onClick={() => { setEditing(false); setErr(null); setForm({ limit: cap.limit, period: cap.period, action: cap.action, warningThreshold: Math.round((cap.warningThreshold ?? 0.8) * 100) }); }}>
                   Cancel
                 </button>
               </div>
@@ -148,6 +156,7 @@ function CreateForm({ providers, applications, onCreated }) {
   const [period, setPeriod] = useState("day");
   const [limit, setLimit] = useState("");
   const [action, setAction] = useState("block");
+  const [warningThreshold, setWarningThreshold] = useState(80);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -165,7 +174,7 @@ function CreateForm({ providers, applications, onCreated }) {
     if (!value.trim()) return setErr("Enter a scope value.");
     setBusy(true);
     try {
-      await api.createCap({ dimension: dim, value: value.trim(), period, limit: lim, action });
+      await api.createCap({ dimension: dim, value: value.trim(), period, limit: lim, action, warningThreshold: Number(warningThreshold) / 100 });
       setValue("");
       setLimit("");
       await onCreated();
@@ -230,6 +239,15 @@ function CreateForm({ providers, applications, onCreated }) {
             <option value="alert">Alert only (no enforcement)</option>
           </select>
         </div>
+
+        {action !== "alert" && (
+          <div>
+            <div className="label mb-1">Warn at (%)</div>
+            <input className="input w-20" type="number" min="0" max="99" step="5" value={warningThreshold}
+              onChange={(e) => setWarningThreshold(e.target.value)}
+              title="Fire a webhook warning before the cap is reached (0 = disabled)" />
+          </div>
+        )}
 
         <button className="btn-primary" onClick={submit} disabled={busy}>
           {busy ? "Adding…" : "Add constraint"}

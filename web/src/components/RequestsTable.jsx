@@ -298,6 +298,13 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
             <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
               <span>{fmt.num(data.total)} records</span>
               <div className="flex items-center gap-2">
+                <button
+                  className="btn-outline"
+                  onClick={() => api.exportRequests({ ...filter, ...fixedFilters, ...range })}
+                  title="Download all matching records as CSV"
+                >
+                  Export CSV
+                </button>
                 <button className="btn-outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
                 <span>Page {page}</span>
                 <button className="btn-outline" disabled={page * data.limit >= data.total} onClick={() => setPage((p) => p + 1)}>Next</button>

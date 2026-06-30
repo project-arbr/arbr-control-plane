@@ -94,7 +94,7 @@ const CAP_ACTIONS = ["alert", "downgrade", "block"];
 
 router.post("/caps", async (req, res, next) => {
   try {
-    const { dimension, value, period, limit, action } = req.body || {};
+    const { dimension, value, period, limit, action, warningThreshold } = req.body || {};
     if (!(Number(limit) > 0)) return res.status(400).json({ error: "limit must be a positive number" });
     const allowed = ["application", "provider", "department", "workflow", "model"];
     const dim = dimension && allowed.includes(dimension) ? dimension : null;
@@ -105,6 +105,7 @@ router.post("/caps", async (req, res, next) => {
       period: period === "day" ? "day" : "month",
       limit: Number(limit),
       action: CAP_ACTIONS.includes(action) ? action : "alert",
+      warningThreshold: warningThreshold != null ? Math.min(1, Math.max(0, Number(warningThreshold))) : 0.8,
       enabled: true,
     });
     capEngine.invalidate();
@@ -120,6 +121,7 @@ router.patch("/caps/:id", async (req, res, next) => {
     if (Number(req.body.limit) > 0) update.limit = Number(req.body.limit);
     if (req.body.period === "day" || req.body.period === "month") update.period = req.body.period;
     if (CAP_ACTIONS.includes(req.body.action)) update.action = req.body.action;
+    if (req.body.warningThreshold != null) update.warningThreshold = Math.min(1, Math.max(0, Number(req.body.warningThreshold)));
     const cap = await Cap.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
     capEngine.invalidate();
     setImmediate(() => logAction("cap.update", "cap", req.params.id, update));
@@ -475,6 +477,13 @@ router.get("/analytics/by/:dimension", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get("/analytics/timeseries", async (req, res, next) => {
+  try {
+    const bucket = req.query.bucket === "hour" ? "hour" : "day";
+    res.json(await analytics.timeseries(req.query, bucket));
+  } catch (e) { next(e); }
+});
+
 router.get("/analytics/realised-savings", async (req, res, next) => {
   try { res.json(await analytics.realisedSavings(req.query)); } catch (e) { next(e); }
 });
@@ -495,6 +504,33 @@ router.get("/requests", async (req, res, next) => {
       RequestRecord.countDocuments(match),
     ]);
     res.json({ items, total, page, limit });
+  } catch (e) { next(e); }
+});
+
+// CSV export — same filters as /requests but no pagination; streams all matching rows.
+router.get("/requests/export", async (req, res, next) => {
+  try {
+    const match = analytics.buildMatch(req.query);
+    const COLS = [
+      "timestamp", "requestId", "application", "workflow", "department", "userId",
+      "taskType", "model", "modelRequested", "provider", "routingDecision", "classifiedBy",
+      "promptTokens", "completionTokens", "totalTokens", "totalCost",
+      "latencyMs", "status", "cacheHit", "difficulty", "difficultyScore",
+    ];
+    function csvCell(v) {
+      if (v == null) return "";
+      if (v instanceof Date) return v.toISOString();
+      const s = String(v);
+      return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="requests.csv"');
+    res.write(COLS.join(",") + "\n");
+    const cursor = RequestRecord.find(match).select(COLS.join(" ")).sort({ timestamp: -1 }).lean().cursor();
+    for await (const doc of cursor) {
+      res.write(COLS.map((c) => csvCell(doc[c])).join(",") + "\n");
+    }
+    res.end();
   } catch (e) { next(e); }
 });
 
