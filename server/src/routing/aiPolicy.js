@@ -224,9 +224,10 @@ function parseJsonBlock(text) {
 const COST_SENSITIVITY = { light: 0.20, mid: 0.25, premium: 0.10 };
 
 // Goal-driven cost-vs-capability weight. "balanced" (default) keeps today's per-tier behavior;
-// "cost" weights cost heavily (cheapest capable model); "quality" weights capability (best model).
+// "cost" favours cheaper models while preserving a meaningful capability floor (target 30-50% savings,
+// not zero-cost); "quality" weights capability almost exclusively.
 function goalWeight(goal, tier) {
-  if (goal === "cost") return 0.6;
+  if (goal === "cost") return 0.30;
   if (goal === "quality") return 0.05;
   return COST_SENSITIVITY[tier] || 0.25; // "balanced" / unset
 }
@@ -294,7 +295,7 @@ async function _computeAssignments({ router, eff, excludeModels = [], goal = "ba
       `- Vary assignments — don't give every task the same model\n` +
       `- Choose the model best suited for each task's requirements\n` +
       (goal === "cost"
-        ? `- GOAL: minimize cost — prefer the cheapest model that can do each task acceptably\n`
+        ? `- GOAL: reduce cost by 30–50% vs using premium models everywhere. Use light-tier for simple tasks (faq, translation, classification, support-response, summarisation). Use mid-tier for moderate tasks (coding, extraction, content generation). Reserve premium only where deep reasoning is truly required. Vary assignments across models — do NOT map every task to the same model, and do NOT choose a model purely because its price is zero; each task must be handled by something genuinely capable of it.\n`
         : goal === "quality"
         ? `- GOAL: maximize quality — prefer the most capable model for each task, cost is secondary\n`
         : `- GOAL: balance capability and cost\n`) +
@@ -336,7 +337,14 @@ function _scoringFallback(task, liveModels, catalogMap, eff, tierOverride, goal)
   const hardFallback = liveModels[0].id;
 
   function poolFor(tier) {
-    if (tier === "premium") return liveModels;
+    if (tier === "premium") {
+      // cost mode: allow mid as the floor (skip light — premium tasks need real capability)
+      if (goal === "cost") {
+        const p = [...(byTier.mid || []), ...(byTier.premium || [])];
+        return p.length ? p : liveModels;
+      }
+      return liveModels;
+    }
     const p = tier === "light"
       ? [...(byTier.light || [])]
       : [...(byTier.light || []), ...(byTier.mid || [])];
