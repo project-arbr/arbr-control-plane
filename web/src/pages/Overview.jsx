@@ -3,10 +3,7 @@ import { api, fmt } from "../api.js";
 import { Stat, Card, Table, Spinner, Tabs, useTabParam } from "../components/ui.jsx";
 import ByDimension from "./ByDimension.jsx";
 import RequestsTable from "../components/RequestsTable.jsx";
-import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer,
-} from "recharts";
+import TrendChart from "../components/TrendChart.jsx";
 
 const TABS = [
   ["summary",    "Summary"],
@@ -14,90 +11,25 @@ const TABS = [
   ["requests",   "Requests"],
 ];
 
-const TREND_PERIODS = [
-  { label: "7 days",  days: 7 },
-  { label: "30 days", days: 30 },
-  { label: "90 days", days: 90 },
-];
-
-function trendRange(days) {
-  const to = new Date();
-  const from = new Date(to);
-  from.setDate(from.getDate() - days);
-  return { from: from.toISOString(), to: to.toISOString() };
-}
-
-function TrendChart() {
-  const [period, setPeriod] = useState(1); // default 30 days
-  const [rows, setRows] = useState(null);
-
-  useEffect(() => {
-    setRows(null);
-    api.timeseries(trendRange(TREND_PERIODS[period].days))
-      .then(setRows)
-      .catch(() => setRows([]));
-  }, [period]);
-
-  return (
-    <Card title="Cost & request trend">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm text-gray-500">Daily totals — cost (bars) and requests (line).</p>
-        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
-          {TREND_PERIODS.map((p, i) => (
-            <button
-              key={p.label}
-              onClick={() => setPeriod(i)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                period === i ? "bg-white text-arbr-charcoal shadow-sm border border-gray-200" : "text-gray-500 hover:text-arbr-charcoal"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {rows === null ? (
-        <div className="flex h-48 items-center justify-center text-sm text-gray-400">Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="flex h-48 items-center justify-center text-sm text-gray-400">No data for this period.</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <ComposedChart data={rows} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(d) => d.slice(5)} />
-            <YAxis yAxisId="cost" orientation="left" tick={{ fontSize: 11 }}
-              tickFormatter={(v) => `$${v.toFixed(2)}`} width={58} />
-            <YAxis yAxisId="reqs" orientation="right" tick={{ fontSize: 11 }} width={44} />
-            <Tooltip
-              formatter={(value, name) => name === "cost" ? [`$${value.toFixed(4)}`, "Cost"] : [value.toLocaleString(), "Requests"]}
-              labelFormatter={(d) => `Date: ${d}`}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="cost" dataKey="cost" name="cost" fill="#4ade80" opacity={0.8} radius={[2, 2, 0, 0]} />
-            <Line yAxisId="reqs" dataKey="requests" name="requests" type="monotone"
-              stroke="#6366f1" strokeWidth={2} dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      )}
-    </Card>
-  );
-}
-
 function Summary() {
   const [data, setData] = useState(null);
+  const [latency, setLatency] = useState(null);
   const [byProvider, setByProvider] = useState([]);
   const [byTask, setByTask] = useState([]);
   const [savings, setSavings] = useState(null);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.overview(), api.by("provider"), api.by("taskType"), api.realisedSavings()])
-      .then(([o, p, t, s]) => { setData(o); setByProvider(p); setByTask(t); setSavings(s); })
+    Promise.all([api.overview(), api.latencyPercentiles(), api.by("provider"), api.by("taskType"), api.realisedSavings()])
+      .then(([o, l, p, t, s]) => { setData(o); setLatency(l); setByProvider(p); setByTask(t); setSavings(s); })
       .catch((e) => setErr(e.message));
   }, []);
 
   if (err) return <div className="text-red-600">{err}</div>;
   if (!data) return <Spinner />;
+
+  const p50 = latency?.p50 != null ? fmt.ms(latency.p50) : "—";
+  const p95 = latency?.p95 != null ? fmt.ms(latency.p95) : "—";
 
   return (
     <div className="space-y-6">
@@ -108,7 +40,9 @@ function Summary() {
         <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Stat label="Latency p50" value={p50} sub="median (success)" />
+        <Stat label="Latency p95" value={p95} sub="95th percentile" />
         <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
         <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
         <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />

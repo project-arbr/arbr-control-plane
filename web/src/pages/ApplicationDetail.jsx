@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { api, fmt } from "../api.js";
 import { Card, Badge, Spinner, Toggle, Tabs, useTabParam, ConfirmDialog, Stat, Table } from "../components/ui.jsx";
 import RequestsTable from "../components/RequestsTable.jsx";
+import TrendChart from "../components/TrendChart.jsx";
 
 const TABS = [
   ["overview",  "Overview"],
@@ -559,6 +560,7 @@ export default function ApplicationDetail() {
       {tab === "overview" && (
         <div className="space-y-6">
           <AppOverview appName={appName} />
+          <TrendChart appName={appName} />
           <RequestsTable
             fixedFilters={{ application: appName }}
             hiddenFilterKeys={["application"]}

@@ -11,9 +11,10 @@ function buildMatch(filter = {}) {
     if (filter.from) m.timestamp.$gte = new Date(filter.from);
     if (filter.to) m.timestamp.$lte = new Date(filter.to);
   }
-  for (const f of ["application", "workflow", "department", "model", "provider", "taskType", "userId"]) {
+  for (const f of ["application", "workflow", "department", "model", "provider", "taskType", "userId", "status"]) {
     if (filter[f]) m[f] = filter[f];
   }
+  if (filter.requestId) m.requestId = filter.requestId;
   return m;
 }
 
@@ -195,6 +196,29 @@ async function timeseries(filter, bucket = "day") {
   return rows;
 }
 
+// Global latency percentiles (p50 + p95) for the selected window, success requests only.
+async function latencyPercentiles(filter) {
+  const match = buildMatch(filter);
+  const [row] = await RequestRecord.aggregate([
+    { $match: { ...match, status: "success" } },
+    {
+      $group: {
+        _id: null,
+        p50: { $percentile: { input: "$latencyMs", p: [0.5],  method: "approximate" } },
+        p95: { $percentile: { input: "$latencyMs", p: [0.95], method: "approximate" } },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        p50: { $round: [{ $first: "$p50" }, 0] },
+        p95: { $round: [{ $first: "$p95" }, 0] },
+      },
+    },
+  ]);
+  return row || { p50: null, p95: null };
+}
+
 module.exports = {
   buildMatch,
   overview,
@@ -210,4 +234,5 @@ module.exports = {
   realisedSavings,
   facets,
   providerHealth,
+  latencyPercentiles,
 };

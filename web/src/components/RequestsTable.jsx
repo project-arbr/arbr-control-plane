@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { api, fmt } from "../api.js";
 import { Card, Table, Badge, Drawer, Stat, CodeBlock } from "./ui.jsx";
 
@@ -131,7 +131,7 @@ function RequestFlow({ r }) {
   );
 }
 
-const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", taskType: "" };
+const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", taskType: "", status: "", requestId: "" };
 
 const PERIODS = [
   { label: "Today",    days: 0 },
@@ -163,6 +163,7 @@ function StatCard({ label, value, sub, highlight }) {
 export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = [], showStats = true, defaultPeriodIndex = 1 }) {
   const [facets, setFacets]   = useState(null);
   const [filter, setFilter]   = useState(EMPTY_FILTER);
+  const [searchInput, setSearchInput] = useState(""); // raw requestId input (debounced into filter)
   const [activePeriod, setActivePeriod] = useState(defaultPeriodIndex);
   const [data, setData]       = useState(null);
   const [stats, setStats]     = useState(null);
@@ -170,6 +171,16 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
   const [err, setErr]         = useState(null);
   const [detail, setDetail]   = useState(null);   // full record for the drilldown
   const [detailOpen, setDetailOpen] = useState(false);
+
+  const debounceRef = useRef(null);
+  const onSearchChange = (val) => {
+    setSearchInput(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      setFilter((f) => ({ ...f, requestId: val.trim() }));
+    }, 400);
+  };
 
   const openDetail = (row) => {
     setDetailOpen(true); setDetail(null);
@@ -272,6 +283,33 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
           />
         </div>
       )}
+
+      {/* Search + status row */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            className="input w-full pl-8"
+            placeholder="Search by request ID…"
+            value={searchInput}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
+        <div className="shrink-0">
+          <select
+            className="input"
+            value={filter.status}
+            onChange={(e) => { setPage(1); setFilter((f) => ({ ...f, status: e.target.value })); }}
+          >
+            <option value="">All statuses</option>
+            <option value="success">Success</option>
+            <option value="failure">Failure</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </div>
+      </div>
 
       {/* Filters */}
       <Card>
