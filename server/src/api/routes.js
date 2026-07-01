@@ -32,7 +32,8 @@ const EvalPair = require("../models/EvalPair");
 const { invalidateCampaignCache } = require("../eval/shadow");
 const { summarizeEvalPairs } = require("../eval/logic");
 const secrets = require("../security/secrets");
-const { config } = require("../config");
+const { config, KNOWN_PROVIDERS } = require("../config");
+const { classifyModelImport } = require("../providers/importLogic");
 
 const router = express.Router();
 
@@ -357,6 +358,67 @@ router.post("/custom-providers/:id/test", async (req, res) => {
   } catch (e) {
     res.json({ ok: false, message: String(e.message || e) });
   }
+});
+
+// Discover a custom provider's models via its OpenAI-compatible GET /v1/models endpoint.
+// Annotates each with whether it's already known in the registry (so the UI can enrich pricing).
+router.get("/custom-providers/:id/models", async (req, res) => {
+  try {
+    const doc = await CustomProvider.findOne({ id: req.params.id }).lean();
+    if (!doc) return res.status(404).json({ ok: false, message: "provider not found" });
+    const apiKey = secrets.decrypt(doc);
+    const upstream = await fetch(`${doc.baseURL}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = await upstream.json().catch(() => null);
+    if (!upstream.ok) return res.json({ ok: false, message: `upstream ${upstream.status}: ${data?.error?.message || ""}` });
+    const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+    const models = list.map((m) => (typeof m === "string" ? m : m?.id)).filter(Boolean).map((id) => {
+      const known = pricing.getModel(id);
+      return { id, known: !!known, registered: !!known && known.provider === doc.id };
+    });
+    res.json({ ok: true, models });
+  } catch (e) {
+    res.json({ ok: false, message: String(e.message || e) });
+  }
+});
+
+// Bulk-register selected discovered models under a custom provider. Adopts orphaned synced rows
+// (re-points their provider) and enriches from the existing catalog; unmatched → $0 pricing row.
+router.post("/custom-providers/:id/models", async (req, res, next) => {
+  try {
+    const doc = await CustomProvider.findOne({ id: req.params.id }).lean();
+    if (!doc) return res.status(404).json({ error: "not_found" });
+    const ids = Array.isArray(req.body?.models) ? req.body.models.filter((x) => typeof x === "string" && x.trim()) : [];
+    if (!ids.length) return res.status(400).json({ error: "models must be a non-empty array of ids" });
+
+    // Providers we must not hijack: built-in known providers + other live custom providers.
+    const otherCustom = await CustomProvider.find({ enabled: true }, { id: 1 }).lean();
+    const connectable = new Set([...KNOWN_PROVIDERS, ...otherCustom.map((c) => c.id).filter((cid) => cid !== doc.id)]);
+
+    const result = { created: 0, adopted: 0, skipped: 0, conflicts: [] };
+    for (const id of ids) {
+      const existing = await ModelEntry.findOne({ id }).lean();
+      const action = classifyModelImport(existing, doc.id, connectable);
+      if (action === "create") {
+        await ModelEntry.create({
+          id, provider: doc.id, label: id, tier: "mid",
+          inputPer1M: 0, outputPer1M: 0, builtIn: false, enabled: true,
+        });
+        result.created++;
+      } else if (action === "adopt") {
+        await ModelEntry.updateOne({ id }, { $set: { provider: doc.id, enabled: true } });
+        result.adopted++;
+      } else if (action === "conflict") {
+        result.conflicts.push(id);
+      } else {
+        result.skipped++;
+      }
+    }
+    await pricing.reload();
+    setImmediate(() => logAction("customProvider.importModels", "customProvider", doc.id, { count: ids.length, created: result.created, adopted: result.adopted }));
+    res.json(result);
+  } catch (e) { next(e); }
 });
 
 // ── model registry ──

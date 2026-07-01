@@ -125,6 +125,8 @@ export const api = {
   updateCustomProvider: (id, body) => req(`/custom-providers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   removeCustomProvider: (id) => req(`/custom-providers/${encodeURIComponent(id)}`, { method: "DELETE" }),
   testCustomProvider: (id, model) => req(`/custom-providers/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify({ model }) }),
+  discoverProviderModels: (id) => req(`/custom-providers/${encodeURIComponent(id)}/models`),
+  importProviderModels: (id, models) => req(`/custom-providers/${encodeURIComponent(id)}/models`, { method: "POST", body: JSON.stringify({ models }) }),
 
   governance: () => req("/governance"),
   updateGovernance: (body) => req("/governance", { method: "PATCH", body: JSON.stringify(body) }),

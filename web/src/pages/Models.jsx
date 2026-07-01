@@ -487,8 +487,37 @@ function AddModelForm({ providerId, models, onSave, onClose }) {
 // ── ModelList ─────────────────────────────────────────────────────────────────
 
 function ModelList({ providerId, models, onRefresh }) {
-  const [adding, setAdding] = useState(false);
   const providerModels = models.filter((m) => m.provider === providerId);
+  const [disc, setDisc]       = useState(null);   // array of {id, known, registered} | { error } | null
+  const [sel, setSel]         = useState({});     // id -> selected
+  const [busy, setBusy]       = useState(false);
+  const [summary, setSummary] = useState(null);
+
+  async function discover() {
+    setBusy(true); setSummary(null); setDisc(null);
+    try {
+      const r = await api.discoverProviderModels(providerId);
+      if (!r.ok) { setDisc({ error: r.message }); return; }
+      setDisc(r.models);
+      const s = {};
+      r.models.forEach((m) => { if (!m.registered) s[m.id] = true; });  // default: import all not-yet-registered
+      setSel(s);
+    } catch (e) { setDisc({ error: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  async function importSelected() {
+    const chosen = Object.keys(sel).filter((id) => sel[id]);
+    if (!chosen.length) return;
+    setBusy(true);
+    try {
+      const r = await api.importProviderModels(providerId, chosen);
+      setSummary(r); setDisc(null); onRefresh();
+    } catch (e) { setSummary({ error: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  const selectedCount = Object.values(sel).filter(Boolean).length;
 
   return (
     <div className="space-y-3">
@@ -496,11 +525,41 @@ function ModelList({ providerId, models, onRefresh }) {
         <h3 className="text-sm font-semibold text-gray-700">
           Models <span className="font-normal text-gray-400">({providerModels.length})</span>
         </h3>
+        <button onClick={discover} disabled={busy} className={BTN_GHOST}>
+          {busy && !disc ? "Discovering…" : "Discover models"}
+        </button>
       </div>
-      {/* + Add model hidden for now */}
 
-      {providerModels.length === 0 && !adding && (
-        <p className="text-sm text-gray-400 py-4 text-center">No models registered for this provider.</p>
+      {summary && (
+        summary.error
+          ? <p className="text-sm text-red-600">{summary.error}</p>
+          : <p className="text-sm text-arbr-green-700">Imported: {summary.created} new, {summary.adopted} adopted, {summary.skipped} already present{summary.conflicts?.length ? `, ${summary.conflicts.length} skipped (owned by another provider)` : ""}.</p>
+      )}
+
+      {disc && disc.error && <p className="text-sm text-red-600">Discovery failed: {disc.error}</p>}
+      {Array.isArray(disc) && (
+        <div className="rounded-lg border border-gray-200 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm text-gray-500">{disc.length} models from provider · {selectedCount} selected</span>
+            <button onClick={importSelected} disabled={busy || !selectedCount} className={BTN_PRIMARY}>
+              {busy ? "Importing…" : `Import selected (${selectedCount})`}
+            </button>
+          </div>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {disc.map((m) => (
+              <label key={m.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
+                <input type="checkbox" checked={!!sel[m.id]} disabled={m.registered}
+                  onChange={(e) => setSel((s) => ({ ...s, [m.id]: e.target.checked }))} />
+                <span className="font-mono text-gray-700">{m.id}</span>
+                {m.registered ? <Badge tone="green">registered</Badge> : m.known && <Badge tone="gray">known pricing</Badge>}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {providerModels.length === 0 && !disc && (
+        <p className="text-sm text-gray-400 py-4 text-center">No models registered. Use “Discover models” to import from the provider.</p>
       )}
 
       <div className="space-y-2">
@@ -751,6 +810,7 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
 // url: pre-filled value (empty = account-specific, user must supply)
 // hint: shown below the Base URL field to guide the user
 const PROVIDER_ENDPOINT_INFO = {
+  "nvidia-nim":  { url: "https://integrate.api.nvidia.com/v1", hint: "Free nvapi- key from build.nvidia.com" },
   "mistral":     { url: "https://api.mistral.ai/v1" },
   "cohere":      { url: "https://api.cohere.ai/v1" },
   "together-ai": { url: "https://api.together.xyz/v1" },

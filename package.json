@@ -33,6 +33,7 @@
     "smoke:logging": "node server/scripts/logging-smoke.js",
     "smoke:maxtokens": "node server/scripts/maxtokens-smoke.js",
     "smoke:eval": "node server/scripts/eval-smoke.js",
+    "smoke:import": "node server/scripts/import-smoke.js",
     "lint": "eslint server/src",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
