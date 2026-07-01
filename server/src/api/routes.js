@@ -934,6 +934,10 @@ router.get("/analytics/provider-health", async (_req, res, next) => {
   try { res.json(await analytics.providerHealth()); } catch (e) { next(e); }
 });
 
+router.get("/analytics/latency-percentiles", async (req, res, next) => {
+  try { res.json(await analytics.latencyPercentiles(req.query)); } catch (e) { next(e); }
+});
+
 // ── Per-application config (kill switch, model opt-out, AI policy override) ──
 const ApplicationConfig = require("../models/ApplicationConfig");
 
