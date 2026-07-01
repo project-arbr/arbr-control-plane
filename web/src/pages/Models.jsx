@@ -61,6 +61,11 @@ function tierTone(tier) {
   return tier === "premium" ? "violet" : tier === "mid" ? "indigo" : "teal";
 }
 
+// Mirror of server importLogic.isChatLikelyModelId — used to pick a sensible model for
+// the "Test connection" probe (non-chat models 404 on /chat/completions).
+const NON_CHAT_MODEL_RE = /embed|rerank|retriev|guardrail|moderation|paddleocr|whisper|parakeet|\briva\b|diffusion|sdxl|\bflux\b|\bclip\b|\bocr\b|\btts\b|text-to-speech|speech-to-text/i;
+const isChatLikely = (id) => !NON_CHAT_MODEL_RE.test(String(id || ""));
+
 function StatusDot({ live }) {
   return (
     <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${live ? "bg-arbr-green-600" : "bg-gray-300"}`} />
@@ -501,7 +506,9 @@ function ModelList({ providerId, models, onRefresh }) {
       if (!r.ok) { setDisc({ error: r.message }); return; }
       setDisc(r.models);
       const s = {};
-      r.models.forEach((m) => { if (!m.registered) s[m.id] = true; });  // default: import all not-yet-registered
+      // Default-select only not-yet-registered, chat-capable models. Non-chat models
+      // (embeddings/rerankers/etc.) 404 on /chat/completions, so leave them unchecked.
+      r.models.forEach((m) => { if (!m.registered && m.chatLikely !== false) s[m.id] = true; });
       setSel(s);
     } catch (e) { setDisc({ error: e.message }); }
     finally { setBusy(false); }
@@ -546,6 +553,7 @@ function ModelList({ providerId, models, onRefresh }) {
               {busy ? "Importing…" : `Import selected (${selectedCount})`}
             </button>
           </div>
+          <p className="mb-2 text-[11px] text-gray-400">Non-chat models (embeddings, rerankers, etc.) are unchecked by default — they don't work on /chat/completions.</p>
           <div className="max-h-64 space-y-1 overflow-y-auto">
             {disc.map((m) => (
               <label key={m.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
@@ -553,6 +561,7 @@ function ModelList({ providerId, models, onRefresh }) {
                   onChange={(e) => setSel((s) => ({ ...s, [m.id]: e.target.checked }))} />
                 <span className="font-mono text-gray-700">{m.id}</span>
                 {m.registered ? <Badge tone="green">registered</Badge> : m.known && <Badge tone="gray">known pricing</Badge>}
+                {m.chatLikely === false && <Badge tone="amber">non-chat</Badge>}
               </label>
             ))}
           </div>
@@ -739,10 +748,13 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
   }
 
   async function testConn() {
-    const firstModel = models.find((m) => m.provider === provider.id);
+    // Prefer a chat-capable model so the test reflects the connection, not an arbitrary
+    // non-chat model that would 404 on /chat/completions.
+    const mine = models.filter((m) => m.provider === provider.id);
+    const testModel = mine.find((m) => isChatLikely(m.id)) || mine[0];
     setTesting(true); setTestResult(null);
     try {
-      const r = await api.testCustomProvider(provider.id, firstModel?.id || null);
+      const r = await api.testCustomProvider(provider.id, testModel?.id || null);
       setTestResult(r);
     } catch { setTestResult({ ok: false, message: "Request failed" }); }
     finally { setTesting(false); }
@@ -777,7 +789,9 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
 
       {testResult && (
         <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-green-50 text-arbr-green-800 border border-arbr-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
-          {testResult.ok ? `✓ Connected · "${testResult.sample}"` : `✗ ${testResult.message}`}
+          {testResult.ok
+            ? `✓ Connected · model: ${testResult.model}${testResult.sample ? ` · "${testResult.sample}"` : ""}`
+            : `✗ ${testResult.message}`}
         </div>
       )}
 

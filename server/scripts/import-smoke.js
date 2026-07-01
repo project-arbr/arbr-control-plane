@@ -1,5 +1,5 @@
 // Pure-logic smoke for custom-provider model import decisions. Run: npm run smoke:import
-const { classifyModelImport } = require("../src/providers/importLogic");
+const { classifyModelImport, isChatLikelyModelId } = require("../src/providers/importLogic");
 
 let pass = 0, fail = 0;
 const eq = (got, exp, msg) => {
@@ -25,6 +25,15 @@ eq(classifyModelImport({ provider: "openai", builtIn: false }, "nvidia-nim", con
 
 // 6. Owned by another live custom provider → don't hijack.
 eq(classifyModelImport({ provider: "other-custom", builtIn: false }, "nvidia-nim", connectable), "conflict", "other custom owns id → conflict");
+
+// 7. Chat-likely filter: real chat models pass; embeddings/rerankers/etc. are excluded.
+eq(isChatLikelyModelId("meta/llama-3.1-8b-instruct"), true, "llama chat → chat-likely");
+eq(isChatLikelyModelId("openai/gpt-oss-20b"), true, "gpt-oss → chat-likely");
+eq(isChatLikelyModelId("deepseek-ai/deepseek-r1"), true, "deepseek-r1 → chat-likely");
+eq(isChatLikelyModelId("nvidia/nv-embedqa-e5-v5"), false, "embedding → excluded");
+eq(isChatLikelyModelId("nvidia/rerank-qa-mistral-4b"), false, "reranker → excluded");
+eq(isChatLikelyModelId("nvidia/nemoretriever-parse"), false, "retriever → excluded");
+eq(isChatLikelyModelId("stabilityai/stable-diffusion-3"), false, "image-gen → excluded");
 
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

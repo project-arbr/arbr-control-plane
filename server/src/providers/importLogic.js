@@ -19,4 +19,13 @@ function classifyModelImport(existing, providerId, connectable) {
   return "adopt";
 }
 
-module.exports = { classifyModelImport };
+// An OpenAI-compatible provider's GET /v1/models lists everything it hosts — including
+// non-chat models (embeddings, rerankers, retrievers, moderation, OCR, speech, image-gen)
+// that 404 on /chat/completions and must not be routed to. Heuristic id filter so discovery
+// can default-select only chat-capable models. Conservative: keeps vision/multimodal chat.
+const NON_CHAT_MODEL = /embed|rerank|retriev|guardrail|moderation|paddleocr|whisper|parakeet|\briva\b|diffusion|sdxl|\bflux\b|\bclip\b|\bocr\b|\btts\b|text-to-speech|speech-to-text/i;
+function isChatLikelyModelId(id) {
+  return !NON_CHAT_MODEL.test(String(id || ""));
+}
+
+module.exports = { classifyModelImport, isChatLikelyModelId };
