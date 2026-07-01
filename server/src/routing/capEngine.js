@@ -40,6 +40,21 @@ async function _breachedEnforcing() {
         spent,
         action: cap.action,
       }));
+    } else {
+      // Near-threshold warning: fire before the cap is actually breached so users can act.
+      const warnAt = cap.warningThreshold ?? 0.8;
+      if (warnAt > 0 && spent / cap.limit >= warnAt) {
+        setImmediate(() => notifier.notify("cap_warning", {
+          key: `warn:${cap._id}`,
+          dimension: cap.dimension || "global",
+          value: cap.value || null,
+          period: cap.period,
+          limit: cap.limit,
+          spent,
+          ratio: Math.round((spent / cap.limit) * 1000) / 1000,
+          action: cap.action,
+        }));
+      }
     }
   }
   _cache = { breached, at: Date.now() };

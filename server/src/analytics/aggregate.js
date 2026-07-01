@@ -174,10 +174,32 @@ async function providerHealth() {
   }));
 }
 
+// Daily (or hourly) time-series of requests, cost, and failures for the selected window.
+// bucket: "day" (default) or "hour". Useful for the Overview trend chart.
+async function timeseries(filter, bucket = "day") {
+  const match = buildMatch(filter);
+  const fmt = bucket === "hour" ? "%Y-%m-%dT%H" : "%Y-%m-%d";
+  const rows = await RequestRecord.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: fmt, date: "$timestamp", timezone: "UTC" } },
+        requests: { $sum: 1 },
+        cost: { $sum: "$totalCost" },
+        failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
+      },
+    },
+    { $sort: { _id: 1 } },
+    { $project: { _id: 0, date: "$_id", requests: 1, cost: 1, failures: 1 } },
+  ]);
+  return rows;
+}
+
 module.exports = {
   buildMatch,
   overview,
   spend,
+  timeseries,
   byApplication,
   byTeam,
   byWorkflow,

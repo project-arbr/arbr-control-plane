@@ -45,12 +45,22 @@ export const api = {
   gatewayProviders: () => fetch("/v1/providers", { headers: { "Content-Type": "application/json" } }).then((r) => r.json()),
 
   overview: (filter) => req(`/analytics/overview${qs(filter)}`),
+  timeseries: (filter) => req(`/analytics/timeseries${qs(filter)}`),
   by: (dimension, filter) => req(`/analytics/by/${dimension}${qs(filter)}`),
   realisedSavings: (filter) => req(`/analytics/realised-savings${qs(filter)}`),
   facets: () => req("/analytics/facets"),
 
   requests: (filter) => req(`/requests${qs(filter)}`),
   request: (id) => req(`/requests/${encodeURIComponent(id)}`),
+  exportRequests: (filter) => {
+    const url = `/api/requests/export${qs(filter)}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "requests.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  },
 
   recommendations: (status) => req(`/recommendations${qs({ status })}`),
   recompute: () => req("/recommendations/recompute", { method: "POST" }),
