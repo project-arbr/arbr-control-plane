@@ -43,7 +43,7 @@ async function _breachedEnforcing() {
     } else {
       // Near-threshold warning: fire before the cap is actually breached so users can act.
       const warnAt = cap.warningThreshold ?? 0.8;
-      if (warnAt > 0 && spent / cap.limit >= warnAt) {
+      if (shouldWarn(spent, cap.limit, warnAt)) {
         setImmediate(() => notifier.notify("cap_warning", {
           key: `warn:${cap._id}`,
           dimension: cap.dimension || "global",
@@ -85,4 +85,9 @@ function describeScope(cap) {
   return cap.dimension ? `${cap.dimension} "${cap.value}"` : "global spend";
 }
 
-module.exports = { enforcement, invalidate, describeScope, windowStart };
+// Pure predicate — exported for unit testing.
+function shouldWarn(spent, limit, warnAt) {
+  return warnAt > 0 && spent < limit && spent / limit >= warnAt;
+}
+
+module.exports = { enforcement, invalidate, describeScope, windowStart, _shouldWarn: shouldWarn };

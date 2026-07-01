@@ -24,6 +24,9 @@ jobs:
       - name: Lint server
         run: npm run lint
 
+      - name: Test server (unit + integration)
+        run: npm run test:server
+
       - name: Install web dependencies
         run: npm --prefix web ci
 
