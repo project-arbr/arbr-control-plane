@@ -37,7 +37,10 @@
     "lint": "eslint server/src",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "test:server:unit": "node --test server/test/unit/*.test.js",
+    "test:server:integration": "node --test server/test/integration/*.test.js",
+    "test:server": "node --test 'server/test/**/*.test.js'"
   },
   "dependencies": {
     "@langchain/anthropic": "^1.5.1",
@@ -56,6 +59,8 @@
     "concurrently": "^10.0.3",
     "eslint": "^10.5.0",
     "globals": "^17.7.0",
+    "mongodb-memory-server": "^11.2.0",
+    "supertest": "^7.2.2",
     "vitepress": "^1.6.4"
   }
 }

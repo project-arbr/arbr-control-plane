@@ -261,3 +261,22 @@ test("asLangChainModel: invoke returns an AIMessage-shaped result; stream yields
   for await (const chunk of model.stream("again")) streamed += chunk.content;
   assert.equal(streamed, OK_RESPONSE.text);
 });
+
+test("chat: passes through cachedReadTokens and cacheWriteTokens in usage", async (t) => {
+  const { baseUrl } = await mockGateway(t, () => ({
+    ...OK_RESPONSE,
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, cachedReadTokens: 3, cacheWriteTokens: 1 },
+  }));
+  const client = createClient({ baseUrl });
+  const res = await client.chat({ messages: [{ role: "user", content: "hi" }] });
+  assert.equal(res.usage.cachedReadTokens, 3);
+  assert.equal(res.usage.cacheWriteTokens, 1);
+});
+
+test("chat: usage without cache fields → cachedReadTokens and cacheWriteTokens are undefined", async (t) => {
+  const { baseUrl } = await mockGateway(t);
+  const client = createClient({ baseUrl });
+  const res = await client.chat({ messages: [{ role: "user", content: "hi" }] });
+  assert.equal(res.usage.cachedReadTokens, undefined);
+  assert.equal(res.usage.cacheWriteTokens, undefined);
+});

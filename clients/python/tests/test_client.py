@@ -304,3 +304,25 @@ def test_as_langchain_model_shapes(gateway):
         assert msg3.content == OK_RESPONSE["text"]
 
     asyncio.run(amain())
+
+
+def test_chat_usage_cache_fields(gateway):
+    gw = gateway(
+        lambda m, p, b, n: (200, {
+            **OK_RESPONSE,
+            "usage": {"inputTokens": 10, "outputTokens": 5, "totalTokens": 15,
+                      "cachedReadTokens": 3, "cacheWriteTokens": 1},
+        }, 0)
+    )
+    karya = create_client(gw.base_url)
+    res = karya.chat(messages=[{"role": "user", "content": "hi"}])
+    assert res.usage.cached_read_tokens == 3
+    assert res.usage.cache_write_tokens == 1
+
+
+def test_chat_usage_cache_fields_absent(gateway):
+    gw = gateway()
+    karya = create_client(gw.base_url)
+    res = karya.chat(messages=[{"role": "user", "content": "hi"}])
+    assert res.usage.cached_read_tokens == 0
+    assert res.usage.cache_write_tokens == 0

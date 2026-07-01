@@ -34,6 +34,7 @@ const { summarizeEvalPairs } = require("../eval/logic");
 const secrets = require("../security/secrets");
 const { config, KNOWN_PROVIDERS } = require("../config");
 const { classifyModelImport, isChatLikelyModelId } = require("../providers/importLogic");
+const { csvCell } = require("../utils/csv");
 
 const router = express.Router();
 
@@ -588,12 +589,6 @@ router.get("/requests/export", async (req, res, next) => {
       "promptTokens", "completionTokens", "totalTokens", "totalCost",
       "latencyMs", "status", "cacheHit", "difficulty", "difficultyScore",
     ];
-    function csvCell(v) {
-      if (v == null) return "";
-      if (v instanceof Date) return v.toISOString();
-      const s = String(v);
-      return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
-    }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="requests.csv"');
     res.write(COLS.join(",") + "\n");
