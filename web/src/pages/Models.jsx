@@ -1001,7 +1001,18 @@ function ProviderSidebar({ allProviders, selected, onSelect, onRefresh }) {
 
   return (
     <aside className="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
-      {/* + Add provider hidden for now */}
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Providers</span>
+        <button onClick={() => setAdding((v) => !v)} className={`${BTN_GHOST} text-xs`}>
+          {adding ? "Cancel" : "+ Add provider"}
+        </button>
+      </div>
+      {adding && (
+        <AddProviderForm
+          onSaved={() => { setAdding(false); onRefresh(); }}
+          onClose={() => setAdding(false)}
+        />
+      )}
 
       <nav className="flex-1 overflow-y-auto py-2">
         {allProviders.map((p) => (
