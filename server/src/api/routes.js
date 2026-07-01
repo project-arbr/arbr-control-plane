@@ -33,7 +33,7 @@ const { invalidateCampaignCache } = require("../eval/shadow");
 const { summarizeEvalPairs } = require("../eval/logic");
 const secrets = require("../security/secrets");
 const { config, KNOWN_PROVIDERS } = require("../config");
-const { classifyModelImport } = require("../providers/importLogic");
+const { classifyModelImport, isChatLikelyModelId } = require("../providers/importLogic");
 
 const router = express.Router();
 
@@ -351,7 +351,12 @@ router.post("/custom-providers/:id/test", async (req, res) => {
     });
     const data = await upstream.json().catch(() => null);
     if (!upstream.ok) {
-      return res.json({ ok: false, message: `upstream ${upstream.status}: ${data?.error?.message || ""}` });
+      // A 404 here almost always means the tested MODEL isn't served (auth/endpoint are fine),
+      // not that the connection is broken — say so, since the tested model may be arbitrary.
+      const hint = upstream.status === 404
+        ? ` — model "${model}" not found on this provider (connection/auth look OK; try a chat model this provider hosts)`
+        : `: ${data?.error?.message || ""}`;
+      return res.json({ ok: false, model, message: `upstream ${upstream.status}${hint}` });
     }
     const reply = data?.choices?.[0]?.message?.content || "";
     res.json({ ok: true, model, sample: reply.slice(0, 60) });
@@ -375,7 +380,7 @@ router.get("/custom-providers/:id/models", async (req, res) => {
     const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
     const models = list.map((m) => (typeof m === "string" ? m : m?.id)).filter(Boolean).map((id) => {
       const known = pricing.getModel(id);
-      return { id, known: !!known, registered: !!known && known.provider === doc.id };
+      return { id, known: !!known, registered: !!known && known.provider === doc.id, chatLikely: isChatLikelyModelId(id) };
     });
     res.json({ ok: true, models });
   } catch (e) {
