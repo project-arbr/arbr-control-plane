@@ -51,38 +51,40 @@ function CreateRuleForm({ models, onCreated }) {
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <div>
-        <div className="label mb-1">When</div>
-        <select className="input" value={field} onChange={(e) => setField(e.target.value)}>
-          <option value="taskType">task type</option>
-          <option value="application">application</option>
-          <option value="workflow">workflow</option>
-        </select>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <div className="label mb-1">When</div>
+          <select className="input" value={field} onChange={(e) => setField(e.target.value)}>
+            <option value="taskType">task type</option>
+            <option value="application">application</option>
+            <option value="workflow">workflow</option>
+          </select>
+        </div>
+        <div>
+          <div className="label mb-1">Equals</div>
+          <input className="input w-44" placeholder="e.g. classification" value={value} onChange={(e) => setValue(e.target.value)} />
+        </div>
+        <div className="flex h-9 items-center px-1 text-sm text-gray-400">→ route to</div>
+        <div>
+          <div className="label mb-1">Provider</div>
+          <select className="input" value={provider} onChange={(e) => setProvider(e.target.value)}>
+            {providers.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <div className="label mb-1">Model</div>
+          <select className="input w-56" value={model} onChange={(e) => setModel(e.target.value)}>
+            {providerModels.map((m) => <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>)}
+          </select>
+        </div>
+        <label className="flex h-9 cursor-pointer items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          Enable now
+        </label>
+        <button className="btn-secondary h-9 px-5" disabled={busy} onClick={submit}>{busy ? "Adding…" : "Add rule"}</button>
       </div>
-      <div>
-        <div className="label mb-1">equals</div>
-        <input className="input w-44" placeholder="e.g. classification" value={value} onChange={(e) => setValue(e.target.value)} />
-      </div>
-      <div className="self-center pb-2 text-gray-400">→ route to</div>
-      <div>
-        <div className="label mb-1">Provider</div>
-        <select className="input" value={provider} onChange={(e) => setProvider(e.target.value)}>
-          {providers.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <div>
-        <div className="label mb-1">Model</div>
-        <select className="input w-56" value={model} onChange={(e) => setModel(e.target.value)}>
-          {providerModels.map((m) => <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>)}
-        </select>
-      </div>
-      <label className="flex items-center gap-2 self-center pb-1 text-sm text-gray-600">
-        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-        enable now
-      </label>
-      <button className="btn-secondary" disabled={busy} onClick={submit}>{busy ? "Adding…" : "Add rule"}</button>
-      {err && <div className="w-full text-xs text-red-600">{err}</div>}
+      {err && <div className="text-xs text-red-600">{err}</div>}
     </div>
   );
 }

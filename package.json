@@ -40,7 +40,7 @@
     "docs:preview": "vitepress preview docs",
     "test:server:unit": "node --test server/test/unit/*.test.js",
     "test:server:integration": "node --test server/test/integration/*.test.js",
-    "test:server": "node --test 'server/test/**/*.test.js'"
+    "test:server": "node --test server/test/unit/*.test.js server/test/integration/*.test.js"
   },
   "dependencies": {
     "@langchain/anthropic": "^1.5.1",

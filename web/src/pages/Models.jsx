@@ -83,7 +83,7 @@ function Field({ label, children }) {
 
 const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-arbr-green-600 focus:outline-none focus:ring-1 focus:ring-arbr-green-600";
 const BTN   = "rounded-md px-3 py-1.5 text-sm font-medium transition-colors";
-const BTN_PRIMARY = `${BTN} bg-arbr-green-600 text-white hover:bg-arbr-green-700`;
+const BTN_PRIMARY = `${BTN} bg-arbr-charcoal text-white hover:bg-arbr-ink`;
 const BTN_GHOST   = `${BTN} border border-gray-300 text-gray-700 hover:bg-gray-50`;
 const BTN_DANGER  = `${BTN} text-red-600 hover:bg-red-50`;
 
