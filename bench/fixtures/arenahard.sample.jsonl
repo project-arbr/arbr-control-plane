@@ -1,0 +1,3 @@
+{"question_id":"ah-1","category":"general","prompt":"Explain what a mutex is and when you would use one, with a concrete example.","reference_answer":"A mutex is a lock."}
+{"question_id":"ah-2","category":"general","prompt":"Write a clear, beginner-friendly explanation of how HTTPS keeps data private, including the role of certificates.","reference_answer":"HTTPS encrypts data."}
+{"question_id":"ah-3","category":"general","prompt":"Summarize the tradeoffs between SQL and NoSQL databases for a small startup, with a recommendation.","reference_answer":"SQL is relational, NoSQL is not. Pick one."}

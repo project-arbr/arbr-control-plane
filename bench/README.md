@@ -24,7 +24,27 @@ RUN_TAG=smoke node bench/runner.js --dataset path/to/livebench.jsonl --limit 20
 node bench/aggregate.js bench/results/livebench-smoke.jsonl
 ```
 
-`npm run smoke:bench` validates the pure logic (cost, scoring, aggregation) with no network.
+## Test it quickly (no dataset download)
+
+- **Pure logic — no network/keys/cost:** `npm run smoke:bench` (cost, scoring, router, aggregation, arena win-mapping).
+- **End-to-end against a real Arbr — tiny cost:** committed sample fixtures exercise the whole pipeline
+  (route → score → cost → curve) without the full datasets:
+
+```sh
+export ARBR_BASE_URL="https://your-arbr-host/v1"  ARBR_API_KEY="ab_…"
+# LiveBench (5 objective items × baselines):
+RUN_TAG=fixt node bench/runner.js --benchmark livebench --dataset bench/fixtures/livebench.sample.jsonl
+node bench/aggregate.js bench/results/livebench-fixt.jsonl
+
+# Arena-Hard (judged → also set a judge model):
+export ARBR_JUDGE_MODEL="gpt-4o"
+RUN_TAG=fixt node bench/runner.js --benchmark arenahard --dataset bench/fixtures/arenahard.sample.jsonl
+node bench/aggregate.js bench/results/arenahard-fixt.jsonl
+```
+
+Expect `arbr-auto` to retain most of `always-premium`'s quality at a fraction of the cost, with a
+per-category line — that confirms routing attribution, scoring, and cost math end to end. Then swap in
+the full LiveBench / Arena-Hard datasets for real numbers.
 
 ## Honesty notes
 - The model pool + prices in `bench/config.js` are disclosed with every result; numbers don't

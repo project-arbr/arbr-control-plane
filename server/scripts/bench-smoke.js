@@ -3,6 +3,7 @@ const { costUsd } = require("../../bench/lib/cost");
 const { summarize } = require("../../bench/lib/summarize");
 const { seededRand } = require("../../bench/lib/router");
 const livebench = require("../../bench/scorers/livebench");
+const arena = require("../../bench/scorers/arenahard");
 
 let pass = 0, fail = 0;
 const eq = (got, exp, msg) => {
@@ -41,6 +42,11 @@ eq(s["arbr-auto"].errors, 1, "arbr error counted");
 approx(s["arbr-auto"].qualityRetainedPct, 50, "arbr retained 50% of premium quality");
 approx(s["arbr-auto"].costPerQuery, 0.015, "arbr cost/query over 4 rows incl error");
 approx(s["always-premium"].costPerQuery, 0.10, "premium cost/query");
+
+// 5. Arena-Hard win mapping (candidate=B vs reference=A): better→win, tie→0.5, worse→0.
+eq(arena.winFromVerdict("better"), 1, "candidate better → win 1");
+eq(arena.winFromVerdict("equal"), 0.5, "tie → 0.5");
+eq(arena.winFromVerdict("worse"), 0, "candidate worse → 0");
 
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

@@ -1,0 +1,5 @@
+{"question_id":"lb-math-1","category":"math","turns":["What is 17 * 23? Put the final answer in \\boxed{}."],"ground_truth":"391"}
+{"question_id":"lb-math-2","category":"math","turns":["Compute the sum of the first 10 positive integers. Put the final answer in \\boxed{}."],"ground_truth":"55"}
+{"question_id":"lb-math-3","category":"math","turns":["Solve 2x + 6 = 10 for x. Put the final answer in \\boxed{}."],"ground_truth":"2"}
+{"question_id":"lb-data-1","category":"data_analysis","turns":["Given the list [3, 1, 4, 1, 5], what is the median? Put the final answer in \\boxed{}."],"ground_truth":"3"}
+{"question_id":"lb-reason-1","category":"reasoning","turns":["All Bloops are Razzies and all Razzies are Lazzies. Are all Bloops Lazzies? End with 'Answer: yes' or 'Answer: no'."],"ground_truth":"yes"}
