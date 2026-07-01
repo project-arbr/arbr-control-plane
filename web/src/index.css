@@ -13,7 +13,7 @@
 
 @layer components {
   .card {
-    @apply bg-white border border-gray-200 rounded-xl shadow-card;
+    @apply bg-white border border-gray-100 rounded-lg shadow-card;
   }
   .btn {
     @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors;
@@ -28,12 +28,15 @@
     @apply btn border border-gray-200 text-arbr-charcoal hover:border-arbr-green-600 hover:bg-arbr-green-50;
   }
   .btn-ghost {
-    @apply btn text-gray-500 hover:bg-arbr-green-50 hover:text-arbr-charcoal;
+    @apply btn text-gray-500 hover:bg-gray-100 hover:text-gray-900;
   }
   .label {
     @apply text-xs font-medium uppercase tracking-wide text-gray-500;
   }
   .input {
-    @apply rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-arbr-green-600 focus:outline-none focus:ring-2 focus:ring-arbr-green-600/15;
+    @apply rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-arbr-green-600 focus:outline-none focus:ring-2 focus:ring-arbr-green-600/15;
+  }
+  .mono {
+    @apply font-mono text-[13px] tracking-tight;
   }
 }

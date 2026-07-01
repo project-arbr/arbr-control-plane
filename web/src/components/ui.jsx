@@ -55,28 +55,28 @@ export function Card({ title, action, children, className = "" }) {
 
 export function Stat({ label, value, sub }) {
   return (
-    <div className="card p-6">
+    <div className="card p-5">
       <div className="label">{label}</div>
-      <div className="mt-2 text-3xl font-bold text-arbr-charcoal">{value}</div>
+      <div className="mt-2 font-mono text-2xl font-bold text-arbr-charcoal">{value}</div>
       {sub && <div className="mt-1 text-sm text-gray-500">{sub}</div>}
     </div>
   );
 }
 
 const BADGE_TONES = {
-  green: "bg-arbr-green-50 text-arbr-green-700 border-arbr-green-200",
+  green:    "bg-arbr-green-50 text-arbr-green-700 border-arbr-green-200",
   charcoal: "bg-gray-100 text-arbr-charcoal border-gray-200",
-  amber: "bg-amber-50 text-amber-700 border-amber-200",
-  indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
-  violet: "bg-violet-50 text-violet-700 border-violet-200",
-  teal: "bg-teal-50 text-teal-700 border-teal-200",
-  red: "bg-red-50 text-red-700 border-red-200",
-  gray: "bg-gray-50 text-gray-500 border-gray-200",
+  amber:    "bg-amber-50 text-amber-700 border-amber-200",
+  indigo:   "bg-indigo-50 text-indigo-700 border-indigo-200",
+  violet:   "bg-violet-50 text-violet-700 border-violet-200",
+  teal:     "bg-teal-50 text-teal-700 border-teal-200",
+  red:      "bg-red-50 text-red-700 border-red-200",
+  gray:     "bg-gray-50 text-gray-500 border-gray-200",
 };
 
 export function Badge({ tone = "gray", children }) {
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${BADGE_TONES[tone] || BADGE_TONES.gray}`}>
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium ${BADGE_TONES[tone] || BADGE_TONES.gray}`}>
       {children}
     </span>
   );
@@ -87,9 +87,9 @@ export function Table({ columns, rows, empty = "No data.", onRowClick }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-left">
+          <tr>
             {columns.map((c) => (
-              <th key={c.key} className="bg-gray-50 px-3 py-2 font-semibold text-arbr-charcoal first:rounded-tl-lg last:rounded-tr-lg">
+              <th key={c.key} className="border-b border-gray-200 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
                 {c.header}
               </th>
             ))}
@@ -97,14 +97,14 @@ export function Table({ columns, rows, empty = "No data.", onRowClick }) {
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-gray-400">{empty}</td></tr>
+            <tr><td colSpan={columns.length} className="px-3 py-10 text-center text-sm text-gray-400">{empty}</td></tr>
           ) : (
             rows.map((row, i) => (
               <tr key={i}
-                className={`border-b border-gray-100 hover:bg-arbr-green-50${onRowClick ? " cursor-pointer" : ""}`}
+                className={`border-b border-gray-100 hover:bg-gray-50${onRowClick ? " cursor-pointer" : ""}`}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}>
                 {columns.map((c) => (
-                  <td key={c.key} className="px-3 py-2 text-gray-700">
+                  <td key={c.key} className="px-3 py-2.5 text-gray-700">
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}
@@ -122,17 +122,22 @@ export function Toggle({ checked, onChange, label }) {
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? "bg-arbr-green-600" : "bg-gray-300"}`}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${checked ? "bg-arbr-green-600" : "bg-gray-300"}`}
       aria-pressed={checked}
       aria-label={label}
     >
-      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
     </button>
   );
 }
 
 export function Spinner() {
-  return <div className="text-sm text-gray-400">Loading…</div>;
+  return (
+    <div className="flex items-center gap-1.5 text-sm text-gray-400">
+      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-gray-300" />
+      Loading…
+    </div>
+  );
 }
 
 export function ConfirmDialog({ title, message, confirmLabel = "Confirm", onConfirm, onCancel }) {
@@ -158,7 +163,7 @@ export function Drawer({ title, onClose, children }) {
         className="h-full w-full max-w-2xl overflow-y-auto border-l border-gray-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
+        <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3">
           <h3 className="text-base font-semibold text-arbr-charcoal">{title}</h3>
           <button className="btn-ghost text-sm" onClick={onClose}>Close</button>
         </div>
@@ -176,14 +181,14 @@ export function CodeBlock({ code, lang }) {
   };
   return (
     <div className="relative">
-      {lang && <span className="absolute left-3 top-2 text-[10px] uppercase tracking-wide text-gray-400">{lang}</span>}
+      {lang && <span className="absolute left-3 top-2 font-mono text-[10px] uppercase tracking-wide text-gray-400">{lang}</span>}
       <button
         onClick={copy}
-        className="absolute right-2 top-2 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-500 hover:border-arbr-green-600 hover:text-arbr-charcoal"
+        className="absolute right-2 top-2 rounded border border-gray-200 bg-white px-2 py-0.5 font-mono text-xs text-gray-500 hover:border-arbr-green-600 hover:text-arbr-charcoal"
       >
         {copied ? "Copied" : "Copy"}
       </button>
-      <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-900 px-4 pb-4 pt-7 text-xs leading-relaxed text-gray-100">
+      <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-900 px-4 pb-4 pt-7 font-mono text-xs leading-relaxed text-gray-100">
         <code>{code}</code>
       </pre>
     </div>

@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// Arbr design system.
+// Arbr design system — developer-tool aesthetic.
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
@@ -7,21 +7,21 @@ export default {
       colors: {
         arbr: {
           green: {
-            50: "#f7fee7",
-            100: "#e5fe96",
-            200: "#d9f99d",
-            300: "#bef264",
-            400: "#a3e635",
-            500: "#84cc16",
-            600: "#698200", // primary
-            700: "#5a7000",
-            800: "#4a5d00",
+            50:  "#f0fdf4",
+            100: "#dcfce7",
+            200: "#bbf7d0",
+            300: "#86efac",
+            400: "#4ade80",
+            500: "#22c55e",
+            600: "#16a34a",
+            700: "#15803d",
+            800: "#166534",
           },
-          charcoal: "#262626",
-          ink: "#1a1a1a",
+          charcoal: "#0f172a",
+          ink:      "#020617",
         },
         gray: {
-          50: "#f9fafb",
+          50:  "#f9fafb",
           100: "#f3f4f6",
           200: "#e5e7eb",
           300: "#d1d5db",
@@ -34,16 +34,18 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
       },
       borderRadius: {
-        lg: "12px",
-        xl: "16px",
+        lg:    "6px",
+        xl:    "10px",
+        "2xl": "14px",
       },
       boxShadow: {
-        card: "0 1px 3px 0 rgb(0 0 0 / 0.1)",
-        hover: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-        menu: "0 4px 20px rgba(0,0,0,0.1)",
+        card:  "0 1px 2px 0 rgb(0 0 0 / 0.05), 0 0 0 1px rgb(0 0 0 / 0.04)",
+        hover: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
+        menu:  "0 8px 24px rgba(0,0,0,0.08)",
       },
     },
   },
