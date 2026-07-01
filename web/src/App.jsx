@@ -9,6 +9,7 @@ import Requests from "./pages/Requests.jsx";
 import Settings from "./pages/Settings.jsx";
 import Docs from "./pages/Docs.jsx";
 import Models from "./pages/Models.jsx";
+import ModelEvals from "./pages/ModelEvals.jsx";
 import Budgets from "./pages/Budgets.jsx";
 import Audit from "./pages/Audit.jsx";
 import Governance from "./pages/Governance.jsx";
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
         <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
         <Route path="/models" element={<Models />} />
+        <Route path="/evals" element={<ModelEvals />} />
         <Route path="/settings" element={<Settings onChange={refreshStatus} />} />
         <Route path="/governance" element={<Governance />} />
         <Route path="/audit" element={<Audit />} />

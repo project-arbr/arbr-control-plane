@@ -12,6 +12,7 @@ const NAV_GROUPS = [
     { to: "/routing",  label: "Routing" },
     { to: "/budgets",  label: "Budgets" },
     { to: "/models",   label: "Models" },
+    { to: "/evals",    label: "Model Evals" },
     { to: "/settings", label: "Settings" },
   ] },
   { section: "Governance", items: [

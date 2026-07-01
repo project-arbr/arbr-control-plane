@@ -139,6 +139,14 @@ export const api = {
   generateAppPolicy: (app, excludeModels = [], goal = "balanced", windowDays) => req(`/app-configs/${encodeURIComponent(app)}/generate-policy`, { method: "POST", body: JSON.stringify({ excludeModels, goal, windowDays }) }),
   simulateAppPolicy: (app, assignments, windowDays) => req(`/app-configs/${encodeURIComponent(app)}/simulate`, { method: "POST", body: JSON.stringify({ assignments, windowDays }) }),
   setAppDefaultPolicy: (app) => req(`/app-configs/${encodeURIComponent(app)}/set-default-policy`, { method: "POST" }),
+
+  // Shadow-eval campaigns
+  evalCampaigns: () => req("/eval/campaigns"),
+  evalCampaign: (id) => req(`/eval/campaigns/${id}`),
+  createEvalCampaign: (body) => req("/eval/campaigns", { method: "POST", body: JSON.stringify(body) }),
+  updateEvalCampaign: (id, body) => req(`/eval/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteEvalCampaign: (id) => req(`/eval/campaigns/${id}`, { method: "DELETE" }),
+  evalCampaignPairs: (id) => req(`/eval/campaigns/${id}/pairs`),
 };
 
 export const fmt = {

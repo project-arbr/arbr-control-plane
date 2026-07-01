@@ -17,6 +17,7 @@ const policyEngine = require("../routing/policy");
 const aiPolicy = require("../routing/aiPolicy");
 const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
+const { maybeShadowEval } = require("../eval/shadow");
 const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
 const ApplicationConfig = require("../models/ApplicationConfig");
@@ -436,6 +437,11 @@ async function handleChat(req, res) {
       routingDecision, cacheHit: false,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
+    });
+    // Shadow-eval: mirror to a candidate model if a campaign is active for this app (self-guarded, non-blocking).
+    maybeShadowEval({
+      application: meta.application, taskType, messages: body.messages, hasTools: false, requestId, router, eff,
+      prod: { model: result.modelId, provider: result.providerId, latencyMs: result.latencyMs, text: result.text, usage: result.usage },
     });
   });
 }

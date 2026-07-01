@@ -27,6 +27,10 @@ const pricing = require("../pricing/registry");
 const ModelEntry = require("../models/ModelEntry");
 const CustomProvider = require("../models/CustomProvider");
 const Settings = require("../models/Settings");
+const EvalCampaign = require("../models/EvalCampaign");
+const EvalPair = require("../models/EvalPair");
+const { invalidateCampaignCache } = require("../eval/shadow");
+const { summarizeEvalPairs } = require("../eval/logic");
 const secrets = require("../security/secrets");
 const { config } = require("../config");
 
@@ -943,6 +947,81 @@ router.post("/app-configs/:app/set-default-policy", async (req, res, next) => {
     await Settings.updateOne({ key: "global" }, { $set: { aiPolicy: cfg.aiPolicyAssignments } }, { upsert: true });
     aiPolicy.invalidate?.();
     setImmediate(() => logAction("appConfig.setDefaultPolicy", "settings", "global", { from: req.params.app }));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// ── Shadow-eval campaigns ─────────────────────────────────────────────────────
+router.get("/eval/campaigns", async (req, res, next) => {
+  try {
+    const campaigns = await EvalCampaign.find().sort({ createdAt: -1 }).lean();
+    const withCounts = await Promise.all(campaigns.map(async (c) => ({
+      ...c, pairCount: await EvalPair.countDocuments({ campaignId: c._id }),
+    })));
+    res.json(withCounts);
+  } catch (e) { next(e); }
+});
+
+router.post("/eval/campaigns", async (req, res, next) => {
+  try {
+    const { application, candidateModel, judgeModel, sampleRate, thresholds, name } = req.body || {};
+    if (!application) return res.status(400).json({ error: "application is required" });
+    if (!candidateModel) return res.status(400).json({ error: "candidateModel is required" });
+    const doc = await EvalCampaign.create({
+      application, candidateModel, name: name || "",
+      judgeModel: judgeModel || null,
+      sampleRate: sampleRate != null ? Math.min(1, Math.max(0, Number(sampleRate))) : 0.1,
+      thresholds: {
+        minPairs: thresholds?.minPairs != null ? Math.max(1, Number(thresholds.minPairs)) : 50,
+        maxLossRate: thresholds?.maxLossRate != null ? Math.min(1, Math.max(0, Number(thresholds.maxLossRate))) : 0.1,
+      },
+    });
+    invalidateCampaignCache();
+    setImmediate(() => logAction("evalCampaign.create", "evalCampaign", String(doc._id), { application, candidateModel }));
+    res.status(201).json(doc);
+  } catch (e) { next(e); }
+});
+
+router.get("/eval/campaigns/:id", async (req, res, next) => {
+  try {
+    const c = await EvalCampaign.findById(req.params.id).lean().catch(() => null);
+    if (!c) return res.status(404).json({ error: "not found" });
+    const pairs = await EvalPair.find({ campaignId: c._id },
+      { prodCost: 1, candidateCost: 1, prodLatencyMs: 1, candidateLatencyMs: 1, verdict: 1 }).lean();
+    res.json({ ...c, summary: summarizeEvalPairs(pairs) });
+  } catch (e) { next(e); }
+});
+
+router.get("/eval/campaigns/:id/pairs", async (req, res, next) => {
+  try {
+    const items = await EvalPair.find({ campaignId: req.params.id }).sort({ timestamp: -1 }).limit(50).lean();
+    res.json({ items });
+  } catch (e) { next(e); }
+});
+
+router.patch("/eval/campaigns/:id", async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const update = {};
+    if (b.status && ["active", "paused", "done"].includes(b.status)) update.status = b.status;
+    if (b.sampleRate != null) update.sampleRate = Math.min(1, Math.max(0, Number(b.sampleRate)));
+    if (b.judgeModel !== undefined) update.judgeModel = b.judgeModel || null;
+    if (b.thresholds) update.thresholds = {
+      minPairs: b.thresholds.minPairs != null ? Math.max(1, Number(b.thresholds.minPairs)) : 50,
+      maxLossRate: b.thresholds.maxLossRate != null ? Math.min(1, Math.max(0, Number(b.thresholds.maxLossRate))) : 0.1,
+    };
+    const c = await EvalCampaign.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).lean();
+    if (!c) return res.status(404).json({ error: "not found" });
+    invalidateCampaignCache();
+    res.json(c);
+  } catch (e) { next(e); }
+});
+
+router.delete("/eval/campaigns/:id", async (req, res, next) => {
+  try {
+    await EvalCampaign.findByIdAndDelete(req.params.id);
+    await EvalPair.deleteMany({ campaignId: req.params.id });
+    invalidateCampaignCache();
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

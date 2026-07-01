@@ -9,6 +9,7 @@ const { resolveRoute, invokeWithFallback, getAppConfig } = require("./handler");
 const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
+const { maybeShadowEval } = require("../eval/shadow");
 const { PROVIDERS } = require("../config");
 const Settings = require("../models/Settings");
 
@@ -155,7 +156,7 @@ function translateToolCalls(toolCalls) {
 async function proxyOpenAICompat(ctx) {
   const {
     res, body, served, modelRequested, meta, requestId, timestamp,
-    taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, eff, baseURL,
+    taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, eff, router, baseURL,
   } = ctx;
 
   const apiKey = eff.providers[served.provider]?.credential?.apiKey || "none";
@@ -209,6 +210,12 @@ async function proxyOpenAICompat(ctx) {
       cachedReadTokens: (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0,
       responseText: data.choices?.[0]?.message?.content || null,
       latencyMs, status: "success",
+    });
+    maybeShadowEval({
+      application: meta.application, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
+      requestId, router, eff,
+      prod: { model: served.model, provider: served.provider, latencyMs, text: data.choices?.[0]?.message?.content || "",
+              usage: { inputTokens: u.prompt_tokens || 0, outputTokens: u.completion_tokens || 0 } },
     });
     return;
   }
@@ -415,7 +422,7 @@ async function handleOpenAICompat(req, res) {
       routing: routingDecision, taskType });
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,
-      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, eff, baseURL: compatBaseURL,
+      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, eff, router, baseURL: compatBaseURL,
     });
   }
 
@@ -701,7 +708,7 @@ async function handleOpenAICompat(req, res) {
     },
   });
 
-  setImmediate(() =>
+  setImmediate(() => {
     logger.write({
       requestId, timestamp, ...meta,
       provider: result.providerId, model: result.modelId, modelRequested,
@@ -714,8 +721,13 @@ async function handleOpenAICompat(req, res) {
       latencyMs: result.latencyMs, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
-    })
-  );
+    });
+    maybeShadowEval({
+      application: meta.application, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
+      requestId, router, eff,
+      prod: { model: result.modelId, provider: result.providerId, latencyMs: result.latencyMs, text: result.text, usage: result.usage },
+    });
+  });
 }
 
 module.exports = { handleOpenAICompat };
