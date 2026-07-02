@@ -1,0 +1,13 @@
+# Image-based deploy overlay — run the prebuilt, CI-published GHCR image instead of
+# building on the prod host. Used by ops/deploy.sh, composed after the base + gcp overlay:
+#
+#   ARBR_IMAGE_TAG=sha-abc123 docker compose \
+#     -f docker-compose.yml -f docker-compose.gcp.yml -f docker-compose.deploy.yml \
+#     pull app && ... up -d --no-build app
+#
+# The image only exists for a commit if CI (test+lint+build) passed for it, so pulling a
+# tag is inherently gated. ARBR_IMAGE_TAG defaults to the latest green main.
+services:
+  app:
+    image: ghcr.io/project-arbr/arbr-control-plane:${ARBR_IMAGE_TAG:-main}
+    pull_policy: always

@@ -56,3 +56,41 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
         working-directory: clients/python
+
+  # Publish a SHA-pinned image ONLY after the full test/lint/build gate passes on main.
+  # An image existing for a commit therefore means "CI green" — that is the deploy gate
+  # consumed by ops/deploy.sh. Nothing is deployed here; deploys stay manually triggered.
+  publish-image:
+    name: Publish image (green main)
+    runs-on: ubuntu-latest
+    needs: [build, python-sdk]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/project-arbr/arbr-control-plane
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=main
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

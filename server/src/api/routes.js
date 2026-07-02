@@ -77,15 +77,19 @@ router.get("/status", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get("/about", (_req, res) => {
-  const pkg = require("../../package.json");
-  res.json({
-    version: pkg.version,
-    name: pkg.name,
-    sdkJs: "0.2.0",
-    sdkPython: "0.2.0",
-    nodeVersion: process.version,
-  });
+router.get("/about", async (_req, res, next) => {
+  try {
+    const pkg = require("../../package.json");
+    const s = await Settings.get().catch(() => null);
+    res.json({
+      version: pkg.version,
+      name: pkg.name,
+      sdkJs: "0.2.0",
+      sdkPython: "0.2.0",
+      nodeVersion: process.version,
+      modelSeedVersion: s?.modelSeedVersion ?? null, // ops/deploy.sh uses this to detect a re-seed
+    });
+  } catch (e) { next(e); }
 });
 
 // ── cost caps (budgets) ──

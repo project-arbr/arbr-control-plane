@@ -143,15 +143,35 @@ docker compose logs -f app
 # Restart the app container
 docker compose restart app
 
-# Update to a new version
-git pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml build app
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d app
-
 # Backup MongoDB
 docker compose exec mongo mongodump --out /tmp/backup
 docker cp $(docker compose ps -q mongo):/tmp/backup ./backup-$(date +%F)
 ```
+
+## Deploying a new version (gated, image-based)
+
+Deploys are **manually triggered** but gated and rollback-safe. CI builds and pushes a
+`ghcr.io/project-arbr/arbr-control-plane:sha-<short>` (and `:main`) image **only after** the
+full test/lint/build suite passes on `main` — so an image existing for a commit means it's
+green. `ops/deploy.sh` pulls that prebuilt image (no build on the prod host), health-checks,
+and auto-rolls-back on failure.
+
+```sh
+cd ~/arbr-ai-control-plane
+bash ops/deploy.sh            # deploy the latest green main
+bash ops/deploy.sh sha-1a2b3c4   # or pin to a specific commit / a vX.Y.Z tag
+```
+
+What it does: verifies the image exists (the green gate) → records the current tag →
+pulls + `up -d` the new image → polls `/health` for ~60s → **rolls back to the previous tag
+if unhealthy** → re-runs the LiteLLM model sync if the seed version changed (keeps pricing
+intact) → posts a success/rollback note to the governance webhook.
+
+> The old build-on-VM path (`git pull && docker compose build app && up -d app`) is
+> deprecated — it built on the prod host and had no rollback. Use `ops/deploy.sh`.
+>
+> Note: this still causes a brief container-recreate blip (no blue-green yet), and it is not
+> auto-triggered on merge — a human runs the command.
 
 ## Production checklist
 
