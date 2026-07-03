@@ -91,6 +91,9 @@ async function middleware(req, res, next) {
       if (!doc) {
         return res.status(401).json({ error: "invalid_api_key", message: "Unknown, disabled, or revoked API key." });
       }
+      if (doc.expiresAt && doc.expiresAt < new Date()) {
+        return res.status(401).json({ error: "expired_api_key", message: `API key "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.` });
+      }
       if (overRpmLimit(doc.keyHash, doc.rpm)) {
         return res.status(429).json({
           error: "rate_limited",
