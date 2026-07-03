@@ -83,6 +83,16 @@ const settingsSchema = new mongoose.Schema(
     // When true, PII patterns (built-in + custom) are redacted from the response text sent to callers,
     // not just from stored logs.
     maskPiiInResponses: { type: Boolean, default: false },
+    // Prompt injection detection: blocks requests whose user/tool messages match known injection patterns.
+    promptInjectionDetectionEnabled: { type: Boolean, default: false },
+    promptInjectionRules: {
+      type: [{
+        name:        String,
+        pattern:     String,
+        application: { type: String, default: "*" },
+      }],
+      default: [],
+    },
   },
   { collection: "settings" }
 );
