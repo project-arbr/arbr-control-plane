@@ -13,7 +13,6 @@ const { maybeShadowEval } = require("../eval/shadow");
 const { PROVIDERS } = require("../config");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
-const promptInjection = require("./promptInjection");
 
 // Set standard gateway tracing headers. Called before res.json() / res.flushHeaders()
 // so clients always see which model, provider, and routing decision served the request.
@@ -322,14 +321,6 @@ async function handleOpenAICompat(req, res) {
     body.max_tokens = settings.maxTokensGuardrail;
   }
 
-  // Prompt injection detection — checked before routing/invoke, always returns JSON.
-  if (settings.promptInjectionDetectionEnabled) {
-    const injApp = req.apiKey?.application || "openai-compat";
-    const { blocked, ruleName } = promptInjection.check(body.messages, settings.promptInjectionRules, injApp);
-    if (blocked) {
-      return res.status(400).json({ error: { message: "Request blocked: potential prompt injection detected.", type: "invalid_request_error", code: "prompt_injection_detected", rule: ruleName } });
-    }
-  }
 
   const { router, eff } = await getRouter();
   if (!router) return res.status(503).json(DEMO_503);

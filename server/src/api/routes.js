@@ -924,8 +924,6 @@ function governanceView(s) {
     outputGuardrailsEnabled: s.outputGuardrailsEnabled ?? false,
     outputGuardrailRules:    s.outputGuardrailRules || [],
     maskPiiInResponses:      s.maskPiiInResponses ?? false,
-    promptInjectionDetectionEnabled: s.promptInjectionDetectionEnabled ?? false,
-    promptInjectionRules:    s.promptInjectionRules || [],
   };
 }
 
@@ -971,10 +969,6 @@ router.patch("/governance", async (req, res, next) => {
       update.outputGuardrailRules = body.outputGuardrailRules.filter(r => r.pattern);
     if ("maskPiiInResponses" in body)
       update.maskPiiInResponses = !!body.maskPiiInResponses;
-    if ("promptInjectionDetectionEnabled" in body)
-      update.promptInjectionDetectionEnabled = !!body.promptInjectionDetectionEnabled;
-    if (Array.isArray(body.promptInjectionRules))
-      update.promptInjectionRules = body.promptInjectionRules.filter(r => r.pattern);
 
     await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
     const s = await Settings.get();
