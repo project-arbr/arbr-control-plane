@@ -19,6 +19,7 @@ const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
 const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
+const semanticCache   = require("../routing/semanticCache");
 const { maybeShadowEval } = require("../eval/shadow");
 const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
@@ -398,6 +399,56 @@ async function handleChat(req, res) {
     }
   }
 
+  // Semantic cache — embedding similarity match (async; requires OpenAI key).
+  // Only reached on exact-match miss so it never adds latency to cache hits.
+  if (settings.semanticCacheEnabled) {
+    const semCached = await semanticCache.get(body.messages, settings.semanticCacheThreshold, settings.semanticCacheTtlMinutes).catch(() => null);
+    if (semCached) {
+      if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+        const { blocked, ruleName } = outputGuardrail.check(semCached.text, settings.outputGuardrailRules, meta.application);
+        if (blocked) {
+          setImmediate(() =>
+            logger.write({
+              requestId, timestamp, ...meta,
+              provider: semCached.provider, model: semCached.model, modelRequested,
+              taskType, classifiedBy, latencyMs: 0,
+              status: "blocked", routingDecision: "semantic_cache", cacheHit: true,
+              errorMessage: `guardrail_violation: ${ruleName}`,
+            })
+          );
+          return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
+        }
+      }
+      const semDeliveryText = settings.maskPiiInResponses
+        ? outputGuardrail.maskPii(semCached.text, settings.customPiiPatterns) : semCached.text;
+      res.set({
+        "X-Arbr-Request-ID": requestId,
+        "X-Arbr-Model":      semCached.model,
+        "X-Arbr-Provider":   semCached.provider,
+        "X-Arbr-Routing":    "semantic_cache",
+        "X-Arbr-Task-Type":  taskType || "",
+      }).json({
+        requestId, model: semCached.model, modelRequested, provider: semCached.provider,
+        routingDecision: "semantic_cache", classifiedBy, cacheHit: true,
+        text: semDeliveryText, usage: semCached.usage,
+      });
+      setImmediate(() =>
+        logger.write({
+          requestId, timestamp, ...meta,
+          provider: semCached.provider, model: semCached.model, modelRequested,
+          taskType, classifiedBy, difficulty, difficultyScore, confidence,
+          promptTokens: semCached.usage?.inputTokens || 0,
+          completionTokens: semCached.usage?.outputTokens || 0,
+          totalTokens: semCached.usage?.totalTokens || 0,
+          latencyMs: 0, status: "success",
+          routingDecision: "semantic_cache", cacheHit: true, routingExplain: explain,
+          messages: body.messages, responseText: semCached.text,
+        })
+      );
+      return;
+    }
+  }
+
   // 3 · INVOKE — provider call, fallback on failure.
   let invocation;
   try {
@@ -474,12 +525,11 @@ async function handleChat(req, res) {
 
   // 5 · AFTER THE RESPONSE — cache + log (cost computed in the logger).
   setImmediate(() => {
-    responseCache.set(served.model, body.messages, {
-      model: result.modelId,
-      provider: result.providerId,
-      text: deliveryText,   // cache the delivered (possibly PII-masked) text
-      usage: result.usage,
-    });
+    const cacheValue = { model: result.modelId, provider: result.providerId, text: deliveryText, usage: result.usage };
+    responseCache.set(served.model, body.messages, cacheValue);
+    if (settings.semanticCacheEnabled) {
+      semanticCache.set(body.messages, cacheValue, settings.semanticCacheTtlMinutes).catch(() => {});
+    }
     logger.write({
       requestId, timestamp, ...meta,
       provider: result.providerId, model: result.modelId, modelRequested,
