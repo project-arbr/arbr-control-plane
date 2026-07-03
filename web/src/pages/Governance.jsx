@@ -190,165 +190,6 @@ function OutputGuardrailsCard({ gov, setGov, save, saving, ok, err }) {
   );
 }
 
-// ── Prompt Injection Detection card ───────────────────────────────────────────
-
-const BUILTIN_INJECTION_RULES = [
-  "ignore-instructions",
-  "disregard-instructions",
-  "forget-instructions",
-  "dan-jailbreak",
-  "model-token-injection",
-  "override-guardrails",
-];
-
-function PromptInjectionCard({ gov, setGov, save, saving, ok, err }) {
-  const [apps, setApps]             = useState([]);
-  const [newName, setNewName]       = useState("");
-  const [newPattern, setNewPattern] = useState("");
-  const [newApp, setNewApp]         = useState("*");
-  const [patternErr, setPatternErr] = useState("");
-
-  useEffect(() => {
-    api.facets().then((f) => setApps(f.applications || [])).catch(() => {});
-  }, []);
-
-  function validatePattern(val) {
-    try { new RegExp(val); setPatternErr(""); return true; }
-    catch { setPatternErr("Invalid regular expression"); return false; }
-  }
-
-  function addRule() {
-    if (!newPattern) return;
-    if (!validatePattern(newPattern)) return;
-    setGov({
-      ...gov,
-      promptInjectionRules: [
-        ...(gov.promptInjectionRules || []),
-        { name: newName || newPattern, pattern: newPattern, application: newApp || "*" },
-      ],
-    });
-    setNewName(""); setNewPattern(""); setNewApp("*"); setPatternErr("");
-  }
-
-  function updateRule(i, field, value) {
-    const updated = [...gov.promptInjectionRules];
-    updated[i] = { ...updated[i], [field]: value };
-    setGov({ ...gov, promptInjectionRules: updated });
-  }
-
-  function removeRule(i) {
-    setGov({ ...gov, promptInjectionRules: gov.promptInjectionRules.filter((_, j) => j !== i) });
-  }
-
-  const AppSelect = ({ value, onChange }) => (
-    <select className="input w-40 text-xs" value={value || "*"} onChange={(e) => onChange(e.target.value)}>
-      <option value="*">All applications</option>
-      {apps.map((a) => <option key={a} value={a}>{a}</option>)}
-    </select>
-  );
-
-  return (
-    <Card title="Prompt Injection Detection">
-      <div className="divide-y divide-gray-100">
-        <SettingRow
-          label="Block requests containing injection patterns"
-          sub="User and tool messages are checked before reaching the model. Fires a 400 prompt_injection_detected error. System prompts are trusted and not checked."
-        >
-          <Toggle
-            checked={!!gov.promptInjectionDetectionEnabled}
-            onChange={(v) => setGov({ ...gov, promptInjectionDetectionEnabled: v })}
-            label="prompt injection detection"
-          />
-        </SettingRow>
-
-        <div className="py-3">
-          <div className="label mb-2">Built-in patterns (always active when enabled)</div>
-          <div className="flex flex-wrap gap-1.5">
-            {BUILTIN_INJECTION_RULES.map((r) => (
-              <Badge key={r} tone="charcoal">{r}</Badge>
-            ))}
-          </div>
-        </div>
-
-        <div className="py-3">
-          <div className="label mb-2">Custom rules</div>
-          {(gov.promptInjectionRules || []).length === 0 && (
-            <p className="mb-2 text-xs text-gray-400">No custom rules yet. Add a keyword or regex pattern below.</p>
-          )}
-
-          {(gov.promptInjectionRules || []).length > 0 && (
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-gray-400">
-              <span className="w-32">Name</span>
-              <span className="flex-1">Pattern / keyword</span>
-              <span className="w-40">Application</span>
-              <span className="w-14" />
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {(gov.promptInjectionRules || []).map((r, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input
-                  className="input w-32 text-xs"
-                  placeholder="Rule name"
-                  value={r.name || ""}
-                  onChange={(e) => updateRule(i, "name", e.target.value)}
-                />
-                <input
-                  className="input flex-1 font-mono text-xs"
-                  placeholder="keyword or regex"
-                  value={r.pattern || ""}
-                  onChange={(e) => updateRule(i, "pattern", e.target.value)}
-                />
-                <AppSelect value={r.application} onChange={(v) => updateRule(i, "application", v)} />
-                <button
-                  type="button"
-                  className="btn-ghost text-xs text-red-500 hover:text-red-700 w-14"
-                  onClick={() => removeRule(i)}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-
-            <div className="flex items-start gap-2 pt-2 border-t border-gray-100">
-              <input
-                className="input w-32 text-xs"
-                placeholder="Rule name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-              <div className="w-48 shrink">
-                <input
-                  className={`input w-full font-mono text-xs ${patternErr ? "border-red-400" : ""}`}
-                  placeholder="keyword or regex"
-                  value={newPattern}
-                  onChange={(e) => { setNewPattern(e.target.value); if (patternErr) validatePattern(e.target.value); }}
-                />
-                {patternErr && <div className="mt-0.5 text-xs text-red-500">{patternErr}</div>}
-              </div>
-              <AppSelect value={newApp} onChange={setNewApp} />
-              <button
-                type="button"
-                className="btn-outline text-xs shrink-0 whitespace-nowrap px-3"
-                onClick={addRule}
-                disabled={!newPattern}
-              >
-                + Add
-              </button>
-            </div>
-          </div>
-          <div className="mt-2 text-xs text-gray-400">
-            Custom rules are checked after built-in patterns. Plain keywords and JavaScript-compatible regular expressions are supported.
-          </div>
-        </div>
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); save({ promptInjectionDetectionEnabled: gov.promptInjectionDetectionEnabled, promptInjectionRules: gov.promptInjectionRules }); }}>
-        <SaveRow saving={saving} ok={ok} err={err} />
-      </form>
-    </Card>
-  );
-}
 
 function GuardrailsTab({ gov, setGov, save, saving, ok, err }) {
   const isKilled = !!gov.maintenanceMode?.enabled;
@@ -541,12 +382,6 @@ function GuardrailsTab({ gov, setGov, save, saving, ok, err }) {
         saving={saving.output} ok={ok.output} err={err.output}
       />
 
-      {/* Prompt Injection Detection */}
-      <PromptInjectionCard
-        gov={gov} setGov={setGov}
-        save={save("injection")}
-        saving={saving.injection} ok={ok.injection} err={err.injection}
-      />
     </div>
   );
 }
@@ -909,9 +744,9 @@ export default function Governance() {
             <GuardrailsTab
               gov={gov} setGov={setGov}
               save={saveFor}
-              saving={{ kill: saving.kill, limits: saving.limits, privacy: saving.privacy, output: saving.output, injection: saving.injection }}
-              ok={{ kill: ok.kill, limits: ok.limits, privacy: ok.privacy, output: ok.output, injection: ok.injection }}
-              err={{ kill: err.kill, limits: err.limits, privacy: err.privacy, output: err.output, injection: err.injection }}
+              saving={{ kill: saving.kill, limits: saving.limits, privacy: saving.privacy, output: saving.output }}
+              ok={{ kill: ok.kill, limits: ok.limits, privacy: ok.privacy, output: ok.output }}
+              err={{ kill: err.kill, limits: err.limits, privacy: err.privacy, output: err.output }}
             />
           )}
           {tab === "observability" && (
