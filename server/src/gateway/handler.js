@@ -17,6 +17,7 @@ const policyEngine = require("../routing/policy");
 const aiPolicy = require("../routing/aiPolicy");
 const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
+const outputGuardrail = require("./outputGuardrail");
 const { maybeShadowEval } = require("../eval/shadow");
 const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
@@ -334,6 +335,25 @@ async function handleChat(req, res) {
   {
     const cached = responseCache.get(served.model, body.messages);
     if (cached) {
+      // Apply output guardrails to cached responses too.
+      if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+        const { blocked, ruleName } = outputGuardrail.check(cached.text, settings.outputGuardrailRules, meta.application);
+        if (blocked) {
+          setImmediate(() =>
+            logger.write({
+              requestId, timestamp, ...meta,
+              provider: cached.provider, model: cached.model, modelRequested,
+              taskType, classifiedBy, latencyMs: 0,
+              status: "blocked", routingDecision: "cache", cacheHit: true,
+              errorMessage: `guardrail_violation: ${ruleName}`,
+            })
+          );
+          return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
+        }
+      }
+      const cachedDeliveryText = settings.maskPiiInResponses
+        ? outputGuardrail.maskPii(cached.text, settings.customPiiPatterns)
+        : cached.text;
       res.set({
         "X-Arbr-Request-ID": requestId,
         "X-Arbr-Model":      cached.model,
@@ -348,7 +368,7 @@ async function handleChat(req, res) {
         routingDecision: "cache",
         classifiedBy,
         cacheHit: true,
-        text: cached.text,
+        text: cachedDeliveryText,
         usage: cached.usage,
       });
       setImmediate(() =>
@@ -397,6 +417,32 @@ async function handleChat(req, res) {
     explain.override = { type: "fallback", from: served.model, to: result.modelId };
   }
 
+  // Output guardrail — deny-list checked before sending response to caller.
+  if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+    const { blocked, ruleName } = outputGuardrail.check(result.text, settings.outputGuardrailRules, meta.application);
+    if (blocked) {
+      setImmediate(() =>
+        logger.write({
+          requestId, timestamp, ...meta,
+          provider: result.providerId, model: result.modelId, modelRequested,
+          taskType, classifiedBy, latencyMs: result.latencyMs,
+          status: "blocked", routingDecision, cacheHit: false,
+          errorMessage: `guardrail_violation: ${ruleName}`,
+        })
+      );
+      return res.status(422).json({
+        error: "guardrail_violation",
+        message: "Response blocked by content policy.",
+        rule: ruleName,
+      });
+    }
+  }
+
+  // PII live masking: redact PII from the text delivered to the caller (response + cache entry).
+  const deliveryText = settings.maskPiiInResponses
+    ? outputGuardrail.maskPii(result.text, settings.customPiiPatterns)
+    : result.text;
+
   // 4 · RETURN — response on its way back immediately.
   res.set({
     "X-Arbr-Request-ID": requestId,
@@ -412,7 +458,7 @@ async function handleChat(req, res) {
     routingDecision,
     classifiedBy,
     cacheHit: false,
-    text: result.text,
+    text: deliveryText,
     usage: result.usage,
   });
 
@@ -421,7 +467,7 @@ async function handleChat(req, res) {
     responseCache.set(served.model, body.messages, {
       model: result.modelId,
       provider: result.providerId,
-      text: result.text,
+      text: deliveryText,   // cache the delivered (possibly PII-masked) text
       usage: result.usage,
     });
     logger.write({
