@@ -890,6 +890,9 @@ function governanceView(s) {
     retentionDays:           s.retentionDays ?? 90,
     alertErrorRateEnabled:   s.alertErrorRateEnabled ?? false,
     alertErrorRateThreshold: s.alertErrorRateThreshold ?? 5,
+    outputGuardrailsEnabled: s.outputGuardrailsEnabled ?? false,
+    outputGuardrailRules:    s.outputGuardrailRules || [],
+    maskPiiInResponses:      s.maskPiiInResponses ?? false,
   };
 }
 
@@ -929,6 +932,12 @@ router.patch("/governance", async (req, res, next) => {
       update.alertErrorRateEnabled = !!body.alertErrorRateEnabled;
     if ("alertErrorRateThreshold" in body)
       update.alertErrorRateThreshold = Math.min(100, Math.max(0, Number(body.alertErrorRateThreshold) || 5));
+    if ("outputGuardrailsEnabled" in body)
+      update.outputGuardrailsEnabled = !!body.outputGuardrailsEnabled;
+    if (Array.isArray(body.outputGuardrailRules))
+      update.outputGuardrailRules = body.outputGuardrailRules.filter(r => r.pattern);
+    if ("maskPiiInResponses" in body)
+      update.maskPiiInResponses = !!body.maskPiiInResponses;
 
     await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
     const s = await Settings.get();

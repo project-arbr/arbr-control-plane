@@ -12,6 +12,7 @@ const logger = require("../logging/logger");
 const { maybeShadowEval } = require("../eval/shadow");
 const { PROVIDERS } = require("../config");
 const Settings = require("../models/Settings");
+const outputGuardrail = require("./outputGuardrail");
 
 // Set standard gateway tracing headers. Called before res.json() / res.flushHeaders()
 // so clients always see which model, provider, and routing decision served the request.
@@ -157,6 +158,7 @@ async function proxyOpenAICompat(ctx) {
   const {
     res, body, served, modelRequested, meta, requestId, timestamp,
     taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, eff, router, baseURL,
+    settings,
   } = ctx;
 
   const apiKey = eff.providers[served.provider]?.credential?.apiKey || "none";
@@ -201,7 +203,20 @@ async function proxyOpenAICompat(ctx) {
         .status(upstream.status || 502)
         .json(data || { error: { message: "Upstream error", type: "server_error" } });
     }
-    res.status(upstream.status).json(data);
+    const responseContent = data.choices?.[0]?.message?.content || "";
+    if (settings?.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+      const { blocked, ruleName } = outputGuardrail.check(responseContent, settings.outputGuardrailRules, meta.application);
+      if (blocked) {
+        logRecord({ latencyMs, status: "blocked", errorMessage: `guardrail_violation: ${ruleName}` });
+        return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
+      }
+    }
+    const deliveryContent = (settings?.maskPiiInResponses && responseContent)
+      ? outputGuardrail.maskPii(responseContent, settings.customPiiPatterns) : responseContent;
+    const deliveryData = deliveryContent !== responseContent
+      ? { ...data, choices: data.choices.map((c, i) => i === 0 ? { ...c, message: { ...c.message, content: deliveryContent } } : c) }
+      : data;
+    res.status(upstream.status).json(deliveryData);
     const u = data.usage || {};
     logRecord({
       promptTokens: u.prompt_tokens || 0,
@@ -221,6 +236,8 @@ async function proxyOpenAICompat(ctx) {
   }
 
   // — Streaming: pipe the upstream SSE through unchanged, parsing usage as it passes ——
+  // Output guardrails are not applied here — bytes are piped in real-time and buffering
+  // the full response would defeat streaming. Non-streaming calls above are fully guarded.
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -423,6 +440,7 @@ async function handleOpenAICompat(req, res) {
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,
       taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, eff, router, baseURL: compatBaseURL,
+      settings,
     });
   }
 
@@ -491,12 +509,29 @@ async function handleOpenAICompat(req, res) {
           // Text path: model chose to answer without using a tool. Emit content so the
           // client doesn't assemble null + "" → empty bubble.
           const text = chunkText(aiMsg);
+          if (text && settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+            const { blocked, ruleName } = outputGuardrail.check(text, settings.outputGuardrailRules, meta.application);
+            if (blocked) {
+              setImmediate(() => logger.write({
+                requestId, timestamp, ...meta,
+                provider: served.provider, model: served.model, modelRequested,
+                taskType, classifiedBy, latencyMs: Date.now() - start,
+                status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+                errorMessage: `guardrail_violation: ${ruleName}`,
+              }));
+              res.write(`data: ${JSON.stringify({ error: { message: "Response blocked by content policy.", code: "guardrail_violation", rule: ruleName } })}\n\n`);
+              res.write("data: [DONE]\n\n");
+              return res.end();
+            }
+          }
+          const deliveryText = (text && settings.maskPiiInResponses)
+            ? outputGuardrail.maskPii(text, settings.customPiiPatterns) : text;
           res.write(`data: ${JSON.stringify({
             ...base, choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
           })}\n\n`);
-          if (text) {
+          if (deliveryText) {
             res.write(`data: ${JSON.stringify({
-              ...base, choices: [{ index: 0, delta: { content: text }, finish_reason: null }],
+              ...base, choices: [{ index: 0, delta: { content: deliveryText }, finish_reason: null }],
             })}\n\n`);
           }
         }
@@ -513,6 +548,22 @@ async function handleOpenAICompat(req, res) {
       } else {
         setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
           routing: routingDecision, taskType });
+        const rawContent = toolCalls?.length ? null : chunkText(aiMsg);
+        if (rawContent && settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+          const { blocked, ruleName } = outputGuardrail.check(rawContent, settings.outputGuardrailRules, meta.application);
+          if (blocked) {
+            setImmediate(() => logger.write({
+              requestId, timestamp, ...meta,
+              provider: served.provider, model: served.model, modelRequested,
+              taskType, classifiedBy, latencyMs: Date.now() - start,
+              status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+              errorMessage: `guardrail_violation: ${ruleName}`,
+            }));
+            return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
+          }
+        }
+        const deliveryContent = (rawContent && settings.maskPiiInResponses)
+          ? outputGuardrail.maskPii(rawContent, settings.customPiiPatterns) : rawContent;
         res.json({
           id: `chatcmpl-${requestId}`,
           object: "chat.completion",
@@ -521,7 +572,7 @@ async function handleOpenAICompat(req, res) {
             index: 0,
             message: {
               role: "assistant",
-              content: toolCalls?.length ? null : chunkText(aiMsg),
+              content: deliveryContent,
               tool_calls: toolCalls,
             },
             finish_reason: finishReason,
@@ -620,6 +671,25 @@ async function handleOpenAICompat(req, res) {
     const cachedReadTokens = result.usage?.cachedReadTokens || 0;
     const cacheWriteTokens = result.usage?.cacheWriteTokens || 0;
 
+    // Output guardrail — full text is available before any SSE chunk is written.
+    if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+      const { blocked, ruleName } = outputGuardrail.check(result.text, settings.outputGuardrailRules, meta.application);
+      if (blocked) {
+        setImmediate(() => logger.write({
+          requestId, timestamp, ...meta,
+          provider: result.providerId, model: result.modelId, modelRequested,
+          taskType, classifiedBy, latencyMs: Date.now() - start,
+          status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+          errorMessage: `guardrail_violation: ${ruleName}`,
+        }));
+        res.write(`data: ${JSON.stringify({ error: { message: "Response blocked by content policy.", code: "guardrail_violation", rule: ruleName } })}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+    }
+    const sseDeliveryText = settings.maskPiiInResponses
+      ? outputGuardrail.maskPii(result.text, settings.customPiiPatterns) : result.text;
+
     // Role delta on the first chunk (OpenAI protocol).
     res.write(`data: ${JSON.stringify({
       id: `chatcmpl-${requestId}`,
@@ -633,7 +703,7 @@ async function handleOpenAICompat(req, res) {
       id: `chatcmpl-${requestId}`,
       object: "chat.completion.chunk",
       model: result.modelId,
-      choices: [{ index: 0, delta: { content: result.text }, finish_reason: null }],
+      choices: [{ index: 0, delta: { content: sseDeliveryText }, finish_reason: null }],
     })}\n\n`);
 
     // Terminal chunk with usage.
@@ -692,13 +762,29 @@ async function handleOpenAICompat(req, res) {
   const { result, usedFallback } = invocation;
   if (usedFallback) { routingDecision = "fallback"; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
 
+  if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
+    const { blocked, ruleName } = outputGuardrail.check(result.text, settings.outputGuardrailRules, meta.application);
+    if (blocked) {
+      setImmediate(() => logger.write({
+        requestId, timestamp, ...meta,
+        provider: result.providerId, model: result.modelId, modelRequested,
+        taskType, classifiedBy, latencyMs: result.latencyMs,
+        status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+        errorMessage: `guardrail_violation: ${ruleName}`,
+      }));
+      return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
+    }
+  }
+  const nsDeliveryText = settings.maskPiiInResponses
+    ? outputGuardrail.maskPii(result.text, settings.customPiiPatterns) : result.text;
+
   res.json({
     id: `chatcmpl-${requestId}`,
     object: "chat.completion",
     model: result.modelId,
     choices: [{
       index: 0,
-      message: { role: "assistant", content: result.text },
+      message: { role: "assistant", content: nsDeliveryText },
       finish_reason: result.finishReason || "stop",
     }],
     usage: {
