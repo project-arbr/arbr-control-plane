@@ -993,7 +993,7 @@ router.patch("/governance", async (req, res, next) => {
     if ("semanticCacheEnabled" in body)
       update.semanticCacheEnabled = !!body.semanticCacheEnabled;
     if ("semanticCacheThreshold" in body)
-      update.semanticCacheThreshold = Math.min(1, Math.max(0, Number(body.semanticCacheThreshold) || 0.92));
+      update.semanticCacheThreshold = Math.min(1, Math.max(0, Number(body.semanticCacheThreshold) || 0.90));
     if ("semanticCacheTtlMinutes" in body)
       update.semanticCacheTtlMinutes = Math.max(1, Number(body.semanticCacheTtlMinutes) || 60);
 

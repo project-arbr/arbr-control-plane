@@ -18,6 +18,7 @@ const HEADERS = {
 };
 
 // Two semantically similar requests — same intent, different wording.
+// Measured similarity with text-embedding-3-small (256-dim): ~0.91
 const REQUEST_1 = {
   messages: [{ role: "user", content: "What is the capital city of France?" }],
   application: "semantic-cache-smoke",

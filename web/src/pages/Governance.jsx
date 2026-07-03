@@ -864,10 +864,10 @@ function SemanticCacheCard({ gov, setGov, save, saving, ok, err }) {
                 min="0.5"
                 max="1"
                 step="0.01"
-                value={gov.semanticCacheThreshold ?? 0.92}
+                value={gov.semanticCacheThreshold ?? 0.90}
                 onChange={(e) => setGov({ ...gov, semanticCacheThreshold: Number(e.target.value) })}
               />
-              <span className="text-sm text-gray-400">0–1  ·  0.92 recommended  ·  higher = stricter matching</span>
+              <span className="text-sm text-gray-400">0–1  ·  0.90 recommended  ·  higher = stricter matching</span>
             </div>
           </div>
           <div>
