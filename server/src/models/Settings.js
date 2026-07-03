@@ -69,6 +69,20 @@ const settingsSchema = new mongoose.Schema(
     // Error-rate alerting: fires the webhook when the rolling 1-hour error rate exceeds threshold.
     alertErrorRateEnabled:   { type: Boolean, default: false },
     alertErrorRateThreshold: { type: Number,  default: 5 },  // percent, 0–100
+    // Output guardrails: keyword/regex deny-list checked against response text before returning to caller.
+    outputGuardrailsEnabled: { type: Boolean, default: false },
+    outputGuardrailRules: {
+      type: [{
+        name:        String,
+        pattern:     String,
+        // "*" = all applications; any other string = specific application name.
+        application: { type: String, default: "*" },
+      }],
+      default: [],
+    },
+    // When true, PII patterns (built-in + custom) are redacted from the response text sent to callers,
+    // not just from stored logs.
+    maskPiiInResponses: { type: Boolean, default: false },
   },
   { collection: "settings" }
 );
