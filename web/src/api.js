@@ -118,6 +118,8 @@ export const api = {
   litellmStatus:   () => req("/litellm/status"),
 
   clearCache: () => req("/cache/clear", { method: "POST" }),
+  clearSemanticCache: () => req("/cache/semantic/clear", { method: "POST" }),
+  semanticCacheStats: () => req("/cache/semantic/stats"),
 
   policy: () => req("/policy"),
   setPolicy: (body) => req("/policy", { method: "PUT", body: JSON.stringify(body) }),

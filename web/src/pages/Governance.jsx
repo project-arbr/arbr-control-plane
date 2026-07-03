@@ -824,10 +824,97 @@ function SystemInfoCard() {
   );
 }
 
-function GeneralTab({ gov }) {
+function SemanticCacheCard({ gov, setGov, save, saving, ok, err }) {
+  const [cacheSize, setCacheSize] = useState(null);
+  const [clearing, setClearing]  = useState(false);
+
+  useEffect(() => {
+    api.semanticCacheStats().then((s) => setCacheSize(s.size)).catch(() => {});
+  }, []);
+
+  async function clearCache() {
+    setClearing(true);
+    try {
+      await api.clearSemanticCache();
+      setCacheSize(0);
+    } finally { setClearing(false); }
+  }
+
+  return (
+    <Card title="Semantic Cache">
+      <div className="divide-y divide-gray-100">
+        <SettingRow
+          label="Enable semantic response caching"
+          sub="Embeds incoming messages and returns a cached response when cosine similarity exceeds the threshold. Requires an OpenAI API key (Settings → Connections)."
+        >
+          <Toggle
+            checked={!!gov.semanticCacheEnabled}
+            onChange={(v) => setGov({ ...gov, semanticCacheEnabled: v })}
+            label="semantic cache"
+          />
+        </SettingRow>
+
+        <div className="py-3 space-y-4">
+          <div>
+            <div className="label mb-1">Similarity threshold</div>
+            <div className="flex items-center gap-3">
+              <input
+                className="input w-28"
+                type="number"
+                min="0.5"
+                max="1"
+                step="0.01"
+                value={gov.semanticCacheThreshold ?? 0.92}
+                onChange={(e) => setGov({ ...gov, semanticCacheThreshold: Number(e.target.value) })}
+              />
+              <span className="text-sm text-gray-400">0–1  ·  0.92 recommended  ·  higher = stricter matching</span>
+            </div>
+          </div>
+          <div>
+            <div className="label mb-1">Cache TTL (minutes)</div>
+            <div className="flex items-center gap-3">
+              <input
+                className="input w-28"
+                type="number"
+                min="1"
+                placeholder="60"
+                value={gov.semanticCacheTtlMinutes ?? 60}
+                onChange={(e) => setGov({ ...gov, semanticCacheTtlMinutes: Number(e.target.value) })}
+              />
+              <span className="text-sm text-gray-400">Entries expire after this many minutes</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="py-3 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-arbr-charcoal">Cache entries</div>
+            <div className="mt-0.5 text-xs text-gray-500">
+              {cacheSize === null ? "Loading…" : `${cacheSize} entries in memory`}
+            </div>
+          </div>
+          <button className="btn-outline text-xs" disabled={clearing} onClick={clearCache}>
+            {clearing ? "Clearing…" : "Clear semantic cache"}
+          </button>
+        </div>
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); save({ semanticCacheEnabled: gov.semanticCacheEnabled, semanticCacheThreshold: gov.semanticCacheThreshold, semanticCacheTtlMinutes: gov.semanticCacheTtlMinutes }); }}>
+        <SaveRow saving={saving} ok={ok} err={err} />
+      </form>
+    </Card>
+  );
+}
+
+function GeneralTab({ gov, setGov, save, saving, ok, err }) {
   return (
     <div className="space-y-5">
       <SystemInfoCard />
+
+      <SemanticCacheCard
+        gov={gov} setGov={setGov}
+        save={save("semantic")}
+        saving={saving.semantic} ok={ok.semantic} err={err.semantic}
+      />
 
       <Card title="Data Export">
         <p className="mb-4 text-sm text-gray-500">
@@ -924,7 +1011,13 @@ export default function Governance() {
             />
           )}
           {tab === "general" && (
-            <GeneralTab gov={gov} />
+            <GeneralTab
+              gov={gov} setGov={setGov}
+              save={saveFor}
+              saving={{ semantic: saving.semantic }}
+              ok={{ semantic: ok.semantic }}
+              err={{ semantic: err.semantic }}
+            />
           )}
         </>
       )}

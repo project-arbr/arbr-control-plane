@@ -16,7 +16,8 @@ const crypto = require("crypto");
 const analytics = require("../analytics/aggregate");
 const recommender = require("../recommend/engine");
 const ruleEngine = require("../routing/ruleEngine");
-const responseCache = require("../routing/responseCache");
+const responseCache  = require("../routing/responseCache");
+const semanticCache  = require("../routing/semanticCache");
 const policyEngine = require("../routing/policy");
 const aiPolicy = require("../routing/aiPolicy");
 const { TASK_TYPES } = require("../classify/classifier");
@@ -981,6 +982,17 @@ router.post("/cache/clear", (_req, res) => {
   res.json({ cleared: true });
 });
 
+// Clear the semantic (embedding-based) cache independently.
+router.post("/cache/semantic/clear", (_req, res) => {
+  semanticCache.clear();
+  res.json({ cleared: true, size: 0 });
+});
+
+// Current semantic cache entry count (for the UI status display).
+router.get("/cache/semantic/stats", (_req, res) => {
+  res.json({ size: semanticCache.size() });
+});
+
 // Auto-mode routing engine: "off" | "guardrail" | "ai".
 router.get("/routing-mode", async (_req, res, next) => {
   try { res.json({ routingMode: await ruleEngine.getRoutingMode() }); } catch (e) { next(e); }
@@ -1166,6 +1178,9 @@ function governanceView(s) {
     maskPiiInResponses:      s.maskPiiInResponses ?? false,
     promptInjectionDetectionEnabled: s.promptInjectionDetectionEnabled ?? false,
     promptInjectionRules:    s.promptInjectionRules || [],
+    semanticCacheEnabled:    s.semanticCacheEnabled ?? false,
+    semanticCacheThreshold:  s.semanticCacheThreshold ?? 0.92,
+    semanticCacheTtlMinutes: s.semanticCacheTtlMinutes ?? 60,
   };
 }
 
@@ -1215,6 +1230,12 @@ router.patch("/governance", async (req, res, next) => {
       update.promptInjectionDetectionEnabled = !!body.promptInjectionDetectionEnabled;
     if (Array.isArray(body.promptInjectionRules))
       update.promptInjectionRules = body.promptInjectionRules.filter(r => r.pattern);
+    if ("semanticCacheEnabled" in body)
+      update.semanticCacheEnabled = !!body.semanticCacheEnabled;
+    if ("semanticCacheThreshold" in body)
+      update.semanticCacheThreshold = Math.min(1, Math.max(0, Number(body.semanticCacheThreshold) || 0.92));
+    if ("semanticCacheTtlMinutes" in body)
+      update.semanticCacheTtlMinutes = Math.max(1, Number(body.semanticCacheTtlMinutes) || 60);
 
     await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
     const s = await Settings.get();
