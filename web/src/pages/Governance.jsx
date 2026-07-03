@@ -845,7 +845,7 @@ function SemanticCacheCard({ gov, setGov, save, saving, ok, err }) {
       <div className="divide-y divide-gray-100">
         <SettingRow
           label="Enable semantic response caching"
-          sub="Embeds incoming messages and returns a cached response when cosine similarity exceeds the threshold. Requires an OpenAI API key (Settings → Connections)."
+          sub="Embeds incoming messages and returns a cached response when cosine similarity exceeds the threshold. Requires an OpenAI provider key configured in Models."
         >
           <Toggle
             checked={!!gov.semanticCacheEnabled}
