@@ -35,6 +35,7 @@
     "smoke:eval": "node server/scripts/eval-smoke.js",
     "smoke:import": "node server/scripts/import-smoke.js",
     "smoke:bench": "node server/scripts/bench-smoke.js",
+    "smoke:semantic-cache": "node server/scripts/semantic-cache-smoke.js",
     "lint": "eslint server/src",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
