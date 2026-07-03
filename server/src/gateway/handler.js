@@ -18,6 +18,7 @@ const aiPolicy = require("../routing/aiPolicy");
 const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
 const outputGuardrail = require("./outputGuardrail");
+const promptInjection = require("./promptInjection");
 const { maybeShadowEval } = require("../eval/shadow");
 const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
@@ -246,6 +247,15 @@ async function handleChat(req, res) {
   // Max-tokens guardrail: clamp body.maxTokens to the configured ceiling.
   if (settings.maxTokensGuardrail && body.maxTokens > settings.maxTokensGuardrail) {
     body.maxTokens = settings.maxTokensGuardrail;
+  }
+
+  // Prompt injection detection — checked before routing/invoke, always returns JSON.
+  if (settings.promptInjectionDetectionEnabled) {
+    const injApp = req.apiKey?.application || body.application || "unknown";
+    const { blocked, ruleName } = promptInjection.check(body.messages, settings.promptInjectionRules, injApp);
+    if (blocked) {
+      return res.status(400).json({ error: "prompt_injection_detected", message: "Request blocked: potential prompt injection detected.", rule: ruleName });
+    }
   }
 
   const requestId = uuidv4();

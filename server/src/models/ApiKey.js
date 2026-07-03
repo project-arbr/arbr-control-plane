@@ -17,6 +17,8 @@ const apiKeySchema = new mongoose.Schema(
     allowedModels: { type: [String], default: [] },
     // Override the global default model when this key sends model:"auto". null = use global.
     defaultModel: { type: String, default: null },
+    // Optional expiry date. Gateway rejects keys whose expiresAt is in the past.
+    expiresAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now },
     lastUsedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },
