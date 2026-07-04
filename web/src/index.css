@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 @layer base {
   html, body, #root {
@@ -15,20 +14,21 @@
   .card {
     @apply bg-white border border-gray-100 rounded-lg shadow-card;
   }
+  /* Base btn styles are inlined into each variant (Tailwind v4 @apply cannot reference custom classes) */
   .btn {
     @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors;
   }
   .btn-primary {
-    @apply btn bg-arbr-charcoal text-white hover:bg-arbr-ink;
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors bg-arbr-charcoal text-white hover:bg-arbr-ink;
   }
   .btn-secondary {
-    @apply btn bg-arbr-charcoal text-white hover:bg-arbr-ink;
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors bg-arbr-charcoal text-white hover:bg-arbr-ink;
   }
   .btn-outline {
-    @apply btn border border-gray-200 text-arbr-charcoal hover:border-gray-400 hover:bg-gray-100;
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors border border-gray-200 text-arbr-charcoal hover:border-gray-400 hover:bg-gray-100;
   }
   .btn-ghost {
-    @apply btn text-gray-500 hover:bg-gray-100 hover:text-gray-900;
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors text-gray-500 hover:bg-gray-100 hover:text-gray-900;
   }
   .label {
     @apply text-xs font-medium uppercase tracking-wide text-gray-500;
