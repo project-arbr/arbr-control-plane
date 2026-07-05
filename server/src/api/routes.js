@@ -816,6 +816,7 @@ router.post("/recommendations/:id/create-canary", async (req, res, next) => {
       evalRunId: rec.evalRunId || null, recommendationId: rec._id, shadowCampaignId: rec.shadowCampaignId || null,
       scope: { application: b.application || rec.application || null, workflow: b.workflow || null, taskType: rec.taskType || null },
       baselineModel: rec.currentModel, candidateModel: rec.suggestedModel,
+      candidateProvider: rec.suggestedProvider || pricing.getModel(rec.suggestedModel)?.provider || null,
       rolloutPct: b.rolloutPct != null ? Math.min(100, Math.max(0, Number(b.rolloutPct))) : 10,
       guardrails: sanitizeGuardrails(b.guardrails),
       metricsWindowMinutes: b.metricsWindowMinutes != null ? Math.max(5, Number(b.metricsWindowMinutes)) : 60,
@@ -865,10 +866,11 @@ router.post("/routing-experiments/:id/promote", async (req, res, next) => {
     const exp = await RoutingExperiment.findById(req.params.id);
     if (!exp) return res.status(404).json({ error: "not found" });
     if (exp.status === "rolled_back") return res.status(409).json({ error: "rolled_back", message: "cannot promote a rolled-back experiment" });
-    const cm = pricing.getModel(exp.candidateModel);
+    const provider = exp.candidateProvider || pricing.getModel(exp.candidateModel)?.provider;
+    if (!provider) return res.status(422).json({ error: "no_provider", message: "cannot determine the candidate's provider; set candidateProvider on the experiment." });
     const rule = await Rule.create({
       condition: { taskType: exp.scope?.taskType || null, application: exp.scope?.application || null, workflow: exp.scope?.workflow || null },
-      target: { provider: cm ? cm.provider : undefined, model: exp.candidateModel },
+      target: { provider, model: exp.candidateModel },
       enabled: true, createdBy: "console",
       sourceRecommendation: exp.recommendationId || null,
       note: `promoted canary ${exp.baselineModel} → ${exp.candidateModel}`,

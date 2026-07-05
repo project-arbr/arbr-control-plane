@@ -63,7 +63,7 @@ test("rollback sets status rolled_back with a reason", async () => {
 test("promote creates an enabled rule and marks the rec accepted", async () => {
   const rec = await makeRec();
   const exp = await RoutingExperiment.create({
-    recommendationId: rec._id, baselineModel: "gpt-4o", candidateModel: "gpt-4o-mini",
+    recommendationId: rec._id, baselineModel: "gpt-4o", candidateModel: "gpt-4o-mini", candidateProvider: "openai",
     scope: { taskType: "classification", application: "support-chat" }, status: "active",
   });
   const res = await agent.post(`/api/routing-experiments/${exp._id}/promote`).send({ approvedBy: "prasanna" });
@@ -71,6 +71,7 @@ test("promote creates an enabled rule and marks the rec accepted", async () => {
   assert.equal(res.body.experiment.status, "promoted");
   assert.equal(res.body.experiment.rolloutPct, 100);
   assert.equal(res.body.rule.enabled, true);
+  assert.equal(res.body.rule.target.provider, "openai"); // provider comes from candidateProvider, not the registry
   assert.equal(res.body.rule.target.model, "gpt-4o-mini");
   const updatedRec = await Recommendation.findById(rec._id);
   assert.equal(updatedRec.status, "accepted");

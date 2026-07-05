@@ -177,15 +177,17 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
   if (autoMode) {
     const canary = await canaryEngine.selectCanary({ application, workflow, taskType, servedModel: served.model, userId });
     if (canary) {
-      const cm = pricing.getModel(canary.toModel);
-      if (cm && eff.liveIds.includes(cm.provider)) {
+      // Prefer the registered model's provider; fall back to the experiment's stored provider
+      // so an unregistered candidate can still be canaried.
+      const provider = pricing.getModel(canary.toModel)?.provider || canary.experiment.candidateProvider;
+      if (provider && eff.liveIds.includes(provider)) {
         explain.canary = {
           experimentId: String(canary.experiment._id),
           evalRunId: canary.experiment.evalRunId ? String(canary.experiment.evalRunId) : null,
           fromModel: served.model, toModel: canary.toModel, rolloutPct: canary.experiment.rolloutPct,
         };
         explain.override = { type: "canary", from: served.model, to: canary.toModel };
-        served = { provider: cm.provider, model: canary.toModel };
+        served = { provider, model: canary.toModel };
         routingDecision = "canary";
       }
     }

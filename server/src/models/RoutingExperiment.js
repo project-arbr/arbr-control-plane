@@ -18,6 +18,7 @@ const routingExperimentSchema = new mongoose.Schema(
     },
     baselineModel: { type: String, required: true },  // the model canary traffic is diverted FROM
     candidateModel: { type: String, required: true }, // routed TO for the canary fraction
+    candidateProvider: { type: String, default: null }, // provider for the candidate (may be unregistered in the pricing table)
     rolloutPct: { type: Number, default: 10, min: 0, max: 100 },
 
     status: { type: String, enum: ["draft", "active", "paused", "rolled_back", "promoted"], default: "draft", index: true },
