@@ -357,7 +357,7 @@ async function handleOpenAICompat(req, res) {
   let served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain;
   try {
     ({ served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain } =
-      await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
+      await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, userId: meta.userId, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
       return res.status(403).json({ error: { message: err.message, type: "invalid_request_error", code: "model_not_allowed" } });
