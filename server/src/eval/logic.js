@@ -53,4 +53,26 @@ function summarizeEvalPairs(pairs) {
   };
 }
 
-module.exports = { isSingleShot, shouldSample, parseVerdict, summarizeEvalPairs };
+// Is `now` inside a campaign's [start, end] window? null bound = open on that side. Pure.
+function withinWindow(now, startDate, endDate) {
+  const t = now instanceof Date ? now.getTime() : Number(now);
+  if (startDate && t < new Date(startDate).getTime()) return false;
+  if (endDate && t > new Date(endDate).getTime()) return false;
+  return true;
+}
+
+// Does this request fall within a campaign's scope filters? A null scope field = "any". The
+// baseline model (the model prod actually served) must match campaign.baselineModel when set.
+// Pure.
+function campaignMatches(campaign, { taskType, workflow, baselineModel }) {
+  if (!campaign) return false;
+  const scope = campaign.scope || {};
+  if (scope.taskType && String(scope.taskType).toLowerCase() !== String(taskType || "").toLowerCase()) return false;
+  if (scope.workflow && scope.workflow !== workflow) return false;
+  if (campaign.baselineModel && campaign.baselineModel !== baselineModel) return false;
+  return true;
+}
+
+module.exports = {
+  isSingleShot, shouldSample, parseVerdict, summarizeEvalPairs, withinWindow, campaignMatches,
+};

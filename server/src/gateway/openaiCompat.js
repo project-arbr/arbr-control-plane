@@ -227,7 +227,7 @@ async function proxyOpenAICompat(ctx) {
       latencyMs, status: "success",
     });
     maybeShadowEval({
-      application: meta.application, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
+      application: meta.application, workflow: meta.workflow, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
       requestId, router, eff,
       prod: { model: served.model, provider: served.provider, latencyMs, text: data.choices?.[0]?.message?.content || "",
               usage: { inputTokens: u.prompt_tokens || 0, outputTokens: u.completion_tokens || 0 } },
@@ -809,7 +809,7 @@ async function handleOpenAICompat(req, res) {
       messages: body.messages, responseText: result.text,
     });
     maybeShadowEval({
-      application: meta.application, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
+      application: meta.application, workflow: meta.workflow, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
       requestId, router, eff,
       prod: { model: result.modelId, provider: result.providerId, latencyMs: result.latencyMs, text: result.text, usage: result.usage },
     });

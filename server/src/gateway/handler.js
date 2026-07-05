@@ -486,7 +486,7 @@ async function handleChat(req, res) {
     });
     // Shadow-eval: mirror to a candidate model if a campaign is active for this app (self-guarded, non-blocking).
     maybeShadowEval({
-      application: meta.application, taskType, messages: body.messages, hasTools: false, requestId, router, eff,
+      application: meta.application, workflow: meta.workflow, taskType, messages: body.messages, hasTools: false, requestId, router, eff,
       prod: { model: result.modelId, provider: result.providerId, latencyMs: result.latencyMs, text: result.text, usage: result.usage },
     });
   });
