@@ -29,8 +29,17 @@ const CustomProvider = require("../models/CustomProvider");
 const Settings = require("../models/Settings");
 const EvalCampaign = require("../models/EvalCampaign");
 const EvalPair = require("../models/EvalPair");
+const EvalDataset = require("../models/EvalDataset");
+const EvalItem = require("../models/EvalItem");
+const EvalRun = require("../models/EvalRun");
+const EvalResult = require("../models/EvalResult");
 const { invalidateCampaignCache } = require("../eval/shadow");
 const { summarizeEvalPairs } = require("../eval/logic");
+const evalDatasetBuilder = require("../eval/dataset");
+const evalReplay = require("../eval/replay");
+const evalThresholds = require("../eval/thresholds");
+const { sameFamily } = require("../eval/rubricJudge");
+const { tierForTask } = require("../classify/classifier");
 const secrets = require("../security/secrets");
 const { config, KNOWN_PROVIDERS } = require("../config");
 const { classifyModelImport, isChatLikelyModelId } = require("../providers/importLogic");
@@ -626,10 +635,24 @@ router.post("/recommendations/recompute", async (_req, res, next) => {
 });
 
 // Accept → create a disabled rule from the recommendation, mark accepted.
+// GATE (P0 eval-backed routing): a recommendation may only become a rule once it has PASSED an
+// offline eval, or the caller supplies an override { reason, approver, expiresAt? }. This is the
+// core promise — no cost-saving rule ships on price math alone. Pass ?dryRun=1 to check the gate.
 router.post("/recommendations/:id/accept", async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
+
+    const override = (req.body && req.body.override) || null;
+    const gate = evalThresholds.gateAccept(rec, override);
+    if (!gate.allowed) {
+      return res.status(409).json({ error: "eval_required", message: gate.reason, evalStatus: rec.evalStatus });
+    }
+    if (gate.status === "overridden") {
+      rec.evalStatus = "overridden";
+      rec.override = { reason: override.reason, approver: override.approver, at: new Date(), expiresAt: override.expiresAt || null };
+    }
+
     const rule = await Rule.create({
       condition: { taskType: rec.taskType, application: null, workflow: null },
       target: { provider: rec.suggestedProvider, model: rec.suggestedModel },
@@ -641,7 +664,111 @@ router.post("/recommendations/:id/accept", async (req, res, next) => {
     rec.status = "accepted";
     await rec.save();
     ruleEngine.invalidate();
-    res.json({ recommendation: rec, rule });
+    setImmediate(() => logAction("recommendation.accept", "recommendation", String(rec._id), {
+      via: gate.status, ruleId: String(rule._id), candidateModel: rec.suggestedModel, evalRunId: rec.evalRunId ? String(rec.evalRunId) : null,
+    }));
+    res.json({ recommendation: rec, rule, acceptedVia: gate.status });
+  } catch (e) { next(e); }
+});
+
+// Build an immutable eval dataset from historical traffic for this recommendation's scope.
+router.post("/recommendations/:id/create-eval-dataset", async (req, res, next) => {
+  try {
+    const rec = await Recommendation.findById(req.params.id);
+    if (!rec) return res.status(404).json({ error: "not found" });
+    const { targetCount, piiMode, windowDays } = req.body || {};
+    const dataset = await evalDatasetBuilder.createFromTraffic({ rec, targetCount, piiMode, windowDays });
+    if (dataset.status === "ready") {
+      rec.evalDatasetId = dataset._id;
+      if (rec.evalStatus === "not_started") rec.evalStatus = "dataset_ready";
+      await rec.save();
+    }
+    setImmediate(() => logAction("eval.dataset.create", "evalDataset", String(dataset._id), { recommendationId: String(rec._id), itemCount: dataset.itemCount, status: dataset.status }));
+    res.status(dataset.status === "failed" ? 422 : 200).json(dataset);
+  } catch (e) { next(e); }
+});
+
+// Start an offline eval run for this recommendation (uses its latest ready dataset, or a given datasetId).
+router.post("/recommendations/:id/run-eval", async (req, res, next) => {
+  try {
+    const rec = await Recommendation.findById(req.params.id);
+    if (!rec) return res.status(404).json({ error: "not found" });
+    const { datasetId, judgeModel, maxRunCostUsd } = req.body || {};
+
+    const dataset = datasetId
+      ? await EvalDataset.findById(datasetId)
+      : await EvalDataset.findOne({ recommendationId: rec._id, status: "ready" }).sort({ createdAt: -1 });
+    if (!dataset || dataset.status !== "ready") {
+      return res.status(409).json({ error: "no_dataset", message: "Create a ready eval dataset first (POST .../create-eval-dataset)." });
+    }
+    if (dataset.piiMode === "metadata_only") {
+      return res.status(422).json({ error: "not_replayable", message: "A metadata_only dataset has no prompts to replay. Use a masked dataset." });
+    }
+    // same-family judge guard on high-risk tasks (self-preference bias).
+    if (dataset.riskTier === "high" && judgeModel && sameFamily(judgeModel, dataset.candidateModel)) {
+      return res.status(422).json({ error: "judge_same_family", message: "For high-risk tasks the judge must not be from the candidate's model family." });
+    }
+
+    const risk = evalThresholds.riskForTier(tierForTask(rec.taskType));
+    const thresholds = evalThresholds.defaultThresholds(risk);
+    const run = await evalReplay.startRun({ rec, dataset, judgeModel: judgeModel || null, thresholds, maxRunCostUsd: maxRunCostUsd ?? null });
+    setImmediate(() => logAction("eval.run.start", "evalRun", String(run._id), { recommendationId: String(rec._id), candidateModel: dataset.candidateModel, judgeModel: judgeModel || null }));
+    res.status(run.status === "failed" ? 422 : 202).json(run);
+  } catch (e) { next(e); }
+});
+
+// Record a manual override reason on a recommendation (audited). Does not create the rule;
+// the subsequent accept call carries the override, or reads this one.
+router.post("/recommendations/:id/override", async (req, res, next) => {
+  try {
+    const { reason, approver, expiresAt } = req.body || {};
+    if (!reason || !approver) return res.status(400).json({ error: "reason and approver are required" });
+    const rec = await Recommendation.findById(req.params.id);
+    if (!rec) return res.status(404).json({ error: "not found" });
+    rec.override = { reason, approver, at: new Date(), expiresAt: expiresAt || null };
+    rec.evalStatus = "overridden";
+    await rec.save();
+    setImmediate(() => logAction("eval.override", "recommendation", String(rec._id), { approver, reason }));
+    res.json(rec);
+  } catch (e) { next(e); }
+});
+
+// ── Eval datasets / runs (read views) ─────────────────────────────────────────
+router.get("/evals/datasets", async (req, res, next) => {
+  try {
+    const q = req.query.recommendationId ? { recommendationId: req.query.recommendationId } : {};
+    res.json(await EvalDataset.find(q).sort({ createdAt: -1 }).lean());
+  } catch (e) { next(e); }
+});
+router.get("/evals/datasets/:id", async (req, res, next) => {
+  try {
+    const ds = await EvalDataset.findById(req.params.id).lean().catch(() => null);
+    if (!ds) return res.status(404).json({ error: "not found" });
+    res.json({ ...ds, sampleItems: await EvalItem.find({ datasetId: ds._id }).limit(10).lean() });
+  } catch (e) { next(e); }
+});
+router.get("/evals/runs", async (req, res, next) => {
+  try {
+    const q = req.query.recommendationId ? { recommendationId: req.query.recommendationId } : {};
+    res.json(await EvalRun.find(q).sort({ createdAt: -1 }).lean());
+  } catch (e) { next(e); }
+});
+router.get("/evals/runs/:id", async (req, res, next) => {
+  try {
+    const run = await EvalRun.findById(req.params.id).lean().catch(() => null);
+    if (!run) return res.status(404).json({ error: "not found" });
+    res.json(run);
+  } catch (e) { next(e); }
+});
+// Worst candidate examples first (worse verdicts + critical failures), for the evidence view.
+router.get("/evals/runs/:id/results", async (req, res, next) => {
+  try {
+    const order = { worse: 0, equal: 1, better: 2 };
+    const results = await EvalResult.find({ evalRunId: req.params.id }).lean();
+    results.sort((a, b) =>
+      (b.criticalFailure - a.criticalFailure) ||
+      ((order[a.judgeVerdict] ?? 3) - (order[b.judgeVerdict] ?? 3)));
+    res.json(results);
   } catch (e) { next(e); }
 });
 

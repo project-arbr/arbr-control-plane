@@ -27,6 +27,25 @@ const recommendationSchema = new mongoose.Schema(
       default: "pending",
       index: true,
     },
+
+    // Eval gating (P0): a recommendation cannot become an ENABLED rule until it has passed an
+    // offline eval, or an admin overrides. See eval/thresholds.gateAccept + eval/replay.
+    evalStatus: {
+      type: String,
+      enum: ["not_started", "dataset_ready", "running", "passed", "failed", "overridden"],
+      default: "not_started",
+      index: true,
+    },
+    evalDatasetId: { type: mongoose.Schema.Types.ObjectId, ref: "EvalDataset", default: null },
+    evalRunId: { type: mongoose.Schema.Types.ObjectId, ref: "EvalRun", default: null },
+    qualitySummary: { type: mongoose.Schema.Types.Mixed, default: null }, // last run's summary
+    override: {
+      reason: { type: String, default: null },
+      approver: { type: String, default: null },
+      at: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+    },
+
     // Stable key so re-running the engine updates instead of duplicating.
     dedupeKey: { type: String, unique: true, index: true },
   },
