@@ -15,11 +15,16 @@ test("buildScopeQuery restricts to success + non-cache + scope", () => {
 });
 
 test("isEligible requires single-shot with prompt + response", () => {
+  // simple single-turn
   assert.equal(isEligible({ responseText: "ok", messages: [{ role: "user", content: "hi" }] }), true);
   assert.equal(isEligible({ responseText: "", messages: [{ role: "user", content: "hi" }] }), false);
   assert.equal(isEligible({ responseText: "ok", messages: null }), false);
-  // multi-turn (has assistant turn) is not single-shot
-  assert.equal(isEligible({ responseText: "ok", messages: [{ role: "assistant", content: "x" }, { role: "user", content: "y" }] }), false);
+  // few-shot pattern (intermediate assistant turn + ends in user) IS eligible
+  assert.equal(isEligible({ responseText: "ok", messages: [{ role: "assistant", content: "x" }, { role: "user", content: "y" }] }), true);
+  // trailing assistant turn (nothing to replay) is NOT eligible
+  assert.equal(isEligible({ responseText: "ok", messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }] }), false);
+  // tool turn is NOT eligible (agentic)
+  assert.equal(isEligible({ responseText: "ok", messages: [{ role: "user", content: "x" }, { role: "tool", content: "y" }, { role: "user", content: "z" }] }), false);
 });
 
 test("dedupeByPromptHash keeps one record per identical prompt", () => {

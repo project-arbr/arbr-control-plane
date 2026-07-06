@@ -129,8 +129,13 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
     const sampled = stratifiedSample(deduped, target, stratumKey);
 
     if (!sampled.length) {
+      const withResp = raw.filter((r) => r.responseText).length;
+      const withMsgs = raw.filter((r) => r.messages).length;
+      const singleShot = raw.filter((r) => r.messages && isSingleShot(r.messages, false)).length;
       dataset.status = "failed";
-      dataset.error = "no eligible historical requests matched this scope";
+      dataset.error = raw.length
+        ? `no eligible records: ${raw.length} found, ${withResp} with responseText, ${withMsgs} with messages, ${singleShot} single-shot`
+        : "no eligible historical requests matched this scope";
       await dataset.save();
       return dataset;
     }
