@@ -8,11 +8,16 @@
 const RequestRecord = require("../models/RequestRecord");
 const Recommendation = require("../models/Recommendation");
 const pricing = require("../pricing/registry");
+const { getEffective } = require("../routing/policy");
 
 // Minimum requests in a group before we bother recommending.
 const MIN_REQUESTS = 20;
 
 async function recompute() {
+  // Use the effective routing policy so custom cheap task types (added by the user
+  // via Routing → Automated routing) are respected — not just the hardcoded defaults.
+  const policy = await getEffective();
+
   // Aggregate token totals per (taskType, model, provider).
   const groups = await RequestRecord.aggregate([
     { $match: { status: "success" } },
@@ -32,7 +37,7 @@ async function recompute() {
     const { taskType, model, provider } = g._id;
     if (g.requests < MIN_REQUESTS) continue;
     if (!pricing.isPremium(model)) continue;
-    if (!pricing.isCheapTask(taskType)) continue;
+    if (!policy.cheapTaskTypes.has(String(taskType || "").toLowerCase())) continue;
 
     const target = pricing.suggestLightTarget(model);
     if (!target) continue;
