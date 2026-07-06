@@ -1,13 +1,16 @@
 // Pure shadow-eval logic — dependency-free (no mongoose/pricing) so it can be unit-tested
 // without a DB. Shared by shadow.js, judge.js, and the API routes.
 
-// Single-shot = safe to mirror: no tools, and no prior assistant/tool turns (one-and-done).
-// Multi-turn / agentic traffic is skipped (a mirrored candidate would want side-effecting actions).
+// Single-shot = safe to mirror: no tool-use turns, and must end with a user message so there
+// is a candidate response to replay and judge. Intermediate assistant turns (few-shot examples)
+// are allowed — they are static context, not side-effecting agentic actions.
 function isSingleShot(messages, hasTools) {
   if (hasTools) return false;
   if (typeof messages === "string") return true;
   if (!Array.isArray(messages)) return false;
-  return !messages.some((m) => m && (m.role === "tool" || m.role === "assistant"));
+  if (messages.some((m) => m && m.role === "tool")) return false;
+  const last = messages[messages.length - 1];
+  return !!(last && last.role === "user");
 }
 
 // Sampling decision (pure): mirror when rand < rate.
