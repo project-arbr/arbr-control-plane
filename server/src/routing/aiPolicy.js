@@ -185,6 +185,7 @@ async function setAssignments(assignments) {
   s.aiPolicy = { ...(s.aiPolicy || {}), assignments: clean };
   s.markModified("aiPolicy");
   await s.save();
+  Settings.invalidateCache();
   invalidate();
   return s.aiPolicy;
 }
@@ -372,6 +373,7 @@ async function regenerate({ router, eff, goal }) {
   s.aiPolicy = { assignments, generatedAt: new Date(), generatorModel: generatorModel.id, capabilityVersion: CAPABILITY_VERSION };
   s.markModified("aiPolicy");
   await s.save();
+  Settings.invalidateCache();
   invalidate();
   return s.aiPolicy;
 }

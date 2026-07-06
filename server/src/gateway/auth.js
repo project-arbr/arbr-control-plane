@@ -63,6 +63,7 @@ async function setRequireApiKey(on) {
   const s = await Settings.get();
   s.requireApiKey = !!on;
   await s.save();
+  Settings.invalidateCache();
   return s.requireApiKey;
 }
 

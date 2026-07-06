@@ -228,6 +228,7 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
 }
 
 async function handleChat(req, res) {
+  const _reqStart = Date.now();
   const body = req.body || {};
 
   // 1 · INGRESS — validate, capture metadata, stamp id + time.
@@ -235,27 +236,27 @@ async function handleChat(req, res) {
     return res.status(400).json({ error: "messages array is required" });
   }
 
-  // Maintenance mode (kill-switch): checked before any routing or provider access.
-  const settings = await Settings.get();
+  // Parallel: settings + appConfig + router are independent reads.
+  const earlyApp = req.apiKey?.application || body.application || "unknown";
+  const [settings, appCfg, routerResult] = await Promise.all([
+    Settings.get(),
+    getAppConfig(earlyApp),
+    getRouter(),
+  ]);
+
   if (settings.maintenanceMode?.enabled) {
     return res.status(503).json({
       error: "maintenance_mode",
       message: settings.maintenanceMode.message || "Service temporarily unavailable.",
     });
   }
-
-  // Per-application kill switch — checked before attribution is fully resolved,
-  // using the body's application claim (key binding happens later).
-  const earlyApp = req.apiKey?.application || body.application || "unknown";
-  const appCfg = await getAppConfig(earlyApp);
   if (appCfg?.killSwitchEnabled) {
     return res.status(503).json({
       error: "app_kill_switch",
       message: appCfg.killSwitchMessage || `Application "${earlyApp}" is temporarily disabled.`,
     });
   }
-
-  const { router, eff } = await getRouter();
+  const { router, eff } = routerResult;
   if (!router) {
     return res.status(503).json({
       error: "demo_mode",
@@ -412,6 +413,7 @@ async function handleChat(req, res) {
   }
 
   // 3 · INVOKE — provider call, fallback on failure.
+  const gatewayOverheadMs = Date.now() - _reqStart;
   let invocation;
   try {
     invocation = await invokeWithFallback(router, eff, {
@@ -502,7 +504,7 @@ async function handleChat(req, res) {
       totalTokens: result.usage?.totalTokens || 0,
       cachedReadTokens: result.usage?.cachedReadTokens || 0,
       cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
-      latencyMs: result.latencyMs, status: "success",
+      latencyMs: result.latencyMs, gatewayOverheadMs, status: "success",
       routingDecision, cacheHit: false,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
