@@ -90,7 +90,11 @@ router.get("/status", async (_req, res, next) => {
 
 router.get("/about", async (_req, res, next) => {
   try {
-    const pkg = require("../../package.json");
+    // package.json is at the repo root (server/src/api → ../../../). Guarded so a missing file
+    // degrades to "unknown version" instead of 500-ing /about (which ops/deploy.sh reads for the
+    // model-seed version).
+    let pkg = {};
+    try { pkg = require("../../../package.json"); } catch { /* version unknown */ }
     const s = await Settings.get().catch(() => null);
     res.json({
       version: pkg.version,
