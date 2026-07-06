@@ -19,6 +19,35 @@ automated policy a human enabled (cost guardrail or AI-generated task→model ma
 is reversible from the dashboard within seconds — and enforced budgets can block or downgrade
 spend that breaches its cap.
 
+![Arbr Control Plane — cost and usage overview](docs/media/dashboard.png)
+
+---
+
+## Why Arbr, and not just another AI gateway?
+
+Routing, observability, and guardrails are table stakes now. What sets Arbr apart is **who
+decides a route, and whether you can undo it**:
+
+- **Deterministic, human-approved routing.** A developer's pinned model is always honored.
+  `model: "auto"` follows only the rules a human enabled. Arbr never silently reroutes
+  traffic through an opaque scorer.
+- **Observe first, then optimise.** Every call is logged and costed; recommendations are
+  costed and advisory until a human accepts them, and every change is reversible from the
+  dashboard in seconds.
+- **Realised savings, not promised savings.** Each record stores both the model requested
+  and the model served, so savings are measured after the fact, not estimated up front.
+
+| Capability | LiteLLM | Helicone / Portkey | **Arbr** |
+|---|:---:|:---:|:---:|
+| Broadest provider access | ✅ | ➖ | routes through them |
+| Observability & spend tracking | ✅ | ✅ | ✅ |
+| Human-approved, reversible routing | ➖ | ➖ | ✅ |
+| Measured (realised) savings | ➖ | ➖ | ✅ |
+
+Use LiteLLM for breadth of providers; Arbr sits happily in front of it (see below). Reach
+for Arbr when a human must approve every routing change and see the savings on both sides
+of it.
+
 ---
 
 ## Quickstart
@@ -458,12 +487,25 @@ This service is **standalone**. The provider router is vendored under
 
 ---
 
-## Scope boundary (deferred to later phases)
+## Not yet (by design or on the roadmap)
 
-Autonomous/inferred model downgrade, ML-based routing, confidence/quality scoring,
-benchmarking, human-feedback loops, governance/access control, budget enforcement, and
-PII-aware routing. Each requires the system to judge quality or enforce policy — out of
-scope for Phase 1, which only acts where a human, not the machine, makes the call.
+Arbr deliberately acts only where a human makes the call, so a few things are intentionally
+absent today:
+
+- **Autonomous rerouting without approval.** The cost guardrail and AI policy take effect
+  only after a human enables them; nothing reroutes silently.
+- **ML/embedding-based routing and output-quality scoring.** Routing uses task type and a
+  difficulty signal, not a learned model of answer quality.
+- **PII-aware routing.** Prompts and responses are masked in logs
+  (`server/src/logging/piiFilter.js`), but PII is not yet used as a routing signal.
+- **Closed-loop evaluation.** Shadow-eval measures a candidate model on live traffic; it
+  does not yet feed routing automatically.
+- **High availability / horizontal scale.** The service runs as a single standalone
+  instance today (like a LiteLLM proxy); Helm/Kubernetes is on the [roadmap](ROADMAP.md).
+
+Budgets, gateway API keys, and governance controls that earlier versions listed here as
+"deferred" have since shipped; see the **Controlled routing**, **Governance**, and
+**Authentication** sections above.
 
 ---
 
