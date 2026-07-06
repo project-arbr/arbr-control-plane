@@ -150,9 +150,11 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
       const withMsgs = raw.filter((r) => r.messages).length;
       const singleShot = raw.filter((r) => r.messages && isSingleShot(r.messages, false)).length;
       dataset.status = "failed";
-      dataset.error = raw.length
-        ? `no eligible records: ${raw.length} found, ${withResp} with responseText, ${withMsgs} with messages, ${singleShot} single-shot`
-        : "no eligible historical requests matched this scope";
+      dataset.error = !raw.length
+        ? "No requests match this recommendation's scope (task type + model) in the window."
+        : withMsgs === 0
+          ? `${raw.length} requests match, but none have a captured prompt to replay. Turn on payload capture (Settings → Observability); only traffic logged after it is enabled can be evaluated.`
+          : `No replayable requests: of ${raw.length} matched, ${withResp} have a response and ${withMsgs} a prompt, ${singleShot} single-shot (multi-turn / tool calls are skipped).`;
       await dataset.save();
       return dataset;
     }
