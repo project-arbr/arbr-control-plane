@@ -78,6 +78,23 @@ function stratumKey(r) {
   return `${r.workflow || "-"}|${r.difficulty || "-"}`;
 }
 
+// Infer output validators for a dataset from what the BASELINE actually produced, so the
+// format pass-rate is a real check (not vacuously 100%). Pure.
+//   - baseline outputs all parse as JSON  → require the candidate to emit valid JSON.
+//   - baseline outputs are a small closed set of short strings → treat as labels; require membership.
+//   - otherwise (free-form text)          → no validator (the judge carries quality).
+function inferValidators(responses) {
+  const vals = (responses || []).map((r) => String(r || "").trim()).filter(Boolean);
+  if (vals.length < 5) return []; // too few to infer a shape confidently
+  const isJson = (s) => { try { JSON.parse(s); return true; } catch { return false; } };
+  if (vals.every(isJson)) return [{ type: "json_schema" }];
+  const distinct = [...new Set(vals)];
+  if (distinct.length <= 12 && distinct.every((v) => v.length <= 40)) {
+    return [{ type: "classification_label", labels: distinct }];
+  }
+  return [];
+}
+
 // Store the item text according to piiMode + global masking. Returns { messages, productionResponse }.
 function projectText(record, piiMode, maskEnabled, customPatterns) {
   if (piiMode === "metadata_only") return { messages: null, productionResponse: null };
@@ -135,6 +152,8 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
       return dataset;
     }
 
+    // Attach validators inferred from the baseline outputs, so formatPassRate is a real gate.
+    const validators = inferValidators(sampled.map((r) => r.responseText));
     const items = sampled.map((r) => {
       const { messages, productionResponse } = projectText(r, effectivePiiMode, maskEnabled, customPatterns);
       return {
@@ -143,7 +162,7 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
         messages, productionResponse,
         productionCost: r.totalCost || 0, productionLatencyMs: r.latencyMs || 0,
         promptHash: promptHashOf(r.messages), responseHash: responseHashOf(r.responseText),
-        validators: [], metadata: { classifiedBy: r.classifiedBy || null, difficulty: r.difficulty || null, confidence: r.confidence ?? null },
+        validators, metadata: { classifiedBy: r.classifiedBy || null, difficulty: r.difficulty || null, confidence: r.confidence ?? null },
       };
     });
     await EvalItem.insertMany(items);
@@ -162,5 +181,5 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
 module.exports = {
   createFromTraffic,
   buildScopeQuery, isEligible, promptHashOf, responseHashOf,
-  dedupeByPromptHash, stratifiedSample, stratumKey, projectText,
+  dedupeByPromptHash, stratifiedSample, stratumKey, projectText, inferValidators,
 };

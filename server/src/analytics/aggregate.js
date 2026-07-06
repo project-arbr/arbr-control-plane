@@ -33,16 +33,22 @@ async function overview(filter) {
         cacheHits: { $sum: { $cond: ["$cacheHit", 1, 0] } },
         cachedReadTokens: { $sum: "$cachedReadTokens" },
         cacheSavingUsd: { $sum: "$cacheSavingUsd" },
+        // Pass-through models with no pricing entry log $0; surface them so cost isn't read as complete.
+        unknownPricingRequests: { $sum: { $cond: [{ $eq: ["$knownPricing", false] }, 1, 0] } },
       },
     },
   ]);
   const totalRequests = row?.totalRequests || 0;
   const totalCost = row?.totalCost || 0;
   const cacheHits = row?.cacheHits || 0;
+  const unknownPricingRequests = row?.unknownPricingRequests || 0;
+  const pricedRequests = totalRequests - unknownPricingRequests;
   return {
     totalRequests,
     totalCost,
-    avgCostPerRequest: totalRequests ? totalCost / totalRequests : 0,
+    // Average over priced requests only — $0 unknown-pricing records would otherwise deflate it.
+    avgCostPerRequest: pricedRequests ? totalCost / pricedRequests : 0,
+    unknownPricingRequests,
     avgLatency: row?.avgLatency || 0,
     totalTokens: row?.totalTokens || 0,
     failures: row?.failures || 0,

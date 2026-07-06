@@ -49,6 +49,7 @@ async function write(record) {
 
     await RequestRecord.create({
       ...record,
+      knownPricing: record.knownPricing !== false, // normalize to a stored boolean
       messages,
       responseText,
       promptTokens,
