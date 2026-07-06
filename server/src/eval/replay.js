@@ -9,7 +9,7 @@ const EvalRun = require("../models/EvalRun");
 const EvalResult = require("../models/EvalResult");
 const Recommendation = require("../models/Recommendation");
 const { clampText, maskPii } = require("../logging/piiFilter");
-const { judgeItem, runValidators, sameFamily, lastUserText } = require("./rubricJudge");
+const { judgeItem, runValidators, lastUserText } = require("./rubricJudge");
 const { evaluateRun } = require("./thresholds");
 
 function percentile(sorted, p) {
