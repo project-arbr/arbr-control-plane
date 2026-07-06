@@ -28,8 +28,12 @@ function Summary() {
   if (err) return <div className="text-red-600">{err}</div>;
   if (!data) return <Spinner />;
 
-  const p50 = latency?.p50 != null ? fmt.ms(latency.p50) : "—";
-  const p95 = latency?.p95 != null ? fmt.ms(latency.p95) : "—";
+  const p50     = latency?.p50     != null ? fmt.ms(latency.p50)     : "—";
+  const p95     = latency?.p95     != null ? fmt.ms(latency.p95)     : "—";
+  const p99     = latency?.p99     != null ? fmt.ms(latency.p99)     : "—";
+  const ttftP50 = latency?.ttftP50 != null ? fmt.ms(latency.ttftP50) : "—";
+  const ttftP95 = latency?.ttftP95 != null ? fmt.ms(latency.ttftP95) : "—";
+  const hasttft = latency?.ttftP50 != null;
 
   return (
     <div className="space-y-6">
@@ -40,9 +44,15 @@ function Summary() {
         <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${hasttft ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
         <Stat label="Latency p50" value={p50} sub="median (success)" />
         <Stat label="Latency p95" value={p95} sub="95th percentile" />
+        <Stat label="Latency p99" value={p99} sub="99th percentile" />
+        {hasttft && <Stat label="TTFT p50" value={ttftP50} sub="streaming median" />}
+        {hasttft && <Stat label="TTFT p95" value={ttftP95} sub="streaming 95th pct" />}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
         <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
         <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />

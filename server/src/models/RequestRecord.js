@@ -37,6 +37,10 @@ const requestRecordSchema = new mongoose.Schema(
 
     // performance + outcome
     latencyMs: { type: Number, default: 0 },
+    // Time-to-first-token in ms (streaming proxy path only; null for non-streaming or LangChain path).
+    ttftMs: { type: Number, default: null },
+    // Gateway processing overhead in ms before the LLM call was dispatched (excludes provider time).
+    gatewayOverheadMs: { type: Number, default: null },
     status: { type: String, enum: ["success", "failure", "blocked"], default: "success", index: true },
     errorMessage: { type: String, default: null },   // provider error text on status:"failure"
     retryCount: { type: Number, default: 0 },

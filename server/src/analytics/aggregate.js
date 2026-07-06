@@ -196,7 +196,8 @@ async function timeseries(filter, bucket = "day") {
   return rows;
 }
 
-// Global latency percentiles (p50 + p95) for the selected window, success requests only.
+// Global latency percentiles (p50 / p95 / p99) + TTFT percentiles for the selected window.
+// Only success requests; TTFT only from records where ttftMs was captured (streaming proxy path).
 async function latencyPercentiles(filter) {
   const match = buildMatch(filter);
   const [row] = await RequestRecord.aggregate([
@@ -204,19 +205,25 @@ async function latencyPercentiles(filter) {
     {
       $group: {
         _id: null,
-        p50: { $percentile: { input: "$latencyMs", p: [0.5],  method: "approximate" } },
-        p95: { $percentile: { input: "$latencyMs", p: [0.95], method: "approximate" } },
+        p50:     { $percentile: { input: "$latencyMs", p: [0.5],  method: "approximate" } },
+        p95:     { $percentile: { input: "$latencyMs", p: [0.95], method: "approximate" } },
+        p99:     { $percentile: { input: "$latencyMs", p: [0.99], method: "approximate" } },
+        ttftP50: { $percentile: { input: "$ttftMs",    p: [0.5],  method: "approximate" } },
+        ttftP95: { $percentile: { input: "$ttftMs",    p: [0.95], method: "approximate" } },
       },
     },
     {
       $project: {
         _id: 0,
-        p50: { $round: [{ $first: "$p50" }, 0] },
-        p95: { $round: [{ $first: "$p95" }, 0] },
+        p50:     { $round: [{ $first: "$p50" },     0] },
+        p95:     { $round: [{ $first: "$p95" },     0] },
+        p99:     { $round: [{ $first: "$p99" },     0] },
+        ttftP50: { $round: [{ $first: "$ttftP50" }, 0] },
+        ttftP95: { $round: [{ $first: "$ttftP95" }, 0] },
       },
     },
   ]);
-  return row || { p50: null, p95: null };
+  return row || { p50: null, p95: null, p99: null, ttftP50: null, ttftP95: null };
 }
 
 module.exports = {
