@@ -12,6 +12,7 @@ const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const { purgeOldRecords } = require("./maintenance/purge");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
 const canaryMonitor = require("./routing/canaryMonitor");
+const evalWorker = require("./eval/worker");
 const { supportsTools } = require("./gateway/capabilities");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
@@ -130,6 +131,9 @@ async function start() {
   // Canary auto-rollback: every 5 min, roll back any active routing experiment that
   // breaches its guardrails (error rate, latency, cost saving, shadow worse-rate).
   canaryMonitor.start();
+
+  // Eval replay worker: picks up queued eval runs (survives restarts; setImmediate did not).
+  evalWorker.start();
 
   app.listen(config.port, config.host, () => {
     console.log("\n" + describe() + "\n");

@@ -655,8 +655,17 @@ router.post("/recommendations/:id/accept", async (req, res, next) => {
       rec.override = { reason: override.reason, approver: override.approver, at: new Date(), expiresAt: override.expiresAt || null };
     }
 
+    // Rule scope is explicit, not silently global: use the caller-provided scope, else the
+    // recommendation's own scope. Both default to null (any) only when nothing is set, and the
+    // resolved condition is returned + audited so a broad rule is never a surprise.
+    const scope = (req.body && req.body.scope) || {};
+    const condition = {
+      taskType: rec.taskType,
+      application: scope.application ?? rec.application ?? null,
+      workflow: scope.workflow ?? rec.workflow ?? null,
+    };
     const rule = await Rule.create({
-      condition: { taskType: rec.taskType, application: null, workflow: null },
+      condition,
       target: { provider: rec.suggestedProvider, model: rec.suggestedModel },
       enabled: false, // human must explicitly switch it on
       createdBy: "console",
@@ -759,6 +768,18 @@ router.get("/evals/runs/:id", async (req, res, next) => {
   try {
     const run = await EvalRun.findById(req.params.id).lean().catch(() => null);
     if (!run) return res.status(404).json({ error: "not found" });
+    res.json(run);
+  } catch (e) { next(e); }
+});
+// Cancel a queued/running run; the worker stops it at the next checkpoint (queued stops immediately).
+router.post("/evals/runs/:id/cancel", async (req, res, next) => {
+  try {
+    const run = await EvalRun.findOneAndUpdate(
+      { _id: req.params.id, status: { $in: ["queued", "running"] } },
+      { $set: { status: "cancelled" } }, { new: true }
+    ).lean().catch(() => null);
+    if (!run) return res.status(409).json({ error: "not_cancellable", message: "run is not queued or running" });
+    setImmediate(() => logAction("eval.run.cancel", "evalRun", req.params.id, null));
     res.json(run);
   } catch (e) { next(e); }
 });
