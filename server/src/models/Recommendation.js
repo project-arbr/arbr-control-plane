@@ -22,6 +22,9 @@ const recommendationSchema = new mongoose.Schema(
 
     // Evidence + projection (USD over the analysed window).
     requestCount: { type: Number, default: 0 },
+    // How many of those requests an eval could actually replay (captured prompt+response,
+    // non-cache). 0 = the recommendation predates payload capture; the eval can't run on it.
+    replayableCount: { type: Number, default: null },
     currentCost: { type: Number, default: 0 },
     projectedCost: { type: Number, default: 0 },
     projectedSavings: { type: Number, default: 0 },
