@@ -44,7 +44,7 @@ const requestRecordSchema = new mongoose.Schema(
     // routing transparency
     routingDecision: {
       type: String,
-      enum: ["passthrough", "explicit", "rule", "auto", "ai", "budget", "cache", "fallback"],
+      enum: ["passthrough", "explicit", "rule", "auto", "ai", "budget", "cache", "fallback", "canary"],
       default: "passthrough",
       index: true,
     },
