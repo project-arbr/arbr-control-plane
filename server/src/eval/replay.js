@@ -86,6 +86,7 @@ async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = 
     candidateModel: dataset.candidateModel,
     judgeModel: judgeModel || null,
     riskTier: dataset.riskTier,
+    fidelity: dataset.piiMode === "raw_allowed" ? "high" : (dataset.piiMode === "metadata_only" ? "metadata_only" : "masked"),
     thresholds,
     estimatedCostUsd,
     maxRunCostUsd,
@@ -102,21 +103,23 @@ async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = 
   }
   if (rec) { rec.evalStatus = "running"; rec.evalRunId = run._id; await rec.save().catch(() => {}); }
 
-  // Fire-and-forget; the run updates its own status.
-  setImmediate(() => executeRun(run._id).catch((e) => console.error("[eval-replay] run failed:", e.message)));
+  // The run stays "queued"; the eval worker (eval/worker.js) claims and executes it. This
+  // survives a process restart (a queued run is picked up on next boot) instead of being lost
+  // with an in-process setImmediate.
   return run;
 }
 
 async function executeRun(runId) {
-  const run = await EvalRun.findById(runId);
-  if (!run || run.status !== "queued") return;
+  // Atomically claim the run (queued → running) so concurrent workers can't double-execute it.
+  const run = await EvalRun.findOneAndUpdate(
+    { _id: runId, status: "queued" },
+    { $set: { status: "running", startedAt: new Date() } },
+    { new: true }
+  );
+  if (!run) return; // already claimed, cancelled, or gone
   const dataset = await EvalDataset.findById(run.datasetId);
   const items = await EvalItem.find({ datasetId: run.datasetId }).lean();
   const { router, eff } = await getRouter().catch(() => ({}));
-
-  run.status = "running";
-  run.startedAt = new Date();
-  await run.save();
 
   if (!router || !eff) return finish(run, [], "no live provider/router (demo mode); cannot replay");
 
@@ -130,6 +133,7 @@ async function executeRun(runId) {
 
   const entries = [];
   let actualCost = 0;
+  let cancelled = false;
   for (const item of items) {
     if (!item.messages) { // metadata_only dataset — nothing to replay
       entries.push({ errored: true });
@@ -138,6 +142,11 @@ async function executeRun(runId) {
     if (run.maxRunCostUsd != null && actualCost > run.maxRunCostUsd) {
       run.error = `cost cap $${run.maxRunCostUsd} reached after ${entries.length} items; stopped early`;
       break;
+    }
+    // Honor cancellation mid-run (checked periodically to bound DB reads).
+    if (entries.length % 10 === 0) {
+      const fresh = await EvalRun.findById(run._id, { status: 1 }).lean().catch(() => null);
+      if (fresh && fresh.status === "cancelled") { cancelled = true; break; }
     }
     try {
       const candidate = await router.complete({
@@ -179,7 +188,7 @@ async function executeRun(runId) {
       entries.push({ errored: true });
     }
   }
-  return finish(run, entries, null, actualCost);
+  return finish(run, entries, cancelled ? "__cancelled__" : null, actualCost);
 }
 
 async function finish(run, entries, hardError, actualCost = 0) {
@@ -187,7 +196,11 @@ async function finish(run, entries, hardError, actualCost = 0) {
   run.summary = summary;
   run.actualCostUsd = actualCost;
   run.completedAt = new Date();
-  if (hardError) {
+  if (hardError === "__cancelled__") {
+    run.status = "cancelled";
+    run.error = "cancelled mid-run";
+    run.failures = [];
+  } else if (hardError) {
     run.status = "failed";
     run.error = hardError;
     run.failures = [hardError];
@@ -201,9 +214,14 @@ async function finish(run, entries, hardError, actualCost = 0) {
   if (run.recommendationId) {
     const rec = await Recommendation.findById(run.recommendationId).catch(() => null);
     if (rec) {
-      rec.evalStatus = run.status === "passed" ? "passed" : "failed";
+      // A cancelled run leaves the recommendation re-runnable, not "failed".
+      if (run.status === "cancelled") {
+        rec.evalStatus = "dataset_ready";
+      } else {
+        rec.evalStatus = run.status === "passed" ? "passed" : "failed";
+        rec.qualitySummary = summary;
+      }
       rec.evalRunId = run._id;
-      rec.qualitySummary = summary;
       await rec.save().catch(() => {});
     }
   }

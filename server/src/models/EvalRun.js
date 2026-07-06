@@ -14,6 +14,10 @@ const evalRunSchema = new mongoose.Schema(
     candidateModel: { type: String, default: null },
     judgeModel: { type: String, default: null },
     riskTier: { type: String, enum: ["low", "medium", "high"], default: "medium" },
+    // Eval fidelity, derived from the dataset's piiMode. A "masked" run compares the candidate on
+    // redacted prompts against a baseline answer produced from the ORIGINAL prompt, so it is not
+    // strictly apples-to-apples — treat a masked pass as lower-confidence than a "high" (raw) one.
+    fidelity: { type: String, enum: ["high", "masked", "metadata_only"], default: "high" },
 
     status: { type: String, enum: ["queued", "running", "passed", "failed", "cancelled"], default: "queued", index: true },
     thresholds: { type: mongoose.Schema.Types.Mixed, default: null },

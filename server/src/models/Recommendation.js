@@ -8,7 +8,12 @@ const recommendationSchema = new mongoose.Schema(
     title: { type: String, required: true },
     reason: { type: String, required: true },
 
-    // What the recommendation is about.
+    // What the recommendation is about. Scope narrows where an accepted rule applies; null = any.
+    // (Today's engine produces task-type-global recs; these let accept constrain the rule and
+    // leave room for per-application recommendations without another schema change.)
+    application: { type: String, default: null },
+    workflow: { type: String, default: null },
+    department: { type: String, default: null },
     taskType: { type: String, default: null },
     currentModel: { type: String, default: null },
     currentProvider: { type: String, default: null },

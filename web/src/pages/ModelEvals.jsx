@@ -194,6 +194,7 @@ function RunDetail({ id, onClose }) {
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
           {run.baselineModel} → {run.candidateModel} · judge {run.judgeModel || "none"} · {run.riskTier} risk · est. cost {fmt.usd(run.estimatedCostUsd)} · actual {fmt.usd(run.actualCostUsd)}
+          {run.fidelity === "masked" && <span className="ml-1 text-amber-600">· masked dataset (lower-fidelity: candidate saw redacted prompts vs the original baseline)</span>}
         </div>
         <div className="flex items-center justify-between">
           <div className="label">Worst candidate examples</div>
