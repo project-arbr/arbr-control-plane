@@ -458,6 +458,11 @@ router.get("/models", async (req, res) => {
     const liveIds = new Set(eff?.liveIds || []);
     models = models.filter((m) => liveIds.has(m.provider));
   }
+  // routable=true → only chat-capable models (drops media/embedding models like Lyria that
+  // can't serve /chat/completions). Used by the routing UI and judge/target pickers.
+  if (req.query.routable === "true") {
+    models = models.filter((m) => m.chatCapable !== false);
+  }
   res.json(models);
 });
 

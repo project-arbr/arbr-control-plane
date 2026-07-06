@@ -146,7 +146,11 @@ function lookup(map, taskType) {
   const model = map[String(taskType || "").toLowerCase()];
   if (!model) return null;
   const m = pricing.getModel(model);
-  return m ? { provider: m.provider, model } : null;
+  // Serve-time guard: a stale or manually-set assignment pointing at a non-chat model (e.g. a
+  // media model like Lyria) must never route. Treat it as unmapped so the caller falls through
+  // to the default model instead of 404ing on /chat/completions.
+  if (!m || m.chatCapable === false) return null;
+  return { provider: m.provider, model };
 }
 
 // Difficulty-aware resolution. Start from the policy's pick for the task type; if the
@@ -164,7 +168,7 @@ function resolveModel({ map, taskType, difficulty, eff }) {
   try {
     const liveIdSet = new Set(eff.liveIds);
     const liveModels = pricing.listModels()
-      .filter((m) => liveIdSet.has(m.provider))
+      .filter((m) => liveIdSet.has(m.provider) && m.chatCapable !== false)
       .sort((a, b) => (b.inputPer1M || 0) - (a.inputPer1M || 0));
     if (!liveModels.length) return base;
     const catalogMap = Object.fromEntries(TASK_CATALOG.map((t) => [t.id, t]));
@@ -259,7 +263,7 @@ async function _computeAssignments({ router, eff, excludeModels = [], goal = "ba
   const excludeSet = new Set(excludeModels);
   const liveIdSet  = new Set(eff.liveIds);
   const liveModels = pricing.listModels()
-    .filter((m) => liveIdSet.has(m.provider) && !excludeSet.has(m.id))
+    .filter((m) => liveIdSet.has(m.provider) && !excludeSet.has(m.id) && m.chatCapable !== false)
     .sort((a, b) => (b.inputPer1M || 0) - (a.inputPer1M || 0));
 
   if (!liveModels.length) throw new Error("no live models available after exclusions");

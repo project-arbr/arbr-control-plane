@@ -14,6 +14,7 @@
 
 const ModelEntry = require("../models/ModelEntry");
 const Settings   = require("../models/Settings");
+const { isChatLikelyModelId } = require("../providers/importLogic");
 
 const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -221,10 +222,21 @@ async function run() {
   const skipped = [];
 
   for (const model of allModels) {
-    const ltEntry = byKey.get(`${model.provider}:${model.id}`);
-    if (!ltEntry) { skipped.push(`${model.provider}:${model.id}`); continue; }
+    // Mark routability from the id heuristic for EVERY model — including ones absent from the
+    // LiteLLM catalog (e.g. Gemini's `lyria-*` music model) that the pricing refresh below skips.
+    // This is what demotes media/embedding models so they're excluded from automated routing.
+    const chatCapable = isChatLikelyModelId(model.id);
 
-    const update = { litellmSyncedAt: now };
+    const ltEntry = byKey.get(`${model.provider}:${model.id}`);
+    if (!ltEntry) {
+      skipped.push(`${model.provider}:${model.id}`);
+      if (model.chatCapable !== chatCapable) {
+        await ModelEntry.updateOne({ id: model.id, provider: model.provider }, { $set: { chatCapable } });
+      }
+      continue;
+    }
+
+    const update = { litellmSyncedAt: now, chatCapable };
 
     const inputCost  = parseFloat(ltEntry.input_cost_per_token);
     const outputCost = parseFloat(ltEntry.output_cost_per_token);
