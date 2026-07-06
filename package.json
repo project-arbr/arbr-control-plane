@@ -41,7 +41,9 @@
     "docs:preview": "vitepress preview docs",
     "test:server:unit": "node --test server/test/unit/*.test.js",
     "test:server:integration": "node --test server/test/integration/*.test.js",
-    "test:server": "node --test server/test/unit/*.test.js server/test/integration/*.test.js"
+    "test:server": "node --test server/test/unit/*.test.js server/test/integration/*.test.js",
+    "bench:latency": "node server/scripts/latency-bench.js",
+    "bench:latency:stream": "node server/scripts/latency-bench.js --stream"
   },
   "dependencies": {
     "@langchain/anthropic": "^1.5.1",

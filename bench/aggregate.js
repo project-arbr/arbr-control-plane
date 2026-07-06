@@ -9,12 +9,13 @@ if (!file) { console.error("usage: node bench/aggregate.js <results.jsonl>"); pr
 const rows = fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const s = summarize(rows);
 
-const pct = (n) => (n == null ? "  —  " : `${n.toFixed(1)}%`);
-const usd = (n) => `$${(Number(n) || 0).toFixed(4)}`;
+const pct  = (n) => (n == null ? "  —  " : `${n.toFixed(1)}%`);
+const usd  = (n) => `$${(Number(n) || 0).toFixed(4)}`;
+const ms   = (n) => (n == null ? "  —" : `${Math.round(n)}ms`);
 
 const benchName = (rows[0] && rows[0].benchmark) || "benchmark";
 console.log(`\n${benchName} router comparison  (${rows.length} rows)\n`);
-console.log("baseline          quality   qRetained   $/query    cost%prem   scored  err  unpriced");
+console.log("baseline          quality   qRetained   $/query    cost%prem   p50      p95      max      scored  err  unpriced");
 for (const k of Object.keys(s)) {
   const b = s[k];
   console.log(
@@ -22,6 +23,9 @@ for (const k of Object.keys(s)) {
     `${pct(b.qualityRetainedPct)}`.padEnd(12) +
     `${usd(b.costPerQuery)}`.padEnd(11) +
     `${pct(b.costVsPremiumPct)}`.padEnd(11) +
+    `${ms(b.latencyP50)}`.padEnd(9) +
+    `${ms(b.latencyP95)}`.padEnd(9) +
+    `${ms(b.latencyMax)}`.padEnd(9) +
     `${b.scoredN}`.padEnd(8) + `${b.errors}`.padEnd(5) + `${b.unpriced}`
   );
 }
