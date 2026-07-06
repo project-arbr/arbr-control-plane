@@ -151,6 +151,130 @@ function CampaignDetail({ id, onClose }) {
   );
 }
 
+const RUN_TONE = { queued: "gray", running: "amber", passed: "green", failed: "red", cancelled: "gray" };
+const EXP_TONE = { draft: "gray", active: "green", paused: "amber", rolled_back: "red", promoted: "charcoal" };
+
+// Offline eval-run detail: pass/fail, aggregate summary, and the worst candidate examples.
+function RunDetail({ id, onClose }) {
+  const [run, setRun] = useState(null);
+  const [results, setResults] = useState(null);
+
+  useEffect(() => {
+    api.evalRun(id).then(setRun).catch((e) => setRun({ _error: e.message }));
+    api.evalRunResults(id).then(setResults).catch(() => setResults([]));
+  }, [id]);
+
+  const exportCsv = () => {
+    const rows = results || [];
+    const head = ["verdict", "criticalFailure", "formatPass", "candidateCost", "candidateLatencyMs", "judgeRationale"];
+    const body = rows.map((r) => head.map((k) => JSON.stringify(r[k] ?? "")).join(","));
+    const blob = new Blob([[head.join(","), ...body].join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `eval-run-${id}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  if (!run) return <Drawer title="Eval run" onClose={onClose}><Spinner /></Drawer>;
+  if (run._error) return <Drawer title="Eval run" onClose={onClose}><div className="text-sm text-red-600">{run._error}</div></Drawer>;
+  const s = run.summary || {};
+
+  return (
+    <Drawer title={`Eval run · ${run.candidateModel}`} onClose={onClose}>
+      <div className="space-y-5">
+        <div className={`rounded-lg p-3 text-sm font-medium ${run.status === "passed" ? "bg-green-50 text-arbr-green-700" : run.status === "failed" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-600"}`}>
+          {run.status === "passed" ? "✓ Passed all thresholds" : run.status === "failed" ? "✗ Failed" : run.status}
+          {run.failures?.length > 0 && <ul className="mt-1 list-disc pl-5 text-xs font-normal">{run.failures.map((f, i) => <li key={i}>{f}</li>)}</ul>}
+          {run.error && <div className="mt-1 text-xs font-normal">{run.error}</div>}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Judged" value={fmt.num(s.judged)} sub={`${fmt.num(s.total)} total`} />
+          <Stat label="Worse-rate" value={pct(s.worseRate)} sub={`critical ${pct(s.criticalFailRate)}`} />
+          <Stat label="Format pass" value={pct(s.formatPassRate)} />
+          <Stat label="Cost saving" value={pct(s.costSavingPct)} sub={`latency ${signedPct(s.avgLatencyDeltaPct)}`} />
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+          {run.baselineModel} → {run.candidateModel} · judge {run.judgeModel || "none"} · {run.riskTier} risk · est. cost {fmt.usd(run.estimatedCostUsd)} · actual {fmt.usd(run.actualCostUsd)}
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="label">Worst candidate examples</div>
+          <button className="btn-outline text-xs" onClick={exportCsv}>Export CSV</button>
+        </div>
+        {results === null ? <Spinner /> : results.length === 0 ? <div className="text-xs text-gray-400">No results.</div> : (
+          <div className="space-y-3">
+            {results.slice(0, 20).map((r) => (
+              <div key={r._id} className="rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center gap-2">
+                  {r.judgeVerdict ? <Badge tone={VERDICT_TONE[r.judgeVerdict]}>{r.judgeVerdict}</Badge> : <Badge tone="gray">unjudged</Badge>}
+                  {r.criticalFailure && <Badge tone="red">critical</Badge>}
+                  {!r.formatPass && <Badge tone="amber">format fail</Badge>}
+                  {r.error && <span className="text-xs text-red-600">{r.error}</span>}
+                </div>
+                {r.judgeRationale && <p className="mt-2 text-sm text-gray-600">{r.judgeRationale}</p>}
+                {r.candidateResponse && <CodeBlock code={r.candidateResponse} />}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Drawer>
+  );
+}
+
+// Offline eval runs across all recommendations.
+function EvalRunsSection() {
+  const [runs, setRuns] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  useEffect(() => { api.evalRuns().then(setRuns).catch(() => setRuns([])); }, []);
+  const cols = [
+    { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
+    { key: "status", header: "Status", render: (r) => <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge> },
+    { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
+    { key: "saving", header: "Cost saving", render: (r) => pct(r.summary?.costSavingPct) },
+    { key: "risk", header: "Risk", render: (r) => r.riskTier },
+    { key: "actions", header: "", render: (r) => <button className="btn-outline text-xs" onClick={(e) => { e.stopPropagation(); setOpenId(r._id); }}>Evidence</button> },
+  ];
+  return (
+    <Card title="Offline eval runs">
+      {runs === null ? <Spinner /> : <Table columns={cols} rows={runs} empty="No eval runs yet — run one from a recommendation." onRowClick={(r) => setOpenId(r._id)} />}
+      {openId && <RunDetail id={openId} onClose={() => setOpenId(null)} />}
+    </Card>
+  );
+}
+
+// Live canary experiments with rollback / promote controls.
+function CanarySection() {
+  const [exps, setExps] = useState(null);
+  const [err, setErr] = useState(null);
+  const load = useCallback(() => { api.routingExperiments().then(setExps).catch(() => setExps([])); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (fn) => { setErr(null); try { await fn(); load(); } catch (e) { setErr(e.message); } };
+  const rollback = (id) => act(() => api.rollbackExperiment(id, "manual rollback from dashboard"));
+  const promote = (id) => act(() => api.promoteExperiment(id, "console"));
+
+  const cols = [
+    { key: "models", header: "Baseline → candidate", render: (e) => <span>{e.baselineModel} → <b>{e.candidateModel}</b></span> },
+    { key: "scope", header: "Scope", render: (e) => <span className="text-xs text-gray-500">{[e.scope?.application, e.scope?.taskType].filter(Boolean).join(" · ") || "any"}</span> },
+    { key: "rollout", header: "Rollout", render: (e) => `${e.rolloutPct}%` },
+    { key: "status", header: "Status", render: (e) => <Badge tone={EXP_TONE[e.status]}>{e.status}</Badge> },
+    { key: "metrics", header: "Live (err / save)", render: (e) => e.lastMetrics ? <span className="text-xs">{pct(e.lastMetrics.candErrorRate)} / {pct(e.lastMetrics.costSavingPct)}</span> : <span className="text-gray-400">—</span> },
+    { key: "actions", header: "", render: (e) => (
+      <span className="flex gap-2" onClick={(ev) => ev.stopPropagation()}>
+        {(e.status === "active" || e.status === "paused") && <button className="btn-outline text-xs" onClick={() => promote(e._id)}>Promote</button>}
+        {(e.status === "active" || e.status === "paused") && <button className="btn-outline text-xs text-red-600" onClick={() => rollback(e._id)}>Roll back</button>}
+        {e.status === "rolled_back" && e.rollbackReason && <span className="text-xs text-red-600">{e.rollbackReason}</span>}
+      </span>
+    ) },
+  ];
+  return (
+    <Card title="Canary experiments">
+      <p className="mb-3 text-sm text-gray-500">Eval-approved candidates rolled out to a deterministic slice of auto-routed traffic. Auto-rolls-back on guardrail breach; promote to make it a rule.</p>
+      {err && <div className="mb-2 text-sm text-red-600">{err}</div>}
+      {exps === null ? <Spinner /> : <Table columns={cols} rows={exps} empty="No canary experiments — start one from a passed recommendation." />}
+    </Card>
+  );
+}
+
 export default function ModelEvals() {
   const [campaigns, setCampaigns] = useState(null);
   const [models, setModels] = useState([]);
@@ -194,8 +318,11 @@ export default function ModelEvals() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-arbr-charcoal">Model Evals</h1>
-        <p className="mt-1 text-sm text-gray-500">Safely evaluate a candidate model on your own live traffic before switching.</p>
+        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model holds quality — offline replay, live shadow, then a guarded canary — before it becomes a rule.</p>
       </div>
+
+      <EvalRunsSection />
+      <CanarySection />
 
       <NewCampaign models={models} apps={apps} onCreated={load} />
 
