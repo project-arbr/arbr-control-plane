@@ -72,22 +72,35 @@ const icons = {
       <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
     </Icon>
   ),
+  recommend: (
+    <Icon>
+      <path d="M9 18h6M10 21h4"/>
+      <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/>
+    </Icon>
+  ),
 };
 
 // ── Navigation definition ─────────────────────────────────────────────────────
+// Grouped by the path a request takes through Arbr: Connect → See → Recommend → Route → Govern.
+// The `hint` is a one-line, plain-language descriptor of what each stage is for.
 const NAV_GROUPS = [
-  { section: "Monitor", items: [
+  { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
+    { to: "/models",   label: "Models",   icon: icons.models },
+    { to: "/settings", label: "Settings", icon: icons.settings },
+  ] },
+  { section: "See", hint: "Know what you're spending, and where", items: [
     { to: "/", label: "Overview", end: true, icon: icons.overview },
     { to: "/applications", label: "Applications", icon: icons.applications },
   ] },
-  { section: "Control", items: [
-    { to: "/routing",  label: "Routing",      icon: icons.routing },
-    { to: "/budgets",  label: "Budgets",       icon: icons.budgets },
-    { to: "/models",   label: "Models",        icon: icons.models },
-    { to: "/evals",    label: "Model Evals",   icon: icons.evals },
-    { to: "/settings", label: "Settings",      icon: icons.settings },
+  { section: "Recommend", hint: "Where a cheaper model fits", items: [
+    { to: "/recommendations", label: "Recommendations", icon: icons.recommend },
   ] },
-  { section: "Governance", items: [
+  { section: "Route", hint: "Send traffic to the right model", items: [
+    { to: "/routing", label: "Routing",     icon: icons.routing },
+    { to: "/evals",   label: "Model Evals", icon: icons.evals },
+  ] },
+  { section: "Govern", hint: "Limits, guardrails, and records", items: [
+    { to: "/budgets",    label: "Budgets",    icon: icons.budgets },
     { to: "/governance", label: "Governance", icon: icons.governance },
     { to: "/audit",      label: "Audit",      icon: icons.audit },
   ] },
@@ -123,8 +136,13 @@ export default function Layout({ status, onSignOut, children }) {
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
           {NAV_GROUPS.map((group, gi) => (
             <div key={group.section} className={gi > 0 ? "mt-5" : ""}>
-              <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-                {group.section}
+              <div className="mb-1 px-3">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                  {group.section}
+                </div>
+                {group.hint && (
+                  <div className="mt-0.5 text-[10px] leading-tight text-gray-300">{group.hint}</div>
+                )}
               </div>
               {group.items.map((item) => (
                 <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>

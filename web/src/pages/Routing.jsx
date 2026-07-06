@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, fmt } from "../api.js";
 import { Card, Table, Stat, Toggle, Badge, Spinner, Tabs, useTabParam, ConfirmDialog } from "../components/ui.jsx";
-import Recommendations from "./Recommendations.jsx";
 
+// Recommendations moved to its own top-level page (/recommendations).
 const TABS = [
   ["rules", "Rules"],
   ["auto", "Automated routing"],
-  ["recommendations", "Recommendations"],
 ];
 
 function cond(c) {
@@ -454,6 +454,13 @@ const MODE_OPTIONS = [
 ];
 
 export default function Routing({ onChange }) {
+  const navigate = useNavigate();
+  // Recommendations is now its own page; send old ?tab=recommendations bookmarks there.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "recommendations") {
+      navigate("/recommendations", { replace: true });
+    }
+  }, [navigate]);
   const [tab, setTab] = useTabParam(TABS);
   const [rules, setRules] = useState(null);
   const [models, setModels] = useState([]);
@@ -569,8 +576,6 @@ export default function Routing({ onChange }) {
           )}
         </>
       )}
-
-      {tab === "recommendations" && <Recommendations embedded />}
 
       {err && <div className="text-red-600">{err}</div>}
     </div>

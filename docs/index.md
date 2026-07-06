@@ -13,23 +13,21 @@ hero:
       text: View on GitHub
       link: https://github.com/project-arbr/arbr-control-plane
 
+# The five stages a request takes through Arbr: Connect → See → Recommend → Route → Govern.
 features:
-  - icon: 🔍
-    title: Full visibility
-    details: Every LLM call logged with model, cost, latency, and routing decision. Spend legible by application, team, workflow, model, and task type — in a live dashboard.
-  - icon: 🎯
-    title: Human-approved routing
-    details: Developers pin the model they want; it's honored as-is. When they say "auto", the gateway applies human-approved rules and automated policies — all reversible in seconds.
-  - icon: 💰
-    title: Cost governance
-    details: Costed recommendations surface premium-model overuse on cheap tasks. Budgets block or downgrade spend that breaches its cap, enforced per application, team, or provider.
-  - icon: 🔗
-    title: Drop-in compatible
-    details: OpenAI-compatible endpoint (POST /v1/chat/completions) — any client that speaks the OpenAI spec works without modification. Real SSE streaming included.
-  - icon: 🛡️
-    title: Keys stay server-side
-    details: Your app never holds provider keys. The gateway holds them encrypted; attribution, rate limits, and governance all bind to your gateway API keys.
   - icon: 🔌
-    title: 8 providers, zero lock-in
-    details: Anthropic, OpenAI, Google Gemini, Amazon Bedrock, DeepSeek, Moonshot AI, xAI (Grok), and Groq. Or point the OpenAI provider at any LiteLLM proxy for hundreds more.
+    title: Connect
+    details: One drop-in, OpenAI-compatible gateway (POST /v1/chat/completions) every app calls without code changes — real SSE streaming included. Connect Anthropic, OpenAI, Gemini, Bedrock, DeepSeek, Moonshot, xAI (Grok) and Groq, or any LiteLLM proxy for hundreds more. Provider keys stay encrypted server-side, never in your app.
+  - icon: 🔍
+    title: See
+    details: Every call logged with model, cost, latency, and routing decision. Spend legible by application, team, workflow, model, and task type — in a live dashboard.
+  - icon: 💡
+    title: Recommend
+    details: Costed recommendations surface premium-model overuse on cheap tasks, with the dollar saving — measured from your own traffic, advisory until a human accepts.
+  - icon: 🎯
+    title: Route
+    details: Developers pin the model they want; it's honored as-is. On "auto", the gateway applies human-approved rules and policies — and you can prove a cheaper model is no worse before it routes. All reversible in seconds.
+  - icon: 🛡️
+    title: Govern
+    details: Budgets block or downgrade spend that breaches its cap, per application, team, or provider. Guardrails, PII masking, and an audit log keep it safe and accountable.
 ---

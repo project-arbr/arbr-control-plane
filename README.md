@@ -19,6 +19,14 @@ automated policy a human enabled (cost guardrail or AI-generated task→model ma
 is reversible from the dashboard within seconds — and enforced budgets can block or downgrade
 spend that breaches its cap.
 
+**The five stages a request takes through Arbr** — the vocabulary the console and these docs are organised around:
+
+- **Connect** — one drop-in, OpenAI-compatible gateway; providers connected once, their keys held encrypted server-side.
+- **See** — every call logged and costed; spend legible by application, team, model, and task type.
+- **Recommend** — costed suggestions where a premium model is handling a cheap task, measured from your own traffic.
+- **Route** — a pinned model is honored; `auto` follows human-approved rules and policies, and a cheaper model can be proven no worse before it routes.
+- **Govern** — budgets, guardrails, PII masking, and an audit log keep spend and data under control.
+
 ![Arbr Control Plane — cost and usage overview](docs/media/dashboard.png)
 
 ---
