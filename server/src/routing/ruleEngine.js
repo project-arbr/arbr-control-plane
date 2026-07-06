@@ -63,6 +63,7 @@ async function setRoutingMode(mode) {
   s.routingMode = next;
   s.autoRouting = next !== "off"; // keep legacy field consistent
   await s.save();
+  Settings.invalidateCache();
   return next;
 }
 

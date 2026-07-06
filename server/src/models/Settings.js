@@ -87,12 +87,21 @@ const settingsSchema = new mongoose.Schema(
   { collection: "settings" }
 );
 
+let _cache = { doc: null, at: 0 };
+const CACHE_TTL_MS = 5_000;
+
 settingsSchema.statics.get = async function get() {
+  if (_cache.doc && Date.now() - _cache.at < CACHE_TTL_MS) return _cache.doc;
   let doc = await this.findOne({ key: "global" });
   if (!doc) {
     doc = await this.create({ key: "global" });
   }
+  _cache = { doc, at: Date.now() };
   return doc;
+};
+
+settingsSchema.statics.invalidateCache = function invalidateCache() {
+  _cache.at = 0;
 };
 
 module.exports = mongoose.model("Settings", settingsSchema);

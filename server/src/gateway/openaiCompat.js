@@ -246,6 +246,8 @@ async function proxyOpenAICompat(ctx) {
   });
   res.flushHeaders(); // send headers immediately so the client/proxy knows it's SSE
   let promptTokens = 0, completionTokens = 0, cachedReadTokens = 0, respText = "";
+  let ttftMs = null;
+  let _firstChunk = true;
   try {
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => "");
@@ -257,6 +259,7 @@ async function proxyOpenAICompat(ctx) {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (_firstChunk && value?.length > 0) { ttftMs = Date.now() - start; _firstChunk = false; }
       res.write(Buffer.from(value)); // relay exact bytes
       buf += decoder.decode(value, { stream: true });
       let nl;
@@ -283,12 +286,12 @@ async function proxyOpenAICompat(ctx) {
       promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
       cachedReadTokens,
       responseText: respText || null,
-      latencyMs: Date.now() - start, status: "success",
+      latencyMs: Date.now() - start, ttftMs, status: "success",
     });
   } catch (err) {
     try { res.write(`data: ${JSON.stringify({ error: String(err.message || err) })}\n\n`); } catch { /* client gone */ }
     res.end();
-    logRecord({ latencyMs: Date.now() - start, status: "failure", errorMessage: String(err.message || err) });
+    logRecord({ latencyMs: Date.now() - start, ttftMs, status: "failure", errorMessage: String(err.message || err) });
   }
 }
 
@@ -301,8 +304,14 @@ async function handleOpenAICompat(req, res) {
     });
   }
 
-  // Maintenance mode (kill-switch): checked before any routing or provider access.
-  const settings = await Settings.get();
+  // Parallel: settings + router + appConfig are independent reads.
+  const appName = req.apiKey?.application || "openai-compat";
+  const [settings, routerResult, appCfg] = await Promise.all([
+    Settings.get(),
+    getRouter(),
+    getAppConfig(appName),
+  ]);
+
   if (settings.maintenanceMode?.enabled) {
     const msg = settings.maintenanceMode.message || "Service temporarily unavailable.";
     const errBody = { error: { message: msg, type: "server_error", code: "maintenance_mode" } };
@@ -315,19 +324,18 @@ async function handleOpenAICompat(req, res) {
     }
     return res.status(503).json(errBody);
   }
+  const { router, eff } = routerResult;
+  if (!router) return res.status(503).json(DEMO_503);
 
   // Max-tokens guardrail: clamp body.max_tokens to the configured ceiling.
   if (settings.maxTokensGuardrail && body.max_tokens > settings.maxTokensGuardrail) {
     body.max_tokens = settings.maxTokensGuardrail;
   }
 
-  const { router, eff } = await getRouter();
-  if (!router) return res.status(503).json(DEMO_503);
-
   const requestId = uuidv4();
   const timestamp = new Date();
   const meta = {
-    application: req.apiKey?.application || "openai-compat",
+    application: appName,
     workflow: "completion",
     userId: req.apiKey?.userId || null,
     department: "openai-compat",
@@ -337,10 +345,6 @@ async function handleOpenAICompat(req, res) {
   const normalized = { ...body, maxTokens: body.max_tokens };
   const modelRequested = (body.model || "auto").trim();
 
-  // Per-application config (kill switch, modelOptOut, generated aiPolicyAssignments). Without this
-  // the app's own policy + allowed-models opt-out are ignored and routing falls back to the global
-  // policy / default — exactly the /v1/chat path's behavior. (parity with handleChat)
-  const appCfg = await getAppConfig(meta.application);
   if (appCfg?.killSwitchEnabled) {
     return res.status(503).json({
       error: {

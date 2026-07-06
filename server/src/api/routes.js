@@ -1180,6 +1180,7 @@ router.patch("/governance", async (req, res, next) => {
       update.maskPiiInResponses = !!body.maskPiiInResponses;
 
     await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
+    Settings.invalidateCache();
     const s = await Settings.get();
     setImmediate(() => logAction("governance.update", "settings", "global", body));
     res.json(governanceView(s));
@@ -1309,6 +1310,7 @@ router.post("/app-configs/:app/set-default-policy", async (req, res, next) => {
     const cfg = await ApplicationConfig.findOne({ applicationName: req.params.app }).lean();
     if (!cfg?.aiPolicyAssignments) return res.status(400).json({ error: "No custom policy set for this application." });
     await Settings.updateOne({ key: "global" }, { $set: { aiPolicy: cfg.aiPolicyAssignments } }, { upsert: true });
+    Settings.invalidateCache();
     aiPolicy.invalidate?.();
     setImmediate(() => logAction("appConfig.setDefaultPolicy", "settings", "global", { from: req.params.app }));
     res.json({ ok: true });
