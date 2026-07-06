@@ -65,6 +65,7 @@ export const api = {
   },
 
   recommendations: (status) => req(`/recommendations${qs({ status })}`),
+  recommendationsAnalysis: () => req("/recommendations/analysis"),
   recompute: () => req("/recommendations/recompute", { method: "POST" }),
   acceptRecommendation: (id, override) => req(`/recommendations/${id}/accept`, { method: "POST", body: JSON.stringify(override ? { override } : {}) }),
   dismissRecommendation: (id) => req(`/recommendations/${id}/dismiss`, { method: "POST" }),
