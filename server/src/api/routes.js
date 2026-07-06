@@ -699,7 +699,12 @@ router.post("/recommendations/:id/create-eval-dataset", async (req, res, next) =
       await rec.save();
     }
     setImmediate(() => logAction("eval.dataset.create", "evalDataset", String(dataset._id), { recommendationId: String(rec._id), itemCount: dataset.itemCount, status: dataset.status }));
-    res.status(dataset.status === "failed" ? 422 : 200).json(dataset);
+    if (dataset.status === "failed") {
+      // Surface the reason as `message` so the UI shows *why*, not a bare "422".
+      const body = dataset.toObject ? dataset.toObject() : dataset;
+      return res.status(422).json({ ...body, error: "no_replayable_traffic", message: dataset.error });
+    }
+    res.json(dataset);
   } catch (e) { next(e); }
 });
 

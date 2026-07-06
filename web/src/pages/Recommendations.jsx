@@ -82,7 +82,7 @@ function RecCard({ rec, models, onChange }) {
             {(evalStatus === "not_started") && (
               <button className="btn-secondary text-sm" disabled={busy}
                 onClick={() => run(() => api.createEvalDataset(rec._id), (d) => `Dataset built: ${d.itemCount} items (${d.riskTier} risk).`)}>
-                1 · Build eval dataset
+                Build eval dataset
               </button>
             )}
             {(evalStatus === "dataset_ready" || evalStatus === "failed") && (
@@ -93,7 +93,7 @@ function RecCard({ rec, models, onChange }) {
                 </select>
                 <button className="btn-secondary text-sm" disabled={busy}
                   onClick={() => run(() => api.runEval(rec._id, { judgeModel: judge || null }), () => "Offline eval started — refresh in a moment.")}>
-                  2 · Run offline eval
+                  Run offline eval
                 </button>
               </>
             )}
@@ -103,7 +103,7 @@ function RecCard({ rec, models, onChange }) {
                 <input className="input text-sm" placeholder="application for rollout" value={application} onChange={(e) => setApplication(e.target.value)} />
                 <button className="btn-secondary text-sm" disabled={busy || !application.trim()}
                   onClick={() => run(() => api.createCanary(rec._id, { application: application.trim() }), (x) => `Canary started at ${x.rolloutPct}%.`)}>
-                  3 · Start canary
+                  Start canary
                 </button>
               </>
             )}
