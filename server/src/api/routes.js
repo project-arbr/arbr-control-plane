@@ -1034,17 +1034,21 @@ router.post("/ai-policy/simulate", async (req, res, next) => {
 router.get("/policy", async (_req, res, next) => {
   try {
     const d = await policyEngine.describe();
-    res.json({ ...d, taskTypes: TASK_TYPES });
+    // Merge built-in task types with any app-provided task types observed in traffic.
+    const observed = (await RequestRecord.distinct("taskType")).filter(Boolean).map((x) => String(x).toLowerCase());
+    const allTypes = [...new Set([...TASK_TYPES, ...observed])].sort();
+    res.json({ ...d, taskTypes: allTypes });
   } catch (e) { next(e); }
 });
 
 router.put("/policy", async (req, res, next) => {
   try {
     const body = req.body || {};
-    // Validate task types against the known catalog.
+    // Validate task types against built-in catalog + any task types observed in traffic.
     let cheapTaskTypes;
     if (Array.isArray(body.cheapTaskTypes)) {
-      const known = new Set(TASK_TYPES);
+      const observed = (await RequestRecord.distinct("taskType")).filter(Boolean).map((x) => String(x).toLowerCase());
+      const known = new Set([...TASK_TYPES, ...observed]);
       cheapTaskTypes = body.cheapTaskTypes.map((x) => String(x).toLowerCase()).filter((x) => known.has(x));
     }
     // Validate targets: each must be a known model that belongs to its provider key.
