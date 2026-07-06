@@ -39,6 +39,7 @@ const recommendationSchema = new mongoose.Schema(
     evalDatasetId: { type: mongoose.Schema.Types.ObjectId, ref: "EvalDataset", default: null },
     evalRunId: { type: mongoose.Schema.Types.ObjectId, ref: "EvalRun", default: null },
     shadowCampaignId: { type: mongoose.Schema.Types.ObjectId, ref: "EvalCampaign", default: null }, // Phase 2
+    experimentId: { type: mongoose.Schema.Types.ObjectId, ref: "RoutingExperiment", default: null }, // Phase 3 canary
     qualitySummary: { type: mongoose.Schema.Types.Mixed, default: null }, // last run's summary
     override: {
       reason: { type: String, default: null },

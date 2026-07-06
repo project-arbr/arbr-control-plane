@@ -11,6 +11,7 @@ const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const { purgeOldRecords } = require("./maintenance/purge");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
+const canaryMonitor = require("./routing/canaryMonitor");
 const { supportsTools } = require("./gateway/capabilities");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
@@ -125,6 +126,10 @@ async function start() {
   // Error-rate alerting: checks rolling 1-hour error rate every 5 min and fires
   // the governance webhook when the threshold is exceeded.
   errorAlertMonitor.start();
+
+  // Canary auto-rollback: every 5 min, roll back any active routing experiment that
+  // breaches its guardrails (error rate, latency, cost saving, shadow worse-rate).
+  canaryMonitor.start();
 
   app.listen(config.port, config.host, () => {
     console.log("\n" + describe() + "\n");

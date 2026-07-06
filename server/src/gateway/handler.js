@@ -15,6 +15,7 @@ const ruleEngine = require("../routing/ruleEngine");
 const autoRouter = require("../routing/autoRouter");
 const policyEngine = require("../routing/policy");
 const aiPolicy = require("../routing/aiPolicy");
+const canaryEngine = require("../routing/canaryEngine");
 const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
 const outputGuardrail = require("./outputGuardrail");
@@ -94,7 +95,7 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
 // Shared routing resolution: classify task + decide served {provider, model}.
 // Returns { served, routingDecision, taskType, classifiedBy, cls }.
 // Callers are responsible for budget enforcement (it may short-circuit the response).
-async function resolveRoute(body, { router, eff, application, workflow, appConfig = {}, appDbConfig = null }) {
+async function resolveRoute(body, { router, eff, application, workflow, userId = null, appConfig = {}, appDbConfig = null }) {
   const routingMode = await ruleEngine.getRoutingMode();
   const explicit = resolveExplicit(body, eff);
   const autoMode = !explicit;
@@ -170,6 +171,28 @@ async function resolveRoute(body, { router, eff, application, workflow, appConfi
       }
     }
   }
+  // Eval-approved canary: divert a deterministic fraction of AUTO-routed traffic to a candidate
+  // model. Pinned (explicit) models are never touched. Fail-open — selectCanary swallows its own
+  // errors, and allowed-model / opt-out checks below still apply to the canary target.
+  if (autoMode) {
+    const canary = await canaryEngine.selectCanary({ application, workflow, taskType, servedModel: served.model, userId });
+    if (canary) {
+      // Prefer the registered model's provider; fall back to the experiment's stored provider
+      // so an unregistered candidate can still be canaried.
+      const provider = pricing.getModel(canary.toModel)?.provider || canary.experiment.candidateProvider;
+      if (provider && eff.liveIds.includes(provider)) {
+        explain.canary = {
+          experimentId: String(canary.experiment._id),
+          evalRunId: canary.experiment.evalRunId ? String(canary.experiment.evalRunId) : null,
+          fromModel: served.model, toModel: canary.toModel, rolloutPct: canary.experiment.rolloutPct,
+        };
+        explain.override = { type: "canary", from: served.model, to: canary.toModel };
+        served = { provider, model: canary.toModel };
+        routingDecision = "canary";
+      }
+    }
+  }
+
   explain.classificationUsed =
     explain.basis === "ai" || explain.basis === "auto" ||
     (explain.basis === "rule" && !!explain.rule?.condition?.taskType);
@@ -270,7 +293,7 @@ async function handleChat(req, res) {
   let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain;
   try {
     ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain } =
-      await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, appConfig, appDbConfig: appCfg }));
+      await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, userId: meta.userId, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
       return res.status(403).json({ error: err.message, code: "model_not_allowed" });
