@@ -80,6 +80,20 @@ function gateAccept(rec, override, now = Date.now()) {
   };
 }
 
+// Phase 2 gate: a shadow campaign may only go active once its linked offline run PASSED, unless
+// an admin overrides. `offlineRun` is the EvalRun referenced by requiredEvalRunId (or null). Pure.
+// Returns { allowed, reason? }.
+function canActivateShadow(offlineRun, override) {
+  if (offlineRun && offlineRun.status === "passed") return { allowed: true };
+  if (override && override.reason && override.approver) return { allowed: true };
+  return {
+    allowed: false,
+    reason: offlineRun
+      ? `linked offline eval is "${offlineRun.status}", not "passed". Pass it first or override { reason, approver }.`
+      : "shadow requires a passed offline eval (requiredEvalRunId). Run one first, or override { reason, approver }.",
+  };
+}
+
 function pct(n) {
   if (n == null || isNaN(n)) return "n/a";
   return `${(Number(n) * 100).toFixed(1)}%`;
@@ -91,6 +105,7 @@ module.exports = {
   defaultThresholds,
   evaluateRun,
   gateAccept,
+  canActivateShadow,
   HIGH_RISK_MIN_HUMAN_REVIEW,
   _THRESHOLDS: THRESHOLDS,
 };

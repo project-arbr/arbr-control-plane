@@ -66,8 +66,27 @@ export const api = {
 
   recommendations: (status) => req(`/recommendations${qs({ status })}`),
   recompute: () => req("/recommendations/recompute", { method: "POST" }),
-  acceptRecommendation: (id) => req(`/recommendations/${id}/accept`, { method: "POST" }),
+  acceptRecommendation: (id, override) => req(`/recommendations/${id}/accept`, { method: "POST", body: JSON.stringify(override ? { override } : {}) }),
   dismissRecommendation: (id) => req(`/recommendations/${id}/dismiss`, { method: "POST" }),
+
+  // Eval-backed routing (P0–P3): dataset → offline run → shadow → canary.
+  createEvalDataset: (id, body = {}) => req(`/recommendations/${id}/create-eval-dataset`, { method: "POST", body: JSON.stringify(body) }),
+  runEval: (id, body = {}) => req(`/recommendations/${id}/run-eval`, { method: "POST", body: JSON.stringify(body) }),
+  startShadow: (id, body = {}) => req(`/recommendations/${id}/start-shadow`, { method: "POST", body: JSON.stringify(body) }),
+  createCanary: (id, body = {}) => req(`/recommendations/${id}/create-canary`, { method: "POST", body: JSON.stringify(body) }),
+  overrideRecommendation: (id, body) => req(`/recommendations/${id}/override`, { method: "POST", body: JSON.stringify(body) }),
+  evalDatasets: (recommendationId) => req(`/evals/datasets${qs({ recommendationId })}`),
+  evalDataset: (id) => req(`/evals/datasets/${id}`),
+  evalRuns: (recommendationId) => req(`/evals/runs${qs({ recommendationId })}`),
+  evalRun: (id) => req(`/evals/runs/${id}`),
+  evalRunResults: (id) => req(`/evals/runs/${id}/results`),
+
+  // Routing experiments (canary rollout).
+  routingExperiments: (status) => req(`/routing-experiments${qs({ status })}`),
+  routingExperiment: (id) => req(`/routing-experiments/${id}`),
+  updateRoutingExperiment: (id, body) => req(`/routing-experiments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  rollbackExperiment: (id, reason) => req(`/routing-experiments/${id}/rollback`, { method: "POST", body: JSON.stringify({ reason }) }),
+  promoteExperiment: (id, approvedBy) => req(`/routing-experiments/${id}/promote`, { method: "POST", body: JSON.stringify({ approvedBy }) }),
 
   models: ({ live } = {}) => req(`/models${live ? "?live=true" : ""}`),
   createModel: (body) => req("/models", { method: "POST", body: JSON.stringify(body) }),

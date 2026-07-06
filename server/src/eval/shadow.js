@@ -8,7 +8,7 @@ const Settings = require("../models/Settings");
 const pricing = require("../pricing/registry");
 const { maskMessages, maskPii, clampText } = require("../logging/piiFilter");
 const { judge } = require("./judge");
-const { isSingleShot, shouldSample } = require("./logic");
+const { isSingleShot, shouldSample, withinWindow, campaignMatches } = require("./logic");
 
 // Short-lived active-campaign cache per application (mirrors getAppConfig in handler.js).
 const _campaignCache = new Map(); // application -> { campaign, expiresAt }
@@ -25,6 +25,28 @@ function invalidateCampaignCache() { _campaignCache.clear(); }
 function costOf(model, usage) {
   const u = usage || {};
   return pricing.costFor(model, u.inputTokens || 0, u.outputTokens || 0).totalCost;
+}
+
+// Candidate spend for this campaign since UTC midnight — enforces maxDailyShadowBudgetUsd.
+async function spentTodayUsd(campaignId) {
+  const since = new Date(); since.setUTCHours(0, 0, 0, 0);
+  const agg = await EvalPair.aggregate([
+    { $match: { campaignId, timestamp: { $gte: since } } },
+    { $group: { _id: null, total: { $sum: "$candidateCost" } } },
+  ]).catch(() => []);
+  return agg.length ? (agg[0].total || 0) : 0;
+}
+
+// Count a candidate call failure; pause the campaign once maxCandidateErrors is hit.
+async function recordCandidateError(campaign) {
+  const count = (campaign.candidateErrorCount || 0) + 1;
+  const update = { candidateErrorCount: count };
+  if (campaign.maxCandidateErrors != null && count >= campaign.maxCandidateErrors) {
+    update.status = "paused";
+    update.statusReason = `candidate error cap (${campaign.maxCandidateErrors}) reached`;
+  }
+  await EvalCampaign.updateOne({ _id: campaign._id }, { $set: update }).catch(() => {});
+  invalidateCampaignCache();
 }
 
 // Fire the "safe to switch" webhook once thresholds clear.
@@ -55,20 +77,25 @@ async function checkThresholdAndNotify(campaign) {
 }
 
 // prod = { model, provider, latencyMs, text, usage }
-async function maybeShadowEval({ application, taskType, messages, hasTools, requestId, prod, router, eff }) {
+async function maybeShadowEval({ application, workflow, taskType, messages, hasTools, requestId, prod, router, eff }) {
   try {
     const campaign = await getActiveCampaign(application);
     if (!campaign || !router || !eff) return;
+    if (!withinWindow(Date.now(), campaign.startDate, campaign.endDate)) return; // outside date window
+    if (!campaignMatches(campaign, { taskType, workflow, baselineModel: prod.model })) return; // scope filter
     if (!isSingleShot(messages, hasTools)) return;
     if (!shouldSample(Math.random(), campaign.sampleRate)) return;
     const cm = pricing.getModel(campaign.candidateModel);
     if (!cm || !eff.liveIds.includes(cm.provider)) return;   // candidate not live → skip
     if (cm.id === prod.model) return;                        // same model → nothing to compare
 
+    // Daily shadow budget: stop mirroring once today's candidate spend hits the cap.
+    if (campaign.maxDailyShadowBudgetUsd != null && await spentTodayUsd(campaign._id) >= campaign.maxDailyShadowBudgetUsd) return;
+
     const candidate = await router.complete({
       messages, providerOverride: cm.provider, modelOverride: campaign.candidateModel,
     }).catch(() => null);
-    if (!candidate) return;
+    if (!candidate) { await recordCandidateError(campaign); return; }
 
     const s = await Settings.get().catch(() => null);
     const mask = !!s?.piiMaskingEnabled;
