@@ -65,6 +65,9 @@ function RecCard({ rec, models, onChange }) {
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <Badge tone="charcoal">{rec.currentModel} → {rec.suggestedModel}</Badge>
             <Badge tone="gray">{fmt.num(rec.requestCount)} requests</Badge>
+            {rec.replayableCount != null && (
+              <Badge tone={rec.replayableCount === 0 ? "red" : "gray"}>{fmt.num(rec.replayableCount)} replayable</Badge>
+            )}
           </div>
           <QualitySummary s={rec.qualitySummary} />
         </div>
@@ -80,10 +83,17 @@ function RecCard({ rec, models, onChange }) {
           {/* Eval-backed flow: prove quality, then roll out under control. */}
           <div className="flex flex-wrap items-center gap-2">
             {(evalStatus === "not_started") && (
-              <button className="btn-secondary text-sm" disabled={busy}
-                onClick={() => run(() => api.createEvalDataset(rec._id), (d) => `Dataset built: ${d.itemCount} items (${d.riskTier} risk).`)}>
-                Build eval dataset
-              </button>
+              rec.replayableCount === 0 ? (
+                <span className="text-sm text-gray-500">
+                  No replayable traffic yet — this recommendation's requests have no captured prompts.
+                  Turn on payload capture (Settings → Observability); only traffic logged after it is enabled can be evaluated.
+                </span>
+              ) : (
+                <button className="btn-secondary text-sm" disabled={busy}
+                  onClick={() => run(() => api.createEvalDataset(rec._id), (d) => `Dataset built: ${d.itemCount} items (${d.riskTier} risk).`)}>
+                  Build eval dataset
+                </button>
+              )
             )}
             {(evalStatus === "dataset_ready" || evalStatus === "failed") && (
               <>

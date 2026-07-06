@@ -28,6 +28,13 @@ async function recompute() {
         promptTokens: { $sum: "$promptTokens" },
         completionTokens: { $sum: "$completionTokens" },
         currentCost: { $sum: "$totalCost" },
+        // Requests an eval could actually replay: captured prompt + response, not a cache hit.
+        // (Single-shot is refined at dataset build; this is the readiness estimate.)
+        replayable: { $sum: { $cond: [{ $and: [
+          { $ne: ["$messages", null] },
+          { $gt: [{ $strLenCP: { $ifNull: ["$responseText", ""] } }, 0] },
+          { $ne: ["$cacheHit", true] },
+        ] }, 1, 0] } },
       },
     },
   ]);
@@ -65,6 +72,7 @@ async function recompute() {
       suggestedModel: target.model,
       suggestedProvider: target.provider,
       requestCount: g.requests,
+      replayableCount: g.replayable || 0,
       currentCost: g.currentCost,
       projectedCost: projected.totalCost,
       projectedSavings,
