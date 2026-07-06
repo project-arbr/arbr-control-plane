@@ -2,8 +2,24 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  buildScopeQuery, isEligible, promptHashOf, dedupeByPromptHash, stratifiedSample, stratumKey, projectText,
+  buildScopeQuery, isEligible, promptHashOf, dedupeByPromptHash, stratifiedSample, stratumKey, projectText, inferValidators,
 } = require("../../src/eval/dataset");
+
+test("inferValidators requires JSON when baseline outputs are all JSON", () => {
+  const v = inferValidators(['{"a":1}', '{"b":2}', '{"c":3}', '{"d":4}', '{"e":5}']);
+  assert.deepEqual(v, [{ type: "json_schema" }]);
+});
+
+test("inferValidators infers a label set for a small closed set of short strings", () => {
+  const v = inferValidators(["billing", "technical", "billing", "account", "technical", "feedback"]);
+  assert.equal(v[0].type, "classification_label");
+  assert.deepEqual(new Set(v[0].labels), new Set(["billing", "technical", "account", "feedback"]));
+});
+
+test("inferValidators attaches nothing for free-form text or too-few samples", () => {
+  assert.deepEqual(inferValidators(["a long free-form sentence that is clearly prose and not a label at all", "another distinct long free-form paragraph of text here", "yet another unique long sentence", "and one more different long sentence", "plus a fifth unique long sentence"]), []);
+  assert.deepEqual(inferValidators(["billing", "technical"]), []); // < 5 samples
+});
 
 test("buildScopeQuery restricts to success + non-cache + scope", () => {
   const q = buildScopeQuery({ taskType: "classification", currentModel: "gpt-4o" }, new Date(0));

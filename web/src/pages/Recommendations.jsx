@@ -145,7 +145,7 @@ export default function Recommendations({ embedded = false }) {
       <div className="flex items-start justify-between">
         <div>
           {!embedded && <h1 className="text-2xl font-bold text-arbr-charcoal">Recommendations</h1>}
-          <p className="text-sm text-gray-500">Costed suggestions. Prove quality with an eval, then roll out under control — the system proposes, the human decides.</p>
+          <p className="text-sm text-gray-500">Costed suggestions. Prove a cheaper model is no worse than the current one, then roll out under control — the system proposes, the human decides.</p>
         </div>
         <button className="btn-primary" onClick={recompute} disabled={busy}>
           {busy ? "Recomputing…" : "Recompute"}

@@ -34,6 +34,9 @@ const requestRecordSchema = new mongoose.Schema(
     inputCost: { type: Number, default: 0 },
     outputCost: { type: Number, default: 0 },
     totalCost: { type: Number, default: 0, index: true },
+    // false = pass-through model with no pricing entry; cost is logged as $0 and must be
+    // EXCLUDED from spend/savings claims rather than treated as free. Surfaced in analytics.
+    knownPricing: { type: Boolean, default: true, index: true },
 
     // performance + outcome
     latencyMs: { type: Number, default: 0 },

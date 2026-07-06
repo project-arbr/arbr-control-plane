@@ -319,7 +319,7 @@ export default function ModelEvals() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-arbr-charcoal">Model Evals</h1>
-        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model holds quality — offline replay, live shadow, then a guarded canary — before it becomes a rule.</p>
+        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one (safe substitution) — offline replay, live shadow, then a guarded canary — before it becomes a rule.</p>
       </div>
 
       <EvalRunsSection />

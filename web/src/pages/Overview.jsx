@@ -39,7 +39,8 @@ function Summary() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Total requests" value={fmt.num(data.totalRequests)} />
-        <Stat label="Total cost" value={fmt.usd(data.totalCost)} />
+        <Stat label="Total cost" value={fmt.usd(data.totalCost)}
+          sub={data.unknownPricingRequests ? `excludes ${fmt.num(data.unknownPricingRequests)} unpriced req` : undefined} />
         <Stat label="Avg cost / request" value={fmt.usd(data.avgCostPerRequest)} />
         <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
