@@ -636,6 +636,12 @@ router.get("/recommendations", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Explains the recommendation landscape (powers the self-diagnosing empty state): what was
+// analyzed, and the high-spend task types excluded only because they aren't marked cheap.
+router.get("/recommendations/analysis", async (_req, res, next) => {
+  try { res.json(await recommender.analyze()); } catch (e) { next(e); }
+});
+
 router.post("/recommendations/recompute", async (_req, res, next) => {
   try { res.json(await recommender.recompute()); } catch (e) { next(e); }
 });

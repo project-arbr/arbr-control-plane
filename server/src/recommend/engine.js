@@ -88,4 +88,65 @@ async function recompute() {
   return results.sort((a, b) => b.projectedSavings - a.projectedSavings);
 }
 
-module.exports = { recompute };
+// Explain the recommendation landscape so an empty Recompute is never a dead end. Pure.
+// groups: [{ taskType, model, provider, requests, promptTokens, completionTokens, currentCost }].
+// The key output is `unmarkedOpportunities`: (task type × premium model) groups with a real saving
+// that are EXCLUDED only because the task type isn't marked cheap — the money hiding in plain sight.
+function analyzeGroups(groups, cheapTaskTypes, { isPremium, suggestLightTarget, costFor, minRequests = MIN_REQUESTS }) {
+  const cheap = cheapTaskTypes instanceof Set
+    ? cheapTaskTypes
+    : new Set((cheapTaskTypes || []).map((x) => String(x).toLowerCase()));
+
+  let analyzedRequests = 0, analyzedCost = 0, flaggedGroups = 0;
+  const unmarked = [];
+  for (const g of groups) {
+    analyzedRequests += g.requests || 0;
+    analyzedCost += g.currentCost || 0;
+    if ((g.requests || 0) < minRequests) continue;
+    if (!isPremium(g.model)) continue;
+    const target = suggestLightTarget(g.model);
+    if (!target) continue;
+    const projected = costFor(target.model, g.promptTokens, g.completionTokens).totalCost;
+    const projectedSavings = (g.currentCost || 0) - projected;
+    if (projectedSavings <= 0) continue;
+
+    if (cheap.has(String(g.taskType || "").toLowerCase())) { flaggedGroups++; continue; } // already recommended
+    unmarked.push({
+      taskType: g.taskType, model: g.model, suggestedModel: target.model,
+      requests: g.requests, currentCost: g.currentCost || 0, projectedSavings,
+    });
+  }
+  unmarked.sort((a, b) => b.projectedSavings - a.projectedSavings);
+  return {
+    analyzedRequests, analyzedCost, flaggedGroups,
+    unmarkedOpportunities: unmarked,
+    unmarkedPotentialSavings: unmarked.reduce((s, u) => s + u.projectedSavings, 0),
+    suggestMarkCheap: [...new Set(unmarked.map((u) => String(u.taskType || "").toLowerCase()))],
+  };
+}
+
+// IO wrapper: aggregate the logged traffic + effective policy, then analyze. Returns the
+// analysis plus the current cheapTaskTypes (so the UI can offer a one-click "mark cheap").
+async function analyze() {
+  const policy = await getEffective();
+  const agg = await RequestRecord.aggregate([
+    { $match: { status: "success" } },
+    { $group: {
+        _id: { taskType: "$taskType", model: "$model", provider: "$provider" },
+        requests: { $sum: 1 },
+        promptTokens: { $sum: "$promptTokens" },
+        completionTokens: { $sum: "$completionTokens" },
+        currentCost: { $sum: "$totalCost" },
+    } },
+  ]);
+  const groups = agg.map((g) => ({
+    taskType: g._id.taskType, model: g._id.model, provider: g._id.provider,
+    requests: g.requests, promptTokens: g.promptTokens, completionTokens: g.completionTokens, currentCost: g.currentCost,
+  }));
+  const a = analyzeGroups(groups, policy.cheapTaskTypes, {
+    isPremium: pricing.isPremium, suggestLightTarget: pricing.suggestLightTarget, costFor: pricing.costFor,
+  });
+  return { ...a, cheapTaskTypes: [...policy.cheapTaskTypes] };
+}
+
+module.exports = { recompute, analyze, analyzeGroups };

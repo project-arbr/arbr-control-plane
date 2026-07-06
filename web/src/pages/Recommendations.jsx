@@ -121,13 +121,86 @@ function RecCard({ rec, models, onChange }) {
   );
 }
 
+// Self-diagnosing empty state: instead of a dead end, explain what was analyzed and surface
+// high-spend task types that are excluded only because they aren't marked cheap — with a
+// one-click "mark cheap & recompute". Falls back gracefully if the analysis endpoint is absent.
+function EmptyState({ analysis, busy, onMarkCheap }) {
+  if (!analysis) {
+    return (
+      <Card>
+        <div className="py-8 text-center text-gray-400">
+          No recommendations yet. Click <span className="font-medium text-arbr-charcoal">Recompute</span> to analyse the logged data.
+        </div>
+      </Card>
+    );
+  }
+  const opps = analysis.unmarkedOpportunities || [];
+  const analyzed = `Analysed ${fmt.num(analysis.analyzedRequests)} requests (${fmt.usd(analysis.analyzedCost)}).`;
+
+  if (opps.length === 0) {
+    return (
+      <Card>
+        <div className="py-8 text-center text-gray-500">
+          <div className="text-arbr-charcoal font-medium">Nothing to optimise right now.</div>
+          <p className="mt-1 text-sm text-gray-400">{analyzed} No premium model is overused on a cheap task — cheap-task traffic is already on lighter models.</p>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-arbr-charcoal">
+            {fmt.usd(analysis.unmarkedPotentialSavings)} of potential savings is hidden
+          </h3>
+          <p className="mt-1 text-sm text-gray-600">
+            {analyzed} These high-spend task types run on a premium model but aren't marked <b>cheap</b>, so they're
+            excluded from recommendations. Mark them cheap to evaluate a cheaper model (nothing reroutes until an eval passes and you approve).
+          </p>
+        </div>
+        <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+          {opps.slice(0, 8).map((o, i) => (
+            <div key={i} className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-arbr-charcoal">{o.taskType || "—"}</span>
+                  <Badge tone="charcoal">{o.model} → {o.suggestedModel}</Badge>
+                  <span className="text-xs text-gray-400">{fmt.num(o.requests)} req · {fmt.usd(o.currentCost)} spent</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-sm font-semibold text-arbr-green-600">~{fmt.usd(o.projectedSavings)}</span>
+                <button className="btn-outline text-xs" disabled={busy} onClick={() => onMarkCheap([o.taskType])}>
+                  Mark cheap
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button className="btn-primary text-sm" disabled={busy}
+          onClick={() => onMarkCheap(analysis.suggestMarkCheap || opps.map((o) => o.taskType))}>
+          {busy ? "Working…" : `Mark all ${(analysis.suggestMarkCheap || []).length} cheap & recompute`}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 export default function Recommendations({ embedded = false }) {
   const [recs, setRecs] = useState(null);
   const [models, setModels] = useState([]);
+  const [analysis, setAnalysis] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  const load = () => api.recommendations().then(setRecs).catch((e) => setErr(e.message));
+  const load = async () => {
+    try {
+      const [r, a] = await Promise.all([api.recommendations(), api.recommendationsAnalysis().catch(() => null)]);
+      setRecs(r); setAnalysis(a);
+    } catch (e) { setErr(e.message); }
+  };
   useEffect(() => {
     load();
     api.models({ live: true }).then((m) => setModels(m || [])).catch(() => {});
@@ -137,6 +210,18 @@ export default function Recommendations({ embedded = false }) {
     setBusy(true); setErr(null);
     try { await api.recompute(); await load(); }
     catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  // One-click: mark the given task types cheap (union with the current set), then recompute.
+  const markCheapAndRecompute = async (taskTypes) => {
+    setBusy(true); setErr(null);
+    try {
+      const merged = [...new Set([...(analysis?.cheapTaskTypes || []), ...taskTypes.map((t) => String(t).toLowerCase())])];
+      await api.setPolicy({ cheapTaskTypes: merged });
+      await api.recompute();
+      await load();
+    } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
 
@@ -154,11 +239,7 @@ export default function Recommendations({ embedded = false }) {
 
       {err && <div className="text-red-600">{err}</div>}
       {recs === null ? <Spinner /> : recs.length === 0 ? (
-        <Card>
-          <div className="py-8 text-center text-gray-400">
-            No recommendations yet. Click <span className="font-medium text-arbr-charcoal">Recompute</span> to analyse the logged data.
-          </div>
-        </Card>
+        <EmptyState analysis={analysis} busy={busy} onMarkCheap={markCheapAndRecompute} />
       ) : (
         <div className="space-y-4">
           {recs.map((r) => <RecCard key={r._id} rec={r} models={models} onChange={load} />)}
