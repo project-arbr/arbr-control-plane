@@ -63,6 +63,7 @@ function RecCard({ rec, models, onChange }) {
           </div>
           <p className="mt-2 text-sm text-gray-600">{rec.reason}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {rec.application && <Badge tone="charcoal">app: {rec.application}</Badge>}
             <Badge tone="charcoal">{rec.currentModel} → {rec.suggestedModel}</Badge>
             <Badge tone="gray">{fmt.num(rec.requestCount)} requests</Badge>
             {rec.replayableCount != null && (
