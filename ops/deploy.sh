@@ -12,7 +12,8 @@ set -euo pipefail
 
 REPO="$HOME/arbr-ai-control-plane"
 IMAGE="ghcr.io/project-arbr/arbr-control-plane"
-COMPOSE="sudo docker compose -f docker-compose.yml -f docker-compose.gcp.yml -f docker-compose.deploy.yml"
+COMPOSE_FILES="-f docker-compose.yml -f docker-compose.gcp.yml -f docker-compose.deploy.yml"
+COMPOSE="sudo docker compose $COMPOSE_FILES"
 PREV_FILE="$HOME/.arbr-deploy-prev"
 HEALTH="http://localhost:4100/health"
 API="http://localhost:4100/api"
@@ -39,8 +40,12 @@ notify() {  # $1 = message text
   [ -n "$url" ] && curl -s -X POST "$url" -H "Content-Type: application/json" -d "{\"text\":\"$1\"}" >/dev/null 2>&1 || true
 }
 deploy() {  # $1 = tag
-  ARBR_IMAGE_TAG="$1" $COMPOSE pull app
-  ARBR_IMAGE_TAG="$1" $COMPOSE up -d --no-build app
+  # ARBR_IMAGE_TAG must be set INSIDE the sudo'd process. `VAR=x sudo …` sets it on sudo's
+  # own environment, which env_reset then strips, so compose falls back to the `:-main`
+  # default — silently ignoring $1 and, worse, "rolling back" to :main instead of $PREV_TAG.
+  # `sudo env VAR=x …` sets it for the child compose process, so the tag is honoured.
+  sudo env ARBR_IMAGE_TAG="$1" docker compose $COMPOSE_FILES pull app
+  sudo env ARBR_IMAGE_TAG="$1" docker compose $COMPOSE_FILES up -d --no-build app
 }
 
 SEED_BEFORE="$(seed_of || true)"
