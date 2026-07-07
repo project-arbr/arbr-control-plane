@@ -930,6 +930,36 @@ router.get("/routing-experiments/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Create a canary directly (not from a recommendation) — e.g. from a passed offline eval.
+// Same gate as shadow/recommendation: a passed offline run (requiredEvalRunId) or an override.
+// Only auto-routed traffic is affected.
+router.post("/routing-experiments", async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.application) return res.status(400).json({ error: "application is required" });
+    if (!b.baselineModel) return res.status(400).json({ error: "baselineModel is required" });
+    if (!b.candidateModel) return res.status(400).json({ error: "candidateModel is required" });
+
+    const offlineRun = b.requiredEvalRunId ? await EvalRun.findById(b.requiredEvalRunId).lean().catch(() => null) : null;
+    const gate = evalThresholds.canActivateShadow(offlineRun, b.override);
+    if (!gate.allowed) return res.status(409).json({ error: "eval_required", message: gate.reason });
+
+    const exp = await RoutingExperiment.create({
+      evalRunId: b.requiredEvalRunId || null, recommendationId: null, shadowCampaignId: null,
+      scope: { application: b.application, workflow: b.workflow || null, taskType: b.taskType || null },
+      baselineModel: b.baselineModel, candidateModel: b.candidateModel,
+      candidateProvider: b.candidateProvider || pricing.getModel(b.candidateModel)?.provider || null,
+      rolloutPct: b.rolloutPct != null ? Math.min(100, Math.max(0, Number(b.rolloutPct))) : 10,
+      guardrails: sanitizeGuardrails(b.guardrails),
+      metricsWindowMinutes: b.metricsWindowMinutes != null ? Math.max(5, Number(b.metricsWindowMinutes)) : 60,
+      status: "active", createdBy: "console", approvedBy: b.approvedBy || (b.override && b.override.approver) || null,
+    });
+    canaryEngine.invalidate();
+    setImmediate(() => logAction("canary.create", "routingExperiment", String(exp._id), { application: b.application, candidateModel: b.candidateModel, rolloutPct: exp.rolloutPct }));
+    res.status(201).json(exp);
+  } catch (e) { next(e); }
+});
+
 // Create a canary from a passed recommendation (only auto-routed traffic is affected).
 router.post("/recommendations/:id/create-canary", async (req, res, next) => {
   try {
