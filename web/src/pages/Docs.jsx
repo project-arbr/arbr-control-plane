@@ -29,7 +29,11 @@ const SCREENS = [
 
 export default function Docs() {
   const [status, setStatus] = useState(null);
-  useEffect(() => { api.status().then(setStatus).catch(() => {}); }, []);
+  const [latency, setLatency] = useState(null);
+  useEffect(() => {
+    api.status().then(setStatus).catch(() => {});
+    api.latencyPercentiles().then(setLatency).catch(() => {});
+  }, []);
 
   const base = typeof window !== "undefined" ? window.location.origin : "http://localhost:4100";
   const live = status?.liveProviders || [];
@@ -82,6 +86,54 @@ res = arbr.chat("Summarise this ticket: ...", model="auto", max_tokens=300)   # 
           model that fits the task. Every call is logged, costed, and governed — with
           <strong> human-approved</strong> rules and an AI policy, all reversible from these screens.
         </p>
+      </Card>
+
+      <Card title="Gateway performance">
+        <p className="mb-3 text-sm text-gray-600">
+          Live latency figures from your traffic — the same data shown on the Overview dashboard,
+          with gateway overhead broken out separately so you can see exactly what Arbr adds on top
+          of provider time.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">Metric</th>
+                <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">P50</th>
+                <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">P95</th>
+                <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">P99</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {[
+                { label: "Total latency", p50: latency?.p50, p95: latency?.p95, p99: latency?.p99 },
+                { label: "Gateway overhead", p50: latency?.overheadP50, p95: latency?.overheadP95, p99: latency?.overheadP99 },
+                { label: "TTFT (streaming)", p50: latency?.ttftP50, p95: latency?.ttftP95, p99: null },
+              ].map(({ label, p50, p95, p99 }) => {
+                const fmt = (v) => v != null ? `${v.toLocaleString()} ms` : "—";
+                return (
+                  <tr key={label}>
+                    <td className="py-2.5 text-gray-700">{label}</td>
+                    <td className="py-2.5 text-right font-mono text-gray-600">{latency ? fmt(p50) : "…"}</td>
+                    <td className="py-2.5 text-right font-mono text-gray-600">{latency ? fmt(p95) : "…"}</td>
+                    <td className="py-2.5 text-right font-mono text-gray-600">{latency ? fmt(p99) : "…"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 space-y-1 text-xs text-gray-400">
+          <p><strong className="text-gray-500">Total latency</strong> — wall-clock time from request received to full response delivered, including provider processing. Success requests only, last 30 days.</p>
+          <p><strong className="text-gray-500">Gateway overhead</strong> — time Arbr spends before dispatching to the LLM: routing decision, auth, classification, logging. This is what the gateway itself costs, excluding provider time.</p>
+          <p><strong className="text-gray-500">TTFT</strong> — time to first streaming token; only captured on streaming calls.</p>
+        </div>
+        <div className="mt-4">
+          <p className="mb-2 text-xs text-gray-500">Run the latency benchmark against your own instance:</p>
+          <CodeBlock lang="bash" code={`ARBR_GATEWAY_URL=http://localhost:4100 ARBR_API_KEY=ab_... \\
+  node server/scripts/latency-bench.js --requests 50 --concurrency 5
+# Add --stream to also measure TTFT. Results saved to bench/results/latency-YYYY-MM-DD.json`} />
+        </div>
       </Card>
 
       <Card title="Getting started — the Connect stage">
