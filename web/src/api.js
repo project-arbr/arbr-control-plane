@@ -79,7 +79,7 @@ export const api = {
   evalDatasets: (recommendationId) => req(`/evals/datasets${qs({ recommendationId })}`),
   evalDataset: (id) => req(`/evals/datasets/${id}`),
   createEval: (body) => req("/evals", { method: "POST", body: JSON.stringify(body) }),
-  evalReplayableCount: ({ application, baselineModel, taskType } = {}) => req(`/evals/replayable-count${qs({ application, baselineModel, taskType })}`),
+  evalTrafficModels: ({ application } = {}) => req(`/evals/traffic-models${qs({ application })}`),
   evalRuns: (recommendationId) => req(`/evals/runs${qs({ recommendationId })}`),
   evalRun: (id) => req(`/evals/runs/${id}`),
   deleteEvalRun: (id) => req(`/evals/runs/${id}`, { method: "DELETE" }),

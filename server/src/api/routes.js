@@ -800,25 +800,26 @@ router.post("/evals", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Estimate how many replayable requests exist for an application + baseline model, so the New
-// eval form can tell the user up front whether there's enough traffic to evaluate. Same
+// Models that have actually served an application's replayable traffic, with per-model counts —
+// the valid BASELINE choices for a new eval (you can't beat a model with no traffic). Same
 // eligibility proxy as the recommendation "replayable" count (captured prompt + response,
-// non-cache); single-shot is refined at dataset build, so this is an upper-bound estimate.
-router.get("/evals/replayable-count", async (req, res, next) => {
+// non-cache); single-shot is refined at dataset build, so counts are an upper-bound estimate.
+router.get("/evals/traffic-models", async (req, res, next) => {
   try {
-    const { application, baselineModel, taskType } = req.query;
-    if (!application || !baselineModel) return res.status(400).json({ error: "application and baselineModel are required" });
+    const { application } = req.query;
+    if (!application) return res.status(400).json({ error: "application is required" });
     const days = Math.max(1, parseInt(req.query.windowDays, 10) || 60);
     const since = new Date(Date.now() - days * 86400000);
-    const q = {
-      status: "success", cacheHit: { $ne: true },
-      application, model: baselineModel,
-      messages: { $ne: null },
-      responseText: { $exists: true, $nin: [null, ""] },
-      timestamp: { $gte: since },
-    };
-    if (taskType) q.taskType = taskType;
-    res.json({ count: await RequestRecord.countDocuments(q), windowDays: days });
+    const rows = await RequestRecord.aggregate([
+      { $match: {
+        application, status: "success", cacheHit: { $ne: true },
+        messages: { $ne: null }, responseText: { $exists: true, $nin: [null, ""] },
+        timestamp: { $gte: since },
+      } },
+      { $group: { _id: { model: "$model", provider: "$provider" }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+    res.json(rows.map((r) => ({ model: r._id.model, provider: r._id.provider, count: r.count })));
   } catch (e) { next(e); }
 });
 
