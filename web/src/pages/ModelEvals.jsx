@@ -247,7 +247,22 @@ function NewEval({ models, apps, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [avail, setAvail] = useState(null); // replayable-request count for the chosen app + baseline
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Once an application + baseline are picked, show how much replayable traffic exists to evaluate.
+  useEffect(() => {
+    const app = form.application.trim();
+    if (!app || !form.baselineModel) { setAvail(null); return; }
+    let cancelled = false;
+    setAvail("loading");
+    const t = setTimeout(() => {
+      api.evalReplayableCount({ application: app, baselineModel: form.baselineModel })
+        .then((r) => { if (!cancelled) setAvail(r.count); })
+        .catch(() => { if (!cancelled) setAvail(null); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.application, form.baselineModel]);
 
   const submit = async () => {
     setErr(null); setNotice(null); setBusy(true);
@@ -301,6 +316,13 @@ function NewEval({ models, apps, onCreated }) {
           </select>
         </div>
       </div>
+      {avail === "loading" && <div className="mt-2 text-xs text-gray-400">Checking available traffic…</div>}
+      {typeof avail === "number" && (
+        <div className={`mt-2 text-xs ${avail === 0 ? "text-amber-600" : "text-gray-500"}`}>
+          ≈ <b>{fmt.num(avail)}</b> replayable request{avail === 1 ? "" : "s"} for <b>{form.application.trim()}</b> on <b>{form.baselineModel}</b> (last 60 days)
+          {avail === 0 && " — nothing to evaluate yet. Needs traffic logged with payload capture on."}
+        </div>
+      )}
       {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
       {notice && <div className="mt-3 text-sm text-arbr-green-700">{notice}</div>}
       <div className="mt-3">
@@ -316,8 +338,10 @@ function NewEval({ models, apps, onCreated }) {
 function EvalRunsSection({ models, apps }) {
   const [runs, setRuns] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
   const load = useCallback(() => { api.evalRuns().then(setRuns).catch(() => setRuns([])); }, []);
   useEffect(() => { load(); }, [load]);
+  const del = async (r) => { setConfirmDel(null); await api.deleteEvalRun(r._id).catch(() => {}); load(); };
   const cols = [
     { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
     { key: "application", header: "Application", render: (r) => r.application || <span className="text-gray-400">any</span> },
@@ -330,13 +354,27 @@ function EvalRunsSection({ models, apps }) {
     { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
     { key: "saving", header: "Cost saving", render: (r) => pct(r.summary?.costSavingPct) },
     { key: "risk", header: "Risk", render: (r) => r.riskTier },
-    { key: "actions", header: "", render: (r) => <button className="btn-outline text-xs" onClick={(e) => { e.stopPropagation(); setOpenId(r._id); }}>Evidence</button> },
+    { key: "actions", header: "", render: (r) => (
+      <span className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <button className="btn-outline text-xs" onClick={() => setOpenId(r._id)}>Evidence</button>
+        <button className="btn-outline text-xs text-red-600" onClick={() => setConfirmDel(r)}>Delete</button>
+      </span>
+    ) },
   ];
   return (
     <Card title="Evals" action={<RefreshButton onClick={load} />}>
       <NewEval models={models} apps={apps} onCreated={load} />
       {runs === null ? <Spinner /> : <Table columns={cols} rows={runs} empty="No evals yet — create one above, or run one from a recommendation." onRowClick={(r) => setOpenId(r._id)} />}
       {openId && <RunDetail id={openId} onClose={() => setOpenId(null)} />}
+      {confirmDel && (
+        <ConfirmDialog
+          title="Delete eval?"
+          message={`This removes the eval ${confirmDel.baselineModel} → ${confirmDel.candidateModel} and its results.`}
+          confirmLabel="Delete"
+          onConfirm={() => del(confirmDel)}
+          onCancel={() => setConfirmDel(null)}
+        />
+      )}
     </Card>
   );
 }

@@ -800,6 +800,28 @@ router.post("/evals", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Estimate how many replayable requests exist for an application + baseline model, so the New
+// eval form can tell the user up front whether there's enough traffic to evaluate. Same
+// eligibility proxy as the recommendation "replayable" count (captured prompt + response,
+// non-cache); single-shot is refined at dataset build, so this is an upper-bound estimate.
+router.get("/evals/replayable-count", async (req, res, next) => {
+  try {
+    const { application, baselineModel, taskType } = req.query;
+    if (!application || !baselineModel) return res.status(400).json({ error: "application and baselineModel are required" });
+    const days = Math.max(1, parseInt(req.query.windowDays, 10) || 60);
+    const since = new Date(Date.now() - days * 86400000);
+    const q = {
+      status: "success", cacheHit: { $ne: true },
+      application, model: baselineModel,
+      messages: { $ne: null },
+      responseText: { $exists: true, $nin: [null, ""] },
+      timestamp: { $gte: since },
+    };
+    if (taskType) q.taskType = taskType;
+    res.json({ count: await RequestRecord.countDocuments(q), windowDays: days });
+  } catch (e) { next(e); }
+});
+
 // ── Eval datasets / runs (read views) ─────────────────────────────────────────
 router.get("/evals/datasets", async (req, res, next) => {
   try {
@@ -839,6 +861,34 @@ router.post("/evals/runs/:id/cancel", async (req, res, next) => {
     res.json(run);
   } catch (e) { next(e); }
 });
+// Delete an eval run and its results. Also drops the dataset + its items when no other run
+// references them (a manual eval owns its dataset), and clears a linked recommendation's pointer
+// so its recorded verdict isn't left dangling.
+router.delete("/evals/runs/:id", async (req, res, next) => {
+  try {
+    const run = await EvalRun.findById(req.params.id).lean().catch(() => null);
+    if (!run) return res.status(404).json({ error: "not found" });
+    await EvalResult.deleteMany({ evalRunId: run._id });
+    await EvalRun.deleteOne({ _id: run._id });
+
+    let datasetDeleted = false;
+    if (run.datasetId && (await EvalRun.countDocuments({ datasetId: run.datasetId })) === 0) {
+      await EvalItem.deleteMany({ datasetId: run.datasetId });
+      await EvalDataset.deleteOne({ _id: run.datasetId });
+      datasetDeleted = true;
+    }
+    if (run.recommendationId) {
+      await Recommendation.updateOne(
+        { _id: run.recommendationId, evalRunId: run._id },
+        { $set: { evalRunId: null, qualitySummary: null, evalStatus: datasetDeleted ? "not_started" : "dataset_ready",
+          ...(datasetDeleted ? { evalDatasetId: null } : {}) } }
+      ).catch(() => {});
+    }
+    setImmediate(() => logAction("eval.run.delete", "evalRun", String(run._id), { candidateModel: run.candidateModel }));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 // Worst candidate examples first (worse verdicts + critical failures), for the evidence view.
 router.get("/evals/runs/:id/results", async (req, res, next) => {
   try {
