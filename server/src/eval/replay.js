@@ -161,25 +161,28 @@ async function executeRun(runId) {
         router, eff, judgeModel: run.judgeModel,
         userText: lastUserText(item.messages), baselineText: item.productionResponse, candidateText: candidate.text, flip,
       });
+      // { error } = judge was configured but produced no usable verdict (call failed / bad output).
+      const judgeError = verdict && verdict.error ? verdict.error : null;
+      const scored = verdict && !judgeError ? verdict : null;
 
       const storedResp = clampText(maskEnabled ? maskPii(candidate.text || "", customPatterns) : (candidate.text || ""));
       await EvalResult.create({
         evalRunId: run._id, evalItemId: item._id, requestId: item.requestId,
         baselineModel: dataset.baselineModel, candidateModel: dataset.candidateModel,
         candidateResponse: storedResp, candidateCost: candCost, candidateLatencyMs: candidate.latencyMs || 0,
-        judgeVerdict: verdict ? verdict.verdict : null,
-        dimensionScores: verdict ? verdict.dimensionScores : {},
-        criticalFailure: verdict ? !!verdict.criticalFailure : false,
+        judgeVerdict: scored ? scored.verdict : null,
+        dimensionScores: scored ? scored.dimensionScores : {},
+        criticalFailure: scored ? !!scored.criticalFailure : false,
         validatorResults: results, formatPass,
-        abFlipped: verdict ? !!verdict.abFlipped : false,
-        judgeRationale: verdict ? verdict.judgeRationale : null,
+        abFlipped: scored ? !!scored.abFlipped : false,
+        judgeRationale: scored ? scored.judgeRationale : judgeError,
       });
       entries.push({
-        verdict: verdict ? verdict.verdict : null,
-        criticalFailure: verdict ? !!verdict.criticalFailure : false,
+        verdict: scored ? scored.verdict : null,
+        criticalFailure: scored ? !!scored.criticalFailure : false,
         formatPass, candidateCost: candCost, candidateLatencyMs: candidate.latencyMs || 0,
         productionCost: item.productionCost || 0, productionLatencyMs: item.productionLatencyMs || 0,
-        errored: false,
+        errored: false, judgeError,
       });
     } catch (err) {
       await EvalResult.create({
@@ -209,6 +212,13 @@ async function finish(run, entries, hardError, actualCost = 0) {
     const { passed, failures } = evaluateRun(summary, run.thresholds || {});
     run.status = passed ? "passed" : "failed";
     run.failures = failures;
+    // If nothing got judged because the JUDGE itself failed, say so — otherwise "0 items judged"
+    // looks like a data problem when it's really a bad/unreachable judge model.
+    const judgeErrs = entries.filter((e) => e.judgeError);
+    if ((summary.judged || 0) === 0 && judgeErrs.length) {
+      run.error = `The judge produced no verdicts: ${judgeErrs[judgeErrs.length - 1].judgeError}. ` +
+        `Pick a judge on a connected provider that reliably returns JSON (e.g. gpt-4o-mini).`;
+    }
   }
   await run.save();
 
