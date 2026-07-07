@@ -36,7 +36,7 @@ async function judge({ router, eff, judgeModel, messages, prodText, candidateTex
   ].join("\n");
   try {
     const res = await router.complete({
-      messages: prompt, providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
+      messages: [{ role: "user", content: prompt }], providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
     });
     return parseVerdict(res.text || "");
   } catch {
