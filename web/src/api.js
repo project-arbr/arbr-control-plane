@@ -87,6 +87,7 @@ export const api = {
 
   // Routing experiments (canary rollout).
   routingExperiments: (status) => req(`/routing-experiments${qs({ status })}`),
+  createRoutingExperiment: (body) => req("/routing-experiments", { method: "POST", body: JSON.stringify(body) }),
   routingExperiment: (id) => req(`/routing-experiments/${id}`),
   updateRoutingExperiment: (id, body) => req(`/routing-experiments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   rollbackExperiment: (id, reason) => req(`/routing-experiments/${id}/rollback`, { method: "POST", body: JSON.stringify({ reason }) }),

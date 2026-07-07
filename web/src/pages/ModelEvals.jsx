@@ -184,12 +184,27 @@ function runOutcome(r) {
 function RunDetail({ id, onClose }) {
   const [run, setRun] = useState(null);
   const [results, setResults] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   const load = useCallback(() => {
     api.evalRun(id).then(setRun).catch((e) => setRun({ _error: e.message }));
     api.evalRunResults(id).then(setResults).catch(() => setResults([]));
   }, [id]);
   useEffect(() => { load(); }, [load]);
+
+  // A passed eval seeds the next pipeline stages directly — no recommendation, no override
+  // (the passed run itself is the gate, linked via requiredEvalRunId).
+  const promote = async (fn, ok) => {
+    setBusy(true); setNotice(null);
+    try { await fn(); setNotice(ok); } catch (e) { setNotice(`Error: ${e.message}`); } finally { setBusy(false); }
+  };
+  const startShadow = () => promote(
+    () => api.createEvalCampaign({ application: run.application, candidateModel: run.candidateModel, judgeModel: run.judgeModel || null, requiredEvalRunId: run._id }),
+    "Shadow campaign started (Stage 2) — see the Shadow section.");
+  const startCanary = () => promote(
+    () => api.createRoutingExperiment({ application: run.application, baselineModel: run.baselineModel, candidateModel: run.candidateModel, requiredEvalRunId: run._id }),
+    "Canary started at 10% (Stage 3) — see the Canary section.");
 
   const exportCsv = () => {
     const rows = results || [];
@@ -242,6 +257,16 @@ function RunDetail({ id, onClose }) {
             </div>
           );
         })()}
+        {runOutcome(run).kind === "pass" && run.application && (
+          <div className="rounded-lg border border-gray-200 p-3">
+            <div className="text-xs text-gray-500">This candidate passed — take it down the pipeline (no recommendation needed):</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button className="btn-secondary text-sm" disabled={busy} onClick={startShadow}>Start shadow →</button>
+              <button className="btn-secondary text-sm" disabled={busy} onClick={startCanary}>Start canary →</button>
+            </div>
+            {notice && <div className={`mt-2 text-sm ${notice.startsWith("Error") ? "text-red-600" : "text-arbr-green-700"}`}>{notice}</div>}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Judged" value={fmt.num(s.judged)} sub={`${fmt.num(s.total)} total`} />
           <Stat label="Worse-rate" value={pct(s.worseRate)} sub={`critical ${pct(s.criticalFailRate)}`} />
@@ -470,12 +495,57 @@ function CanarySection() {
   );
 }
 
+// In-app override dialog (replaces a chain of native window.prompt calls) — collects a reason +
+// approver to start a gated stage without a passed eval. Deliberate escape hatch, clearly labelled.
+function OverrideDialog({ title, message, onConfirm, onCancel }) {
+  const [reason, setReason] = useState("");
+  const [approver, setApprover] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onCancel}>
+      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-semibold text-arbr-charcoal">{title}</h3>
+        {message && <p className="mt-1 text-sm text-gray-500">{message}</p>}
+        <div className="mt-4 space-y-3">
+          <div>
+            <div className="label mb-1">Override reason</div>
+            <input className="input w-full" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why start without a passed eval?" />
+          </div>
+          <div>
+            <div className="label mb-1">Approver</div>
+            <input className="input w-full" value={approver} onChange={(e) => setApprover(e.target.value)} placeholder="your name" />
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn-primary" disabled={!reason.trim() || !approver.trim()}
+            onClick={() => onConfirm({ reason: reason.trim(), approver: approver.trim() })}>Start anyway</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pipeline stage header, so the page order reads as the actual flow:
+// offline eval → shadow → canary → promote.
+function StageHeading({ n, title, desc }) {
+  return (
+    <div className="border-b border-gray-100 pb-1 pt-2">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-arbr-green-600">Stage {n}</span>
+        <span className="text-base font-semibold text-arbr-charcoal">{title}</span>
+      </div>
+      <p className="mt-0.5 text-xs text-gray-500">{desc}</p>
+    </div>
+  );
+}
+
 export default function ModelEvals() {
   const [campaigns, setCampaigns] = useState(null);
   const [models, setModels] = useState([]);
   const [apps, setApps] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
+  const [override, setOverride] = useState(null); // { campaign, message } when the gate blocks resume
   const [err, setErr] = useState(null);
 
   const load = useCallback(() => {
@@ -497,14 +567,14 @@ export default function ModelEvals() {
       await api.updateEvalCampaign(c._id, { status });
       load();
     } catch (e) {
-      if (e.status === 409 && status === "active") {
-        const reason = window.prompt(`This shadow campaign can't start yet:\n\n${e.message}\n\nEnter an override reason to start it anyway (or Cancel):`);
-        if (!reason) return;
-        const approver = window.prompt("Approver name:") || "console";
-        try { await api.updateEvalCampaign(c._id, { status, override: { reason, approver } }); load(); }
-        catch (e2) { setErr(e2.message); }
-      } else setErr(e.message);
+      if (e.status === 409 && status === "active") setOverride({ campaign: c, message: e.message });
+      else setErr(e.message);
     }
+  };
+  const confirmOverride = async ({ reason, approver }) => {
+    const c = override.campaign; setOverride(null); setErr(null);
+    try { await api.updateEvalCampaign(c._id, { status: "active", override: { reason, approver } }); load(); }
+    catch (e) { setErr(e.message); }
   };
   const remove = async (c) => { setConfirmDel(null); await api.deleteEvalCampaign(c._id); load(); };
 
@@ -537,18 +607,21 @@ export default function ModelEvals() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-arbr-charcoal">Model Evals</h1>
-        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one (safe substitution) — offline replay, live shadow, then a guarded canary — before it becomes a rule.</p>
+        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one before it becomes a rule. The stages below follow that flow — offline eval → shadow → canary → promote.</p>
       </div>
 
+      <StageHeading n="1" title="Offline eval" desc="Replay past traffic through a candidate and judge it against the baseline. No production impact." />
       <EvalRunsSection models={models} apps={apps} />
-      <CanarySection />
 
+      <StageHeading n="2" title="Shadow" desc="Mirror a sample of live traffic to the candidate without serving it, judged against the current model — a real-traffic check with no user impact." />
       <NewCampaign models={models} apps={apps} onCreated={load} />
-
       <Card title="Campaigns" action={<RefreshButton onClick={load} />}>
         {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
         {campaigns === null ? <Spinner /> : <Table columns={columns} rows={campaigns} empty="No campaigns yet." onRowClick={(c) => setOpenId(c._id)} />}
       </Card>
+
+      <StageHeading n="3" title="Canary" desc="Send a small slice of real traffic to a proven candidate, auto-rolling back on breach; promote to make it a rule." />
+      <CanarySection />
 
       {openId && <CampaignDetail id={openId} onClose={() => setOpenId(null)} />}
       {confirmDel && (
@@ -558,6 +631,14 @@ export default function ModelEvals() {
           confirmLabel="Delete"
           onConfirm={() => remove(confirmDel)}
           onCancel={() => setConfirmDel(null)}
+        />
+      )}
+      {override && (
+        <OverrideDialog
+          title="Start shadow without a passed eval?"
+          message={override.message}
+          onConfirm={confirmOverride}
+          onCancel={() => setOverride(null)}
         />
       )}
     </div>
