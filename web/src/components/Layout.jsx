@@ -108,10 +108,10 @@ const NAV_GROUPS = [
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
 
 function navClass({ isActive }) {
-  return `mx-1 my-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-normal transition-colors ${
+  return `mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors ${
     isActive
       ? "bg-arbr-green-50 text-arbr-green-700"
-      : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
   }`;
 }
 
@@ -135,21 +135,23 @@ export default function Layout({ status, onSignOut, children }) {
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
           {NAV_GROUPS.map((group, gi) => (
-            <div key={group.section} className={gi > 0 ? "mt-5" : ""}>
-              <div className="mb-1.5 px-3">
-                <div className="text-[15px] font-normal uppercase tracking-wide text-gray-500">
+            <div key={group.section} className={gi > 0 ? "mt-3 border-t border-gray-100 pt-3" : ""}>
+              <div className="px-3">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-600">
                   {group.section}
                 </div>
                 {group.hint && (
-                  <div className="mt-0.5 text-[10px] leading-tight text-gray-300">{group.hint}</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-gray-400">{group.hint}</div>
                 )}
               </div>
-              {group.items.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
-                  {item.icon}
-                  {item.label}
-                </NavLink>
-              ))}
+              <div className="mt-1.5">
+                {group.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
+                    {item.icon}
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
             </div>
           ))}
         </nav>
