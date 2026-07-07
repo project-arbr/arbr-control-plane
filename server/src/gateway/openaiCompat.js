@@ -593,7 +593,7 @@ async function handleOpenAICompat(req, res) {
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, difficulty, difficultyScore, confidence,
           promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
-          latencyMs: Date.now() - start, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
+          latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
           knownPricing: served.knownPricing,
           messages: body.messages, responseText: chunkText(aiMsg) || null,
         })
@@ -730,7 +730,7 @@ async function handleOpenAICompat(req, res) {
         provider: result.providerId, model: result.modelId, modelRequested,
         taskType, classifiedBy, difficulty, difficultyScore, confidence,
         promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
-        latencyMs: Date.now() - start, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
+        latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages, responseText: result.text,
       })
@@ -741,6 +741,7 @@ async function handleOpenAICompat(req, res) {
   // — Non-streaming ——————————————————————————————————————————————————————————————
   setGatewayHeaders(res, { requestId, model: served.model, provider: served.provider,
     routing: routingDecision, taskType });
+  const _llmStart = Date.now();
   let invocation;
   try {
     invocation = await invokeWithFallback(router, eff, {
@@ -810,7 +811,7 @@ async function handleOpenAICompat(req, res) {
       totalTokens:      result.usage?.totalTokens  || 0,
       cachedReadTokens: result.usage?.cachedReadTokens || 0,
       cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
-      latencyMs: result.latencyMs, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
+      latencyMs: result.latencyMs, gatewayOverheadMs: _llmStart - _reqStart, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
     });
