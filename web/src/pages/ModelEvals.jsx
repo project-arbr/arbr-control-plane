@@ -470,6 +470,20 @@ function CanarySection() {
   );
 }
 
+// Pipeline stage header, so the page order reads as the actual flow:
+// offline eval → shadow → canary → promote.
+function StageHeading({ n, title, desc }) {
+  return (
+    <div className="border-b border-gray-100 pb-1 pt-2">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-arbr-green-600">Stage {n}</span>
+        <span className="text-base font-semibold text-arbr-charcoal">{title}</span>
+      </div>
+      <p className="mt-0.5 text-xs text-gray-500">{desc}</p>
+    </div>
+  );
+}
+
 export default function ModelEvals() {
   const [campaigns, setCampaigns] = useState(null);
   const [models, setModels] = useState([]);
@@ -537,18 +551,21 @@ export default function ModelEvals() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-arbr-charcoal">Model Evals</h1>
-        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one (safe substitution) — offline replay, live shadow, then a guarded canary — before it becomes a rule.</p>
+        <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one before it becomes a rule. The stages below follow that flow — offline eval → shadow → canary → promote.</p>
       </div>
 
+      <StageHeading n="1" title="Offline eval" desc="Replay past traffic through a candidate and judge it against the baseline. No production impact." />
       <EvalRunsSection models={models} apps={apps} />
-      <CanarySection />
 
+      <StageHeading n="2" title="Shadow" desc="Mirror a sample of live traffic to the candidate without serving it, judged against the current model — a real-traffic check with no user impact." />
       <NewCampaign models={models} apps={apps} onCreated={load} />
-
       <Card title="Campaigns" action={<RefreshButton onClick={load} />}>
         {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
         {campaigns === null ? <Spinner /> : <Table columns={columns} rows={campaigns} empty="No campaigns yet." onRowClick={(c) => setOpenId(c._id)} />}
       </Card>
+
+      <StageHeading n="3" title="Canary" desc="Send a small slice of real traffic to a proven candidate, auto-rolling back on breach; promote to make it a rule." />
+      <CanarySection />
 
       {openId && <CampaignDetail id={openId} onClose={() => setOpenId(null)} />}
       {confirmDel && (
