@@ -158,13 +158,14 @@ async function proxyOpenAICompat(ctx) {
   const {
     res, body, served, modelRequested, meta, requestId, timestamp,
     taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, eff, router, baseURL,
-    settings,
+    settings, _reqStart,
   } = ctx;
 
   const apiKey = eff.providers[served.provider]?.credential?.apiKey || "none";
   const url = `${baseURL}/chat/completions`;
   const upstreamBody = { ...body, model: served.model };
   const start = Date.now();
+  const gatewayOverheadMs = _reqStart != null ? start - _reqStart : null;
 
   const logRecord = (extra) =>
     setImmediate(() =>
@@ -224,7 +225,7 @@ async function proxyOpenAICompat(ctx) {
       totalTokens: u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0),
       cachedReadTokens: (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0,
       responseText: data.choices?.[0]?.message?.content || null,
-      latencyMs, status: "success",
+      latencyMs, gatewayOverheadMs, status: "success",
     });
     maybeShadowEval({
       application: meta.application, workflow: meta.workflow, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
@@ -286,7 +287,7 @@ async function proxyOpenAICompat(ctx) {
       promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
       cachedReadTokens,
       responseText: respText || null,
-      latencyMs: Date.now() - start, ttftMs, status: "success",
+      latencyMs: Date.now() - start, ttftMs, gatewayOverheadMs, status: "success",
     });
   } catch (err) {
     try { res.write(`data: ${JSON.stringify({ error: String(err.message || err) })}\n\n`); } catch { /* client gone */ }
@@ -296,6 +297,7 @@ async function proxyOpenAICompat(ctx) {
 }
 
 async function handleOpenAICompat(req, res) {
+  const _reqStart = Date.now();
   const body = req.body || {};
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
@@ -444,7 +446,7 @@ async function handleOpenAICompat(req, res) {
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,
       taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, eff, router, baseURL: compatBaseURL,
-      settings,
+      settings, _reqStart,
     });
   }
 
