@@ -82,13 +82,13 @@ const icons = {
 
 // ── Navigation definition ─────────────────────────────────────────────────────
 const NAV_GROUPS = [
-  { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
-    { to: "/models",   label: "Models",   icon: icons.models },
-    { to: "/settings", label: "Settings", icon: icons.settings },
-  ] },
   { section: "See", hint: "Know what you're spending, and where", items: [
     { to: "/", label: "Overview", end: true, icon: icons.overview },
     { to: "/applications", label: "Applications", icon: icons.applications },
+  ] },
+  { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
+    { to: "/models",   label: "Models",   icon: icons.models },
+    { to: "/settings", label: "Settings", icon: icons.settings },
   ] },
   { section: "Recommend", hint: "Where a cheaper model fits", items: [
     { to: "/recommendations", label: "Recommendations", icon: icons.recommend },
