@@ -110,7 +110,10 @@ function PolicyEditor({ models }) {
 
   const modelsByProvider = {};
   for (const m of models) (modelsByProvider[m.provider] ||= []).push(m);
-  const providers = Object.keys(pol.effective.lightTargets).sort();
+  // Only connected providers with a routable model — a target on a disconnected provider would
+  // render an empty dropdown the user can't fix, and could never route. (`models` is already
+  // live + routable from the parent's api.models({ live, routable }).)
+  const providers = Object.keys(modelsByProvider).sort();
   const toggleTask = (t) => setCheap((c) => (c.includes(t) ? c.filter((x) => x !== t) : [...c, t]));
 
   const save = async () => {
@@ -457,14 +460,19 @@ export default function Routing({ onChange }) {
   const [tab, setTab] = useTabParam(TABS);
   const [rules, setRules] = useState(null);
   const [models, setModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(true);
   const [mode, setMode] = useState("off");
   const [cacheMsg, setCacheMsg] = useState(null);
   const [err, setErr] = useState(null);
 
   const load = () =>
-    Promise.all([api.rules(), api.routingMode(), api.models()])
+    // Only connected providers' CHAT-CAPABLE models — a rule/policy targeting an unconnected
+    // provider would never route, and a media/embedding model (e.g. Lyria) can't serve chat.
+    // (The Models page manages the full registry; routing targets the live, routable ones.)
+    Promise.all([api.rules(), api.routingMode(), api.models({ live: true, routable: true })])
       .then(([r, rm, m]) => { setRules(r); setMode(rm.routingMode); setModels(m); })
-      .catch((e) => setErr(e.message));
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoadingModels(false));
   useEffect(() => { load(); }, []);
 
   const toggleRule = async (id, enabled) => { await api.updateRule(id, { enabled }); await load(); };
@@ -492,7 +500,11 @@ export default function Routing({ onChange }) {
               Map a condition to a target model. The gateway applies it deterministically — no quality guess.
               Rules always override automated routing.
             </p>
-            {models.length === 0 ? <Spinner /> : <CreateRuleForm models={models} onCreated={load} />}
+            {loadingModels ? <Spinner /> : models.length === 0 ? (
+              <div className="py-4 text-sm text-gray-500">
+                No connected providers yet. Connect one under <span className="font-medium text-arbr-charcoal">Models</span> to create routing rules.
+              </div>
+            ) : <CreateRuleForm models={models} onCreated={load} />}
           </Card>
 
           <Card title="Rules">

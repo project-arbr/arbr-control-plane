@@ -15,6 +15,12 @@ const modelEntrySchema = new mongoose.Schema(
     tier:         { type: String, enum: ["light", "mid", "premium"], required: true },
     builtIn:       { type: Boolean, default: false },
     enabled:       { type: Boolean, default: true },
+    // Whether this model can serve /chat/completions and may therefore be a ROUTING target.
+    // False for media/embedding/etc. models (image, audio, music like Lyria, embeddings, rerank)
+    // that a provider's catalog lists but which 404 on chat and must never be auto-routed to.
+    // Default true (back-compat: existing chat entries stay routable); set false during sync
+    // via the non-chat id heuristic. Gates automated routing, AI policy, and the routing UI.
+    chatCapable:   { type: Boolean, default: true },
     bestUsedFor:   { type: String, default: "" },
     releaseDate:   { type: String, default: "" },
     contextWindow: { type: Number, default: null },

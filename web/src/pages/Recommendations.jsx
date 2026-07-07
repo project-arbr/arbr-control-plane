@@ -214,7 +214,7 @@ export default function Recommendations({ embedded = false }) {
   };
   useEffect(() => {
     load();
-    api.models({ live: true }).then((m) => setModels(m || [])).catch(() => {});
+    api.models({ live: true, routable: true }).then((m) => setModels(m || [])).catch(() => {});
   }, []);
 
   const recompute = async () => {

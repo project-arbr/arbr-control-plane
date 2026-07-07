@@ -89,7 +89,10 @@ export const api = {
   rollbackExperiment: (id, reason) => req(`/routing-experiments/${id}/rollback`, { method: "POST", body: JSON.stringify({ reason }) }),
   promoteExperiment: (id, approvedBy) => req(`/routing-experiments/${id}/promote`, { method: "POST", body: JSON.stringify({ approvedBy }) }),
 
-  models: ({ live } = {}) => req(`/models${live ? "?live=true" : ""}`),
+  models: ({ live, routable } = {}) => {
+    const q = [live && "live=true", routable && "routable=true"].filter(Boolean).join("&");
+    return req(`/models${q ? `?${q}` : ""}`);
+  },
   createModel: (body) => req("/models", { method: "POST", body: JSON.stringify(body) }),
   updateModel: (id, body) => req(`/models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteModel: (id) => req(`/models/${encodeURIComponent(id)}`, { method: "DELETE" }),
