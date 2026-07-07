@@ -229,7 +229,8 @@ export default function Settings({ onChange }) {
 
   useEffect(() => {
     load();
-    api.models().then(setModels).catch(() => {});
+    // Default-model picker: only connected, chat-capable models (not the full registry).
+    api.models({ live: true, routable: true }).then(setModels).catch(() => {});
     api.about().then(setAbout).catch(() => {});
   }, []);
 

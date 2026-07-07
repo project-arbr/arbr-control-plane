@@ -493,7 +493,9 @@ export default function ApplicationDetail() {
       .catch((e) => setErr(e.message));
 
   useEffect(() => {
-    Promise.all([loadConfig(), api.models({ live: true }).then(setModels).catch(() => {})]);
+    // Per-app routing pickers target chat models on connected providers; the saved per-app
+    // assignments/opt-out come from loadConfig(). Options are live + routable only.
+    Promise.all([loadConfig(), api.models({ live: true, routable: true }).then(setModels).catch(() => {})]);
   }, [appName]);
 
   const toggleKill = async (enabled) => {
