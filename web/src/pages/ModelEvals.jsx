@@ -8,6 +8,18 @@ const STATUS_TONE = { active: "green", paused: "amber", done: "gray" };
 const pct = (n) => (n == null ? "—" : `${(n * 100).toFixed(1)}%`);
 const signedPct = (n) => (n == null ? "—" : `${n > 0 ? "+" : ""}${(n * 100).toFixed(1)}%`);
 
+// Small per-section/-row refresh control — evals run async, so re-fetch without a full page reload.
+function RefreshButton({ onClick, label = "Refresh" }) {
+  return (
+    <button className="btn-outline flex items-center gap-1.5 text-xs" onClick={onClick} title="Refresh">
+      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+      </svg>
+      {label}
+    </button>
+  );
+}
+
 // Create-campaign form. Models come from the registry; application is free-text (any app that sends traffic).
 function NewCampaign({ models, apps, onCreated }) {
   const [form, setForm] = useState({ application: "", candidateModel: "", judgeModel: "", sampleRate: 0.1, minPairs: 50, maxLossRate: 0.1 });
@@ -159,10 +171,11 @@ function RunDetail({ id, onClose }) {
   const [run, setRun] = useState(null);
   const [results, setResults] = useState(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api.evalRun(id).then(setRun).catch((e) => setRun({ _error: e.message }));
     api.evalRunResults(id).then(setResults).catch(() => setResults([]));
   }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   const exportCsv = () => {
     const rows = results || [];
@@ -181,8 +194,14 @@ function RunDetail({ id, onClose }) {
   return (
     <Drawer title={`Eval run · ${run.candidateModel}`} onClose={onClose}>
       <div className="space-y-5">
+        <div className="flex justify-end"><RefreshButton onClick={load} /></div>
         <div className={`rounded-lg p-3 text-sm font-medium ${run.status === "passed" ? "bg-green-50 text-arbr-green-700" : run.status === "failed" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-600"}`}>
-          {run.status === "passed" ? "✓ Passed all thresholds" : run.status === "failed" ? "✗ Failed" : run.status}
+          {run.status === "passed" ? (run.exploratory ? "✓ Passed (exploratory)" : "✓ Passed all thresholds") : run.status === "failed" ? "✗ Failed" : run.status}
+          {run.exploratory && (
+            <div className="mt-1 text-xs font-normal">
+              Exploratory eval on {fmt.num(run.summary?.judged ?? 0)} judged item(s) — a directional signal on a small sample, not a promotion-grade result.
+            </div>
+          )}
           {run.failures?.length > 0 && <ul className="mt-1 list-disc pl-5 text-xs font-normal">{run.failures.map((f, i) => <li key={i}>{f}</li>)}</ul>}
           {run.error && <div className="mt-1 text-xs font-normal">{run.error}</div>}
         </div>
@@ -302,14 +321,19 @@ function EvalRunsSection({ models, apps }) {
   const cols = [
     { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
     { key: "application", header: "Application", render: (r) => r.application || <span className="text-gray-400">any</span> },
-    { key: "status", header: "Status", render: (r) => <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge> },
+    { key: "status", header: "Status", render: (r) => (
+      <span className="flex items-center gap-1.5">
+        <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge>
+        {r.exploratory && <Badge tone="gray">exploratory</Badge>}
+      </span>
+    ) },
     { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
     { key: "saving", header: "Cost saving", render: (r) => pct(r.summary?.costSavingPct) },
     { key: "risk", header: "Risk", render: (r) => r.riskTier },
     { key: "actions", header: "", render: (r) => <button className="btn-outline text-xs" onClick={(e) => { e.stopPropagation(); setOpenId(r._id); }}>Evidence</button> },
   ];
   return (
-    <Card title="Evals">
+    <Card title="Evals" action={<RefreshButton onClick={load} />}>
       <NewEval models={models} apps={apps} onCreated={load} />
       {runs === null ? <Spinner /> : <Table columns={cols} rows={runs} empty="No evals yet — create one above, or run one from a recommendation." onRowClick={(r) => setOpenId(r._id)} />}
       {openId && <RunDetail id={openId} onClose={() => setOpenId(null)} />}
@@ -343,7 +367,7 @@ function CanarySection() {
     ) },
   ];
   return (
-    <Card title="Canary experiments">
+    <Card title="Canary experiments" action={<RefreshButton onClick={load} />}>
       <p className="mb-3 text-sm text-gray-500">Eval-approved candidates rolled out to a deterministic slice of auto-routed traffic. Auto-rolls-back on guardrail breach; promote to make it a rule.</p>
       {err && <div className="mb-2 text-sm text-red-600">{err}</div>}
       {exps === null ? <Spinner /> : <Table columns={cols} rows={exps} empty="No canary experiments — start one from a passed recommendation." />}
@@ -425,7 +449,7 @@ export default function ModelEvals() {
 
       <NewCampaign models={models} apps={apps} onCreated={load} />
 
-      <Card title="Campaigns">
+      <Card title="Campaigns" action={<RefreshButton onClick={load} />}>
         {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
         {campaigns === null ? <Spinner /> : <Table columns={columns} rows={campaigns} empty="No campaigns yet." onRowClick={(c) => setOpenId(c._id)} />}
       </Card>

@@ -22,6 +22,11 @@ const evalRunSchema = new mongoose.Schema(
     status: { type: String, enum: ["queued", "running", "passed", "failed", "cancelled"], default: "queued", index: true },
     thresholds: { type: mongoose.Schema.Types.Mixed, default: null },
 
+    // Exploratory (manually-created) run: the sample-size floor was lowered to the traffic
+    // actually available instead of the risk-tier promotion floor. A pass is a directional
+    // signal on a small sample, NOT a promotion-grade result. The UI labels it as such.
+    exploratory: { type: Boolean, default: false },
+
     // Cost guardrail — replay + judge calls are real spend. Estimated up front; the run aborts
     // (status:failed) rather than exceed maxRunCostUsd.
     estimatedCostUsd: { type: Number, default: 0 },
