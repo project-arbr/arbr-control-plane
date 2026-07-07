@@ -294,14 +294,37 @@ export default function ModelEvals() {
     api.facets().then((f) => setApps(f?.applications || [])).catch(() => {});
   }, [load]);
 
-  const setStatus = async (c, status) => { await api.updateEvalCampaign(c._id, { status }); load(); };
+  // Activating a shadow campaign is gated on a passed offline eval (or an override). If the gate
+  // blocks it (409), explain why and offer to start it anyway with a recorded override reason.
+  const setStatus = async (c, status) => {
+    setErr(null);
+    try {
+      await api.updateEvalCampaign(c._id, { status });
+      load();
+    } catch (e) {
+      if (e.status === 409 && status === "active") {
+        const reason = window.prompt(`This shadow campaign can't start yet:\n\n${e.message}\n\nEnter an override reason to start it anyway (or Cancel):`);
+        if (!reason) return;
+        const approver = window.prompt("Approver name:") || "console";
+        try { await api.updateEvalCampaign(c._id, { status, override: { reason, approver } }); load(); }
+        catch (e2) { setErr(e2.message); }
+      } else setErr(e.message);
+    }
+  };
   const remove = async (c) => { setConfirmDel(null); await api.deleteEvalCampaign(c._id); load(); };
 
   const columns = [
     { key: "application", header: "Application", render: (c) => <span className="font-medium">{c.application}</span> },
     { key: "candidateModel", header: "Candidate" },
     { key: "judgeModel", header: "Judge", render: (c) => c.judgeModel || <span className="text-gray-400">none</span> },
-    { key: "status", header: "Status", render: (c) => <Badge tone={STATUS_TONE[c.status]}>{c.status}</Badge> },
+    { key: "status", header: "Status", render: (c) => (
+      <span className="flex flex-col gap-0.5">
+        <span><Badge tone={STATUS_TONE[c.status]}>{c.status}</Badge></span>
+        {c.status === "paused" && c.statusReason && (
+          <span className="max-w-[240px] text-[10px] leading-tight text-gray-400">{c.statusReason}</span>
+        )}
+      </span>
+    ) },
     { key: "pairCount", header: "Pairs", render: (c) => fmt.num(c.pairCount) },
     { key: "sampleRate", header: "Sample", render: (c) => pct(c.sampleRate) },
     { key: "actions", header: "", render: (c) => (

@@ -108,7 +108,7 @@ const NAV_GROUPS = [
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
 
 function navClass({ isActive }) {
-  return `mx-1 my-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+  return `mx-1 my-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-normal transition-colors ${
     isActive
       ? "bg-arbr-green-50 text-arbr-green-700"
       : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
@@ -136,8 +136,8 @@ export default function Layout({ status, onSignOut, children }) {
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
           {NAV_GROUPS.map((group, gi) => (
             <div key={group.section} className={gi > 0 ? "mt-5" : ""}>
-              <div className="mb-1 px-3">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              <div className="mb-1.5 px-3">
+                <div className="text-[15px] font-normal uppercase tracking-wide text-gray-500">
                   {group.section}
                 </div>
                 {group.hint && (
