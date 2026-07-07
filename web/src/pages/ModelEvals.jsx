@@ -196,7 +196,12 @@ function RunDetail({ id, onClose }) {
       <div className="space-y-5">
         <div className="flex justify-end"><RefreshButton onClick={load} /></div>
         <div className={`rounded-lg p-3 text-sm font-medium ${run.status === "passed" ? "bg-green-50 text-arbr-green-700" : run.status === "failed" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-600"}`}>
-          {run.status === "passed" ? "✓ Passed all thresholds" : run.status === "failed" ? "✗ Failed" : run.status}
+          {run.status === "passed" ? (run.exploratory ? "✓ Passed (exploratory)" : "✓ Passed all thresholds") : run.status === "failed" ? "✗ Failed" : run.status}
+          {run.exploratory && (
+            <div className="mt-1 text-xs font-normal">
+              Exploratory eval on {fmt.num(run.summary?.judged ?? 0)} judged item(s) — a directional signal on a small sample, not a promotion-grade result.
+            </div>
+          )}
           {run.failures?.length > 0 && <ul className="mt-1 list-disc pl-5 text-xs font-normal">{run.failures.map((f, i) => <li key={i}>{f}</li>)}</ul>}
           {run.error && <div className="mt-1 text-xs font-normal">{run.error}</div>}
         </div>
@@ -316,7 +321,12 @@ function EvalRunsSection({ models, apps }) {
   const cols = [
     { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
     { key: "application", header: "Application", render: (r) => r.application || <span className="text-gray-400">any</span> },
-    { key: "status", header: "Status", render: (r) => <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge> },
+    { key: "status", header: "Status", render: (r) => (
+      <span className="flex items-center gap-1.5">
+        <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge>
+        {r.exploratory && <Badge tone="gray">exploratory</Badge>}
+      </span>
+    ) },
     { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
     { key: "saving", header: "Cost saving", render: (r) => pct(r.summary?.costSavingPct) },
     { key: "risk", header: "Risk", render: (r) => r.riskTier },

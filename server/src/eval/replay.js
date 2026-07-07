@@ -72,12 +72,13 @@ function estimateRunCost(items, baselineModel, candidateModel, judgeModel, getMo
 }
 
 // Kick off a run in the background. Validates cost ceiling up front. Returns the created EvalRun.
-async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = null, createdBy = "console" }) {
+async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = null, createdBy = "console", exploratory = false }) {
   const items = await EvalItem.find({ datasetId: dataset._id }).lean();
   const estimatedCostUsd = estimateRunCost(items, dataset.baselineModel, dataset.candidateModel, judgeModel);
 
   const run = await EvalRun.create({
     recommendationId: rec ? rec._id : null,
+    exploratory: !!exploratory,
     datasetId: dataset._id,
     application: dataset.scope?.application || null,
     workflow: dataset.scope?.workflow || null,

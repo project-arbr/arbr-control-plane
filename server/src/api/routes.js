@@ -790,8 +790,12 @@ router.post("/evals", async (req, res, next) => {
 
     const risk = evalThresholds.riskForTier(tierForTask(taskType));
     const thresholds = evalThresholds.defaultThresholds(risk);
-    const run = await evalReplay.startRun({ rec: null, dataset, judgeModel: judgeModel || null, thresholds, maxRunCostUsd: maxRunCostUsd ?? null });
-    setImmediate(() => logAction("eval.create", "evalRun", String(run._id), { application, baselineModel, candidateModel, judgeModel: judgeModel || null }));
+    // Exploratory: don't block on the risk-tier promotion floor (200/300/500) — evaluate whatever
+    // traffic is actually available. Flagged exploratory so a pass reads as a directional signal,
+    // not a promotion-grade result. The other gates (worse-rate, latency, cost) still apply.
+    thresholds.minItems = Math.max(1, dataset.itemCount || 1);
+    const run = await evalReplay.startRun({ rec: null, dataset, judgeModel: judgeModel || null, thresholds, maxRunCostUsd: maxRunCostUsd ?? null, exploratory: true });
+    setImmediate(() => logAction("eval.create", "evalRun", String(run._id), { application, baselineModel, candidateModel, judgeModel: judgeModel || null, exploratory: true }));
     res.status(run.status === "failed" ? 422 : 201).json({ dataset, run });
   } catch (e) { next(e); }
 });
