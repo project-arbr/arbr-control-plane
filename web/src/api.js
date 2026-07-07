@@ -78,6 +78,7 @@ export const api = {
   overrideRecommendation: (id, body) => req(`/recommendations/${id}/override`, { method: "POST", body: JSON.stringify(body) }),
   evalDatasets: (recommendationId) => req(`/evals/datasets${qs({ recommendationId })}`),
   evalDataset: (id) => req(`/evals/datasets/${id}`),
+  createEval: (body) => req("/evals", { method: "POST", body: JSON.stringify(body) }),
   evalRuns: (recommendationId) => req(`/evals/runs${qs({ recommendationId })}`),
   evalRun: (id) => req(`/evals/runs/${id}`),
   evalRunResults: (id) => req(`/evals/runs/${id}/results`),
