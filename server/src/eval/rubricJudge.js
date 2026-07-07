@@ -136,7 +136,7 @@ async function judgeItem({ router, eff, judgeModel, userText, baselineText, cand
   // null is reserved for "no judge configured / not live" (an intentional capture-only run).
   try {
     const res = await router.complete({
-      messages: prompt, providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
+      messages: [{ role: "user", content: prompt }], providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
     });
     const parsed = parseRubricVerdict(res.text || "");
     if (!parsed) return { error: `judge "${judgeModel}" did not return a valid A/B/tie JSON verdict` };

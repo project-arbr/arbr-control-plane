@@ -345,9 +345,18 @@ function EvalRunsSection({ models, apps }) {
   const [runs, setRuns] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
+  const [err, setErr] = useState(null);
   const load = useCallback(() => { api.evalRuns().then(setRuns).catch(() => setRuns([])); }, []);
   useEffect(() => { load(); }, [load]);
   const del = async (r) => { setConfirmDel(null); await api.deleteEvalRun(r._id).catch(() => {}); load(); };
+  // Re-run: start a fresh eval with the same application, baseline, candidate and judge.
+  const rerun = async (r) => {
+    setErr(null);
+    try {
+      await api.createEval({ application: r.application, baselineModel: r.baselineModel, candidateModel: r.candidateModel, judgeModel: r.judgeModel || null });
+      load();
+    } catch (e) { setErr(e.message); }
+  };
   const cols = [
     { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
     { key: "application", header: "Application", render: (r) => r.application || <span className="text-gray-400">any</span> },
@@ -363,6 +372,7 @@ function EvalRunsSection({ models, apps }) {
     { key: "actions", header: "", render: (r) => (
       <span className="flex gap-2" onClick={(e) => e.stopPropagation()}>
         <button className="btn-outline text-xs" onClick={() => setOpenId(r._id)}>Evidence</button>
+        {r.application && <button className="btn-outline text-xs" onClick={() => rerun(r)}>Re-run</button>}
         <button className="btn-outline text-xs text-red-600" onClick={() => setConfirmDel(r)}>Delete</button>
       </span>
     ) },
@@ -370,6 +380,7 @@ function EvalRunsSection({ models, apps }) {
   return (
     <Card title="Evals" action={<RefreshButton onClick={load} />}>
       <NewEval models={models} apps={apps} onCreated={load} />
+      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
       {runs === null ? <Spinner /> : <Table columns={cols} rows={runs} empty="No evals yet — create one above, or run one from a recommendation." onRowClick={(r) => setOpenId(r._id)} />}
       {openId && <RunDetail id={openId} onClose={() => setOpenId(null)} />}
       {confirmDel && (
