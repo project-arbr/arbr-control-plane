@@ -764,6 +764,38 @@ router.post("/recommendations/:id/override", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Create an eval directly (not from a recommendation): build a dataset from an application's
+// recent single-shot traffic and start an offline run comparing a candidate model against the
+// baseline. Lets users test ANY candidate, recommended or not. Mirrors the recommendation
+// create-dataset + run-eval flow in one call, reusing the same builder/runner with a
+// recommendation-shaped scope (recommendationId stays null).
+router.post("/evals", async (req, res, next) => {
+  try {
+    const { application, taskType, baselineModel, candidateModel, judgeModel, targetCount, piiMode, windowDays, maxRunCostUsd } = req.body || {};
+    if (!application) return res.status(400).json({ error: "application is required" });
+    if (!baselineModel) return res.status(400).json({ error: "baselineModel is required" });
+    if (!candidateModel) return res.status(400).json({ error: "candidateModel is required" });
+    if (baselineModel === candidateModel) return res.status(400).json({ error: "baselineModel and candidateModel must differ" });
+
+    // Scope shaped like a recommendation so the existing builder/runner work unchanged.
+    const scope = { _id: null, application, taskType: taskType || null, currentModel: baselineModel, suggestedModel: candidateModel };
+    const dataset = await evalDatasetBuilder.createFromTraffic({ rec: scope, targetCount, piiMode, windowDays });
+    if (dataset.status !== "ready") {
+      const body = dataset.toObject ? dataset.toObject() : dataset;
+      return res.status(422).json({ ...body, error: "no_replayable_traffic", message: dataset.error });
+    }
+    if (dataset.riskTier === "high" && judgeModel && sameFamily(judgeModel, candidateModel)) {
+      return res.status(422).json({ error: "judge_same_family", message: "For high-risk tasks the judge must not be from the candidate's model family." });
+    }
+
+    const risk = evalThresholds.riskForTier(tierForTask(taskType));
+    const thresholds = evalThresholds.defaultThresholds(risk);
+    const run = await evalReplay.startRun({ rec: null, dataset, judgeModel: judgeModel || null, thresholds, maxRunCostUsd: maxRunCostUsd ?? null });
+    setImmediate(() => logAction("eval.create", "evalRun", String(run._id), { application, baselineModel, candidateModel, judgeModel: judgeModel || null }));
+    res.status(run.status === "failed" ? 422 : 201).json({ dataset, run });
+  } catch (e) { next(e); }
+});
+
 // ── Eval datasets / runs (read views) ─────────────────────────────────────────
 router.get("/evals/datasets", async (req, res, next) => {
   try {

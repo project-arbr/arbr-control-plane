@@ -221,13 +221,87 @@ function RunDetail({ id, onClose }) {
   );
 }
 
-// Offline eval runs across all recommendations.
-function EvalRunsSection() {
+// Create an eval directly — replay an application's traffic through any candidate model, judged
+// against the baseline. Doesn't require a recommendation, so users can test models on a hunch.
+function NewEval({ models, apps, onCreated }) {
+  const [form, setForm] = useState({ application: "", baselineModel: "", candidateModel: "", judgeModel: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    setErr(null); setNotice(null); setBusy(true);
+    try {
+      const { run } = await api.createEval({
+        application: form.application.trim(),
+        baselineModel: form.baselineModel,
+        candidateModel: form.candidateModel,
+        judgeModel: form.judgeModel || null,
+      });
+      setNotice(`Eval started (${run.status}) — it appears below; refresh in a moment for the verdict.`);
+      setForm({ application: "", baselineModel: "", candidateModel: "", judgeModel: "" });
+      onCreated();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const valid = form.application.trim() && form.baselineModel && form.candidateModel && form.baselineModel !== form.candidateModel;
+  return (
+    <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50/70 p-4">
+      <div className="text-sm font-semibold text-arbr-charcoal">New eval</div>
+      <p className="mb-3 mt-0.5 text-xs text-gray-500">
+        Replay an application's recent single-shot traffic through a candidate model and judge it against the
+        baseline. Works for any candidate — it doesn't have to be recommended.
+      </p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <div className="label mb-1">Application</div>
+          <input className="input w-full" list="eval-run-apps" placeholder="e.g. gyde-chat-client"
+            value={form.application} onChange={(e) => set("application", e.target.value)} />
+          <datalist id="eval-run-apps">{apps.map((a) => <option key={a} value={a} />)}</datalist>
+        </div>
+        <div>
+          <div className="label mb-1">Baseline (current)</div>
+          <select className="input w-full" value={form.baselineModel} onChange={(e) => set("baselineModel", e.target.value)}>
+            <option value="">Select…</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          </select>
+        </div>
+        <div>
+          <div className="label mb-1">Candidate (to test)</div>
+          <select className="input w-full" value={form.candidateModel} onChange={(e) => set("candidateModel", e.target.value)}>
+            <option value="">Select…</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          </select>
+        </div>
+        <div>
+          <div className="label mb-1">Judge <span className="text-gray-400">(optional)</span></div>
+          <select className="input w-full" value={form.judgeModel} onChange={(e) => set("judgeModel", e.target.value)}>
+            <option value="">No judge (format checks only)</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          </select>
+        </div>
+      </div>
+      {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
+      {notice && <div className="mt-3 text-sm text-arbr-green-700">{notice}</div>}
+      <div className="mt-3">
+        <button className="btn-secondary text-sm" disabled={busy || !valid} onClick={submit}>
+          {busy ? "Starting…" : "Run eval"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// All evals — created here directly or from a recommendation.
+function EvalRunsSection({ models, apps }) {
   const [runs, setRuns] = useState(null);
   const [openId, setOpenId] = useState(null);
-  useEffect(() => { api.evalRuns().then(setRuns).catch(() => setRuns([])); }, []);
+  const load = useCallback(() => { api.evalRuns().then(setRuns).catch(() => setRuns([])); }, []);
+  useEffect(() => { load(); }, [load]);
   const cols = [
     { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
+    { key: "application", header: "Application", render: (r) => r.application || <span className="text-gray-400">any</span> },
     { key: "status", header: "Status", render: (r) => <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge> },
     { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
     { key: "saving", header: "Cost saving", render: (r) => pct(r.summary?.costSavingPct) },
@@ -235,8 +309,9 @@ function EvalRunsSection() {
     { key: "actions", header: "", render: (r) => <button className="btn-outline text-xs" onClick={(e) => { e.stopPropagation(); setOpenId(r._id); }}>Evidence</button> },
   ];
   return (
-    <Card title="Offline eval runs">
-      {runs === null ? <Spinner /> : <Table columns={cols} rows={runs} empty="No eval runs yet — run one from a recommendation." onRowClick={(r) => setOpenId(r._id)} />}
+    <Card title="Evals">
+      <NewEval models={models} apps={apps} onCreated={load} />
+      {runs === null ? <Spinner /> : <Table columns={cols} rows={runs} empty="No evals yet — create one above, or run one from a recommendation." onRowClick={(r) => setOpenId(r._id)} />}
       {openId && <RunDetail id={openId} onClose={() => setOpenId(null)} />}
     </Card>
   );
@@ -345,7 +420,7 @@ export default function ModelEvals() {
         <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one (safe substitution) — offline replay, live shadow, then a guarded canary — before it becomes a rule.</p>
       </div>
 
-      <EvalRunsSection />
+      <EvalRunsSection models={models} apps={apps} />
       <CanarySection />
 
       <NewCampaign models={models} apps={apps} onCreated={load} />
