@@ -2,21 +2,27 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Card, Badge, CodeBlock } from "../components/ui.jsx";
 
-// One row per left-nav menu — keep in sync with Layout.jsx NAV_GROUPS so the docs track the product.
+// Grouped by the path a request takes through Arbr — keep in sync with Layout.jsx NAV_GROUPS.
+// [stage, one-line purpose, [[screen, what it does], …]]
 const SCREENS = [
-  ["Monitor", [
+  ["Connect", "Wire your apps and providers to one gateway.", [
+    ["Models", "Connect providers (paste a key), or add any OpenAI-compatible provider (e.g. NVIDIA) and Discover + import its models. Prices/benchmarks sync from the catalog."],
+    ["Settings", "Gateway API keys (per application), default provider/model, and Require-API-keys."],
+  ]],
+  ["See", "Know what you're spending, and where.", [
     ["Overview", "Usage, spend, tokens, success rate and latency (incl. p50/p95), with a cost trend chart. Filter by period."],
     ["Applications", "Per-application view of the same metrics; click a request for the full drilldown (prompt, response, routing)."],
   ]],
-  ["Control", [
-    ["Routing", "Routing mode (off / cost guardrail / AI), human-approved rules, and the AI policy (task→model). Every request records why it was routed the way it was."],
-    ["Budgets", "Spend caps per application/provider/etc. with warning thresholds; a breached cap can alert, downgrade, or block."],
-    ["Models", "Connect providers (paste a key), or add any OpenAI-compatible provider (e.g. NVIDIA) and Discover + import its models. Prices/benchmarks sync from the catalog."],
-    ["Model Evals", "Shadow-evaluate a candidate model on your own live traffic (mirrored, not served), judged vs current, with a safe-to-switch verdict."],
-    ["Settings", "Gateway API keys (per application), default provider/model, Require-API-keys, and governance (webhook, retention, PII masking, max-tokens guardrail)."],
+  ["Recommend", "Surface where a cheaper model fits — measured from your own traffic.", [
+    ["Recommendations", "Costed suggestions where a premium model is handling a cheap task. Advisory until you accept; each can be proven with an eval before it ever routes."],
   ]],
-  ["Governance", [
-    ["Governance", "Kill switch / maintenance mode, PII masking, retention, and the alert webhook."],
+  ["Route", "Send traffic to the right model — on human approval, always reversible.", [
+    ["Routing", "Routing mode (off / cost guardrail / AI), human-approved rules, and the AI policy (task→model). Every request records why it was routed the way it was."],
+    ["Model Evals", "Prove a candidate before you switch: replay past traffic offline, shadow-evaluate on live traffic (mirrored, not served), then canary with auto-rollback."],
+  ]],
+  ["Govern", "Set the limits, protect data, and keep a record.", [
+    ["Budgets", "Spend caps per application/provider with warning thresholds; a breached cap can alert, downgrade, or block."],
+    ["Governance", "Kill switch / maintenance mode, PII masking, max-tokens guardrail, retention, and the alert webhook."],
     ["Audit", "A log of console actions (keys, rules, caps, connections) for accountability."],
   ]],
 ];
@@ -57,7 +63,8 @@ res = arbr.chat("Summarise this ticket: ...", model="auto", max_tokens=300)   # 
       <div>
         <h1 className="text-2xl font-bold text-arbr-charcoal">Documentation</h1>
         <p className="text-sm text-gray-500">
-          What Arbr is, how each screen works, and how to point an app at the gateway.
+          What Arbr is, and how the console works — following the path a request takes:
+          Connect → See → Recommend → Route → Govern.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-gray-500">Gateway:</span>
@@ -77,7 +84,7 @@ res = arbr.chat("Summarise this ticket: ...", model="auto", max_tokens=300)   # 
         </p>
       </Card>
 
-      <Card title="Getting started">
+      <Card title="Getting started — the Connect stage">
         <ol className="ml-4 list-decimal space-y-3 text-sm text-gray-600">
           <li><strong>Run it</strong> — <code>docker compose up</code> (Mongo + app on :4100), or <code>npm run dev</code> locally.</li>
           <li><strong>Connect a provider</strong> — Settings → Connections, or the <strong>Models</strong> page. For any OpenAI-compatible provider (e.g. NVIDIA), add it there and <strong>Discover models</strong> to import them. Keys are stored encrypted.</li>
@@ -86,14 +93,21 @@ res = arbr.chat("Summarise this ticket: ...", model="auto", max_tokens=300)   # 
         </ol>
         <div className="mt-3"><CodeBlock lang="bash" code={compatCurl} /></div>
         <div className="mt-3"><CodeBlock lang="bash" code={nativeCurl} /></div>
+        <p className="mt-3 text-xs text-gray-400">
+          That's Connect. From there: <strong>See</strong> your spend, act on a <strong>Recommend</strong>ation,
+          shape how you <strong>Route</strong>, and set the guardrails to <strong>Govern</strong> it.
+        </p>
       </Card>
 
-      <Card title="The dashboard, screen by screen">
-        <p className="mb-3 text-sm text-gray-500">Every left-nav menu, and what it does:</p>
+      <Card title="The dashboard, stage by stage">
+        <p className="mb-3 text-sm text-gray-500">
+          The console follows the path a request takes: <strong>Connect → See → Recommend → Route → Govern</strong>.
+        </p>
         <div className="space-y-4">
-          {SCREENS.map(([group, items]) => (
-            <div key={group}>
-              <div className="label mb-1">{group}</div>
+          {SCREENS.map(([stage, hint, items]) => (
+            <div key={stage}>
+              <div className="label mb-0.5">{stage}</div>
+              <div className="mb-1 text-xs text-gray-400">{hint}</div>
               <ul className="space-y-1.5 text-sm text-gray-600">
                 {items.map(([name, desc]) => (
                   <li key={name}><strong className="text-arbr-charcoal">{name}</strong> — {desc}</li>

@@ -5,6 +5,7 @@ import { api, clearAdminToken } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Overview from "./pages/Overview.jsx";
 import Routing from "./pages/Routing.jsx";
+import Recommendations from "./pages/Recommendations.jsx";
 import Requests from "./pages/Requests.jsx";
 import Settings from "./pages/Settings.jsx";
 import Docs from "./pages/Docs.jsx";
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/applications/:name" element={<ApplicationDetail />} />
         <Route path="/requests" element={<Requests />} />
         <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
+        <Route path="/recommendations" element={<Recommendations />} />
         <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
         <Route path="/models" element={<Models />} />
         <Route path="/evals" element={<ModelEvals />} />
@@ -48,9 +50,8 @@ export default function App() {
         <Route path="/audit" element={<Audit />} />
         <Route path="/docs" element={<Docs />} />
 
-        {/* Redirects for old / deep links — pages now live as sub-tabs. */}
+        {/* Redirects for old / deep links. */}
         <Route path="/rules" element={<Navigate to="/routing" replace />} />
-        <Route path="/recommendations" element={<Navigate to="/routing?tab=recommendations" replace />} />
         <Route path="/views" element={<Navigate to="/?tab=dimensions" replace />} />
       </Routes>
     </Layout>
