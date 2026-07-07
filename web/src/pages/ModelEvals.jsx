@@ -163,8 +163,22 @@ function CampaignDetail({ id, onClose }) {
   );
 }
 
-const RUN_TONE = { queued: "gray", running: "amber", passed: "green", failed: "red", cancelled: "gray" };
 const EXP_TONE = { draft: "gray", active: "green", paused: "amber", rolled_back: "red", promoted: "charcoal" };
+
+// Translate a run's raw status into a user-facing OUTCOME. Crucially, a completed run whose
+// candidate simply didn't clear the quality bar is "Not recommended" (a valid verdict), NOT the
+// scary red "Failed" — that's reserved for a run that couldn't actually complete (judge/candidate
+// error), or was inconclusive (no verdicts to judge on).
+function runOutcome(r) {
+  if (r.status === "passed") return { kind: "pass", label: "Safe to switch", tone: "green" };
+  if (r.status === "queued") return { kind: "pending", label: "Queued", tone: "gray" };
+  if (r.status === "running") return { kind: "pending", label: "Running", tone: "amber" };
+  if (r.status === "cancelled") return { kind: "cancelled", label: "Cancelled", tone: "gray" };
+  // status === "failed":
+  if (r.error) return { kind: "error", label: "Couldn't complete", tone: "red" };
+  if ((r.summary?.judged || 0) === 0) return { kind: "inconclusive", label: "Inconclusive", tone: "gray" };
+  return { kind: "reject", label: "Not recommended", tone: "amber" };
+}
 
 // Offline eval-run detail: pass/fail, aggregate summary, and the worst candidate examples.
 function RunDetail({ id, onClose }) {
@@ -195,16 +209,39 @@ function RunDetail({ id, onClose }) {
     <Drawer title={`Eval run · ${run.candidateModel}`} onClose={onClose}>
       <div className="space-y-5">
         <div className="flex justify-end"><RefreshButton onClick={load} /></div>
-        <div className={`rounded-lg p-3 text-sm font-medium ${run.status === "passed" ? "bg-green-50 text-arbr-green-700" : run.status === "failed" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-600"}`}>
-          {run.status === "passed" ? (run.exploratory ? "✓ Passed (exploratory)" : "✓ Passed all thresholds") : run.status === "failed" ? "✗ Failed" : run.status}
-          {run.exploratory && (
-            <div className="mt-1 text-xs font-normal">
-              Exploratory eval on {fmt.num(run.summary?.judged ?? 0)} judged item(s) — a directional signal on a small sample, not a promotion-grade result.
+        {(() => {
+          const o = runOutcome(run);
+          const bg = o.tone === "green" ? "bg-green-50 text-arbr-green-700"
+            : o.tone === "red" ? "bg-red-50 text-red-700"
+            : o.tone === "amber" ? "bg-amber-50 text-amber-800"
+            : "bg-gray-50 text-gray-600";
+          const blurb = {
+            pass: "The candidate met every quality bar — safe to switch for this traffic.",
+            reject: "The eval ran and reached a verdict: the candidate didn't clear the bar to switch, so it isn't recommended for this traffic. (This is a result, not an error.)",
+            inconclusive: "The eval ran but produced no quality verdicts (e.g. no judge was selected), so there's nothing to conclude.",
+            error: "The eval couldn't complete — see the reason below.",
+            cancelled: "This run was cancelled before finishing.",
+            pending: "This run hasn't finished yet.",
+          }[o.kind];
+          return (
+            <div className={`rounded-lg p-3 text-sm ${bg}`}>
+              <div className="font-medium">
+                {o.kind === "pass" ? "✓ " : o.kind === "error" ? "✗ " : ""}{o.label}
+                {run.exploratory && o.kind !== "error" ? " · exploratory" : ""}
+              </div>
+              {blurb && <div className="mt-1 text-xs font-normal">{blurb}</div>}
+              {run.exploratory && (o.kind === "reject" || o.kind === "pass") && (
+                <div className="mt-1 text-xs font-normal">
+                  Directional signal on {fmt.num(run.summary?.judged ?? 0)} judged item(s), not a promotion-grade result.
+                </div>
+              )}
+              {o.kind === "error" && run.error && <div className="mt-1 text-xs font-normal">{run.error}</div>}
+              {o.kind !== "error" && run.failures?.length > 0 && (
+                <ul className="mt-1 list-disc pl-5 text-xs font-normal">{run.failures.map((f, i) => <li key={i}>{f}</li>)}</ul>
+              )}
             </div>
-          )}
-          {run.failures?.length > 0 && <ul className="mt-1 list-disc pl-5 text-xs font-normal">{run.failures.map((f, i) => <li key={i}>{f}</li>)}</ul>}
-          {run.error && <div className="mt-1 text-xs font-normal">{run.error}</div>}
-        </div>
+          );
+        })()}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Judged" value={fmt.num(s.judged)} sub={`${fmt.num(s.total)} total`} />
           <Stat label="Worse-rate" value={pct(s.worseRate)} sub={`critical ${pct(s.criticalFailRate)}`} />
@@ -360,12 +397,15 @@ function EvalRunsSection({ models, apps }) {
   const cols = [
     { key: "candidateModel", header: "Baseline → candidate", render: (r) => <span>{r.baselineModel} → <b>{r.candidateModel}</b></span> },
     { key: "application", header: "Application", render: (r) => r.application || <span className="text-gray-400">any</span> },
-    { key: "status", header: "Status", render: (r) => (
-      <span className="flex items-center gap-1.5">
-        <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge>
-        {r.exploratory && <Badge tone="gray">exploratory</Badge>}
-      </span>
-    ) },
+    { key: "status", header: "Outcome", render: (r) => {
+      const o = runOutcome(r);
+      return (
+        <span className="flex items-center gap-1.5">
+          <Badge tone={o.tone}>{o.label}</Badge>
+          {r.exploratory && <Badge tone="gray">exploratory</Badge>}
+        </span>
+      );
+    } },
     { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
     { key: "saving", header: "Cost saving", render: (r) => pct(r.summary?.costSavingPct) },
     { key: "risk", header: "Risk", render: (r) => r.riskTier },
