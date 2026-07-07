@@ -132,15 +132,17 @@ async function judgeItem({ router, eff, judgeModel, userText, baselineText, cand
   const aText = flip ? candidateText : baselineText;
   const bText = flip ? baselineText : candidateText;
   const prompt = buildRubricPrompt({ userText, aText, bText });
+  // On failure return { error } (not null) so the run can explain WHY 0 items were judged.
+  // null is reserved for "no judge configured / not live" (an intentional capture-only run).
   try {
     const res = await router.complete({
       messages: prompt, providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
     });
     const parsed = parseRubricVerdict(res.text || "");
-    const mapped = mapVerdictToCandidate(parsed, candidateSlot);
-    return mapped ? { ...mapped, abFlipped: !!flip } : null;
-  } catch {
-    return null;
+    if (!parsed) return { error: `judge "${judgeModel}" did not return a valid A/B/tie JSON verdict` };
+    return { ...mapVerdictToCandidate(parsed, candidateSlot), abFlipped: !!flip };
+  } catch (e) {
+    return { error: `judge "${judgeModel}" call failed: ${e.message}` };
   }
 }
 
