@@ -247,22 +247,26 @@ function NewEval({ models, apps, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [avail, setAvail] = useState(null); // replayable-request count for the chosen app + baseline
+  const [baselineOptions, setBaselineOptions] = useState(null); // models with replayable traffic for the app
+  const [loadingBase, setLoadingBase] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Once an application + baseline are picked, show how much replayable traffic exists to evaluate.
+  // When the application changes, load the models that actually served its replayable traffic —
+  // those (and only those) are valid baselines. Reset any stale baseline pick.
   useEffect(() => {
     const app = form.application.trim();
-    if (!app || !form.baselineModel) { setAvail(null); return; }
+    setForm((f) => (f.baselineModel ? { ...f, baselineModel: "" } : f));
+    if (!app) { setBaselineOptions(null); return; }
     let cancelled = false;
-    setAvail("loading");
+    setLoadingBase(true);
     const t = setTimeout(() => {
-      api.evalReplayableCount({ application: app, baselineModel: form.baselineModel })
-        .then((r) => { if (!cancelled) setAvail(r.count); })
-        .catch(() => { if (!cancelled) setAvail(null); });
+      api.evalTrafficModels({ application: app })
+        .then((rows) => { if (!cancelled) setBaselineOptions(rows || []); })
+        .catch(() => { if (!cancelled) setBaselineOptions([]); })
+        .finally(() => { if (!cancelled) setLoadingBase(false); });
     }, 350);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [form.application, form.baselineModel]);
+  }, [form.application]);
 
   const submit = async () => {
     setErr(null); setNotice(null); setBusy(true);
@@ -296,9 +300,13 @@ function NewEval({ models, apps, onCreated }) {
         </div>
         <div>
           <div className="label mb-1">Baseline (current)</div>
-          <select className="input w-full" value={form.baselineModel} onChange={(e) => set("baselineModel", e.target.value)}>
-            <option value="">Select…</option>
-            {models.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          <select className="input w-full" value={form.baselineModel}
+            disabled={!form.application.trim() || loadingBase || (baselineOptions != null && baselineOptions.length === 0)}
+            onChange={(e) => set("baselineModel", e.target.value)}>
+            <option value="">{!form.application.trim() ? "Pick an application first" : loadingBase ? "Loading…" : "Select…"}</option>
+            {(baselineOptions || []).map((o) => (
+              <option key={o.model} value={o.model}>{o.model} ({fmt.num(o.count)} replayable)</option>
+            ))}
           </select>
         </div>
         <div>
@@ -316,11 +324,9 @@ function NewEval({ models, apps, onCreated }) {
           </select>
         </div>
       </div>
-      {avail === "loading" && <div className="mt-2 text-xs text-gray-400">Checking available traffic…</div>}
-      {typeof avail === "number" && (
-        <div className={`mt-2 text-xs ${avail === 0 ? "text-amber-600" : "text-gray-500"}`}>
-          ≈ <b>{fmt.num(avail)}</b> replayable request{avail === 1 ? "" : "s"} for <b>{form.application.trim()}</b> on <b>{form.baselineModel}</b> (last 60 days)
-          {avail === 0 && " — nothing to evaluate yet. Needs traffic logged with payload capture on."}
+      {form.application.trim() && !loadingBase && baselineOptions != null && baselineOptions.length === 0 && (
+        <div className="mt-2 text-xs text-amber-600">
+          No replayable traffic for <b>{form.application.trim()}</b> in the last 60 days — nothing to evaluate yet (needs requests logged with payload capture on).
         </div>
       )}
       {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
@@ -427,7 +433,8 @@ export default function ModelEvals() {
 
   useEffect(() => {
     load();
-    api.models().then((m) => setModels(m || [])).catch(() => {});
+    // Candidate + judge get CALLED during a run, so only offer connected, chat-capable models.
+    api.models({ live: true, routable: true }).then((m) => setModels(m || [])).catch(() => {});
     api.facets().then((f) => setApps(f?.applications || [])).catch(() => {});
   }, [load]);
 
