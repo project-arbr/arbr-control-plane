@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { getAdminToken } from "../api.js";
 
@@ -81,8 +81,6 @@ const icons = {
 };
 
 // ── Navigation definition ─────────────────────────────────────────────────────
-// Grouped by the path a request takes through Arbr: Connect → See → Recommend → Route → Govern.
-// The `hint` is a one-line, plain-language descriptor of what each stage is for.
 const NAV_GROUPS = [
   { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
     { to: "/models",   label: "Models",   icon: icons.models },
@@ -108,10 +106,10 @@ const NAV_GROUPS = [
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
 
 function navClass({ isActive }) {
-  return `mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors ${
+  return `mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
     isActive
       ? "bg-arbr-green-50 text-arbr-green-700"
-      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
   }`;
 }
 
@@ -125,35 +123,62 @@ function Wordmark() {
 }
 
 export default function Layout({ status, onSignOut, children }) {
+  const [collapsed, setCollapsed] = useState(new Set());
+
+  function toggleSection(section) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }
+
   return (
     <div className="flex min-h-full">
-      <aside className="sticky top-0 flex h-screen w-56 flex-col border-r border-gray-100 bg-white">
+      <aside className="sticky top-0 flex h-screen w-60 flex-col border-r border-gray-100 bg-white">
         <div className="px-5 py-5">
           <Wordmark />
           <div className="mt-1 font-mono text-[10px] text-gray-400">control-plane</div>
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={group.section} className={gi > 0 ? "mt-3 border-t border-gray-100 pt-3" : ""}>
-              <div className="px-3">
-                <div className="text-xs font-bold uppercase tracking-wider text-gray-600">
-                  {group.section}
-                </div>
-                {group.hint && (
-                  <div className="mt-0.5 text-[11px] leading-snug text-gray-400">{group.hint}</div>
+          {NAV_GROUPS.map((group, gi) => {
+            const isCollapsed = collapsed.has(group.section);
+            return (
+              <div key={group.section} className={gi > 0 ? "mt-1" : ""}>
+                <button
+                  onClick={() => toggleSection(group.section)}
+                  title={group.hint}
+                  className="group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left transition-colors hover:bg-gray-50"
+                >
+                  <span className="text-[10.5px] font-semibold uppercase tracking-widest text-gray-400 transition-colors group-hover:text-gray-600">
+                    {group.section}
+                  </span>
+                  <svg
+                    className={`h-3 w-3 flex-shrink-0 text-gray-300 transition-transform duration-200 group-hover:text-gray-400 ${
+                      isCollapsed ? "-rotate-90" : ""
+                    }`}
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="mt-0.5 mb-1.5">
+                    {group.items.map((item) => (
+                      <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
+                        {item.icon}
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
                 )}
               </div>
-              <div className="mt-1.5">
-                {group.items.map((item) => (
-                  <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
-                    {item.icon}
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="px-2 pb-2">
@@ -164,7 +189,7 @@ export default function Layout({ status, onSignOut, children }) {
           {getAdminToken() && onSignOut && (
             <button
               onClick={onSignOut}
-              className="mx-1 mt-0.5 flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              className="mx-1 mt-0.5 flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-900"
             >
               <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
