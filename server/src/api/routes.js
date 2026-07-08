@@ -39,6 +39,7 @@ const evalDatasetBuilder = require("../eval/dataset");
 const evalReplay = require("../eval/replay");
 const evalThresholds = require("../eval/thresholds");
 const { efficiencyOf } = require("../eval/efficiency");
+const { judgeReliability } = require("../eval/judgeReliability");
 const { sameFamily } = require("../eval/rubricJudge");
 const { tierForTask } = require("../classify/classifier");
 const RoutingExperiment = require("../models/RoutingExperiment");
@@ -865,9 +866,12 @@ router.get("/eval-benchmarks/:id", async (req, res, next) => {
     const bench = await EvalDataset.findById(req.params.id).lean().catch(() => null);
     if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
     const runs = await EvalRun.find({ datasetId: bench._id }).sort({ createdAt: -1 }).lean();
-    const leaderboard = runs.map((r) => ({
-      ...r, efficiency: efficiencyOf(r.summary, r.actualCostUsd),
-    })).sort((a, b) => (b.efficiency.qualityPerDollar ?? -1) - (a.efficiency.qualityPerDollar ?? -1));
+    // Per-run judge reliability from the stored verdicts (position bias + decisiveness).
+    const leaderboard = await Promise.all(runs.map(async (r) => {
+      const verdicts = await EvalResult.find({ evalRunId: r._id }, { judgeVerdict: 1, abFlipped: 1 }).lean();
+      return { ...r, efficiency: efficiencyOf(r.summary, r.actualCostUsd), judge: judgeReliability(verdicts) };
+    }));
+    leaderboard.sort((a, b) => (b.efficiency.qualityPerDollar ?? -1) - (a.efficiency.qualityPerDollar ?? -1));
     res.json({ ...bench, leaderboard });
   } catch (e) { next(e); }
 });
