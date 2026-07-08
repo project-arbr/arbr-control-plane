@@ -146,19 +146,21 @@ async function judgeItem({ router, eff, judgeModel, userText, baselineText, cand
   }
 }
 
-// "Disprove it": a second pass over an item the judge called WORSE, which argues the OPPOSITE
-// and re-decides. Only worse verdicts that survive this falsification count — cutting false
-// "worse" (judge noise) that would unfairly fail a good candidate. (DoorDash's precision pass:
-// "attempt to falsify its own conclusions" — their single most important design decision.)
+// "Disprove it": a second pass over an item the judge called WORSE. It re-examines the verdict
+// and overturns it ONLY when the "worse" call is clearly a mistake — cutting false "worse" (judge
+// noise) without letting a genuinely worse candidate off the hook. (DoorDash's precision pass:
+// "attempt to falsify its own conclusions.") CONSERVATIVE BY DESIGN: unsure/tie → the verdict
+// STANDS, so this can't collapse the worse-rate and wave a bad candidate through.
 // Returns { overturned: bool, reason }. overturned=true means the "worse" verdict did NOT hold.
 async function disproveWorse({ router, eff, judgeModel, userText, baselineText, candidateText }) {
   if (!judgeModel) return { overturned: false };
   const jm = pricing.getModel(judgeModel);
   if (!jm || !eff?.liveIds?.includes(jm.provider)) return { overturned: false };
   const prompt = [
-    "A first reviewer judged RESPONSE B to be WORSE than RESPONSE A for the same user request.",
-    "Challenge that: make the strongest honest case that B is actually AS GOOD AS or better than A",
-    "(equally correct, complete, and instruction-following), then decide.",
+    "A first reviewer judged RESPONSE B WORSE than RESPONSE A for the same user request.",
+    "Re-examine strictly and impartially. Decide whether that WORSE verdict holds.",
+    "Overturn it ONLY if it is clearly a mistake — i.e. B is genuinely as correct, complete, and",
+    "instruction-following as A. If B is even slightly worse, or you are unsure, the WORSE verdict STANDS.",
     "",
     "USER REQUEST:",
     userText,
@@ -169,8 +171,8 @@ async function disproveWorse({ router, eff, judgeModel, userText, baselineText, 
     "RESPONSE B (candidate):",
     String(candidateText || "").slice(0, 6000),
     "",
-    'Reply with ONLY JSON: {"b_is_worse": true | false, "reason": "<one sentence>"}',
-    'Set "b_is_worse": false if the original "worse" verdict is not clearly justified.',
+    'Reply with ONLY JSON: {"worse_verdict_holds": true | false, "reason": "<one sentence>"}',
+    'Set "worse_verdict_holds": false ONLY when the "worse" verdict is clearly wrong.',
   ].join("\n");
   try {
     const res = await router.complete({
@@ -179,7 +181,8 @@ async function disproveWorse({ router, eff, judgeModel, userText, baselineText, 
     const m = String(res.text || "").match(/\{[\s\S]*\}/);
     if (!m) return { overturned: false };
     const j = JSON.parse(m[0]);
-    return { overturned: j.b_is_worse === false, reason: String(j.reason || "").slice(0, 300) };
+    // Overturn only on an explicit "does not hold"; missing/unsure → verdict stands (conservative).
+    return { overturned: j.worse_verdict_holds === false, reason: String(j.reason || "").slice(0, 300) };
   } catch {
     return { overturned: false };
   }
