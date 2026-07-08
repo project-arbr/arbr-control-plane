@@ -51,9 +51,10 @@ function NewCampaign({ models, apps, onCreated }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div>
           <div className="label mb-1">Application</div>
-          <input className="input w-full" list="eval-apps" placeholder="e.g. my-pipeline"
-            value={form.application} onChange={(e) => set("application", e.target.value)} />
-          <datalist id="eval-apps">{apps.map((a) => <option key={a} value={a} />)}</datalist>
+          <select className="input w-full" value={form.application} onChange={(e) => set("application", e.target.value)}>
+            <option value="">{apps.length ? "Select an application…" : "No applications with traffic"}</option>
+            {apps.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
         </div>
         <div>
           <div className="label mb-1">Candidate model</div>
@@ -356,9 +357,10 @@ function NewEval({ models, apps, onCreated }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div>
           <div className="label mb-1">Application</div>
-          <input className="input w-full" list="eval-run-apps" placeholder="e.g. gyde-chat-client"
-            value={form.application} onChange={(e) => set("application", e.target.value)} />
-          <datalist id="eval-run-apps">{apps.map((a) => <option key={a} value={a} />)}</datalist>
+          <select className="input w-full" value={form.application} onChange={(e) => set("application", e.target.value)}>
+            <option value="">{apps.length ? "Select an application…" : "No applications with traffic"}</option>
+            {apps.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
         </div>
         <div>
           <div className="label mb-1">Baseline (current)</div>
@@ -667,8 +669,10 @@ function BenchmarksSection({ models, apps }) {
           </div>
           <div>
             <div className="label mb-1">Application</div>
-            <input className="input w-full" list="bench-apps" placeholder="e.g. gyde-chat-client" value={form.application} onChange={(e) => set("application", e.target.value)} />
-            <datalist id="bench-apps">{apps.map((a) => <option key={a} value={a} />)}</datalist>
+            <select className="input w-full" value={form.application} onChange={(e) => set("application", e.target.value)}>
+              <option value="">{apps.length ? "Select an application…" : "No applications with traffic"}</option>
+              {apps.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
           </div>
           <div>
             <div className="label mb-1">Baseline (reference)</div>
@@ -727,7 +731,7 @@ export default function ModelEvals() {
     load();
     // Candidate + judge get CALLED during a run, so only offer connected, chat-capable models.
     api.models({ live: true, routable: true }).then((m) => setModels(m || [])).catch(() => {});
-    api.facets().then((f) => setApps(f?.applications || [])).catch(() => {});
+    api.facets().then((f) => setApps([...new Set(f?.applications || [])])).catch(() => {});
   }, [load]);
 
   // Activating a shadow campaign is gated on a passed offline eval (or an override). If the gate
