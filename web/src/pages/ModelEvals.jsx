@@ -8,6 +8,32 @@ const STATUS_TONE = { active: "green", paused: "amber", done: "gray" };
 const pct = (n) => (n == null ? "—" : `${(n * 100).toFixed(1)}%`);
 const signedPct = (n) => (n == null ? "—" : `${n > 0 ? "+" : ""}${(n * 100).toFixed(1)}%`);
 
+// Mirror of server rubricJudge.familyOf — used to warn when a judge shares the candidate's family
+// (a model judging its own family favors it: self-preference). The server hard-blocks this on
+// high-risk tasks; here we warn at any risk so the picker is honest without being restrictive.
+function familyOf(id) {
+  const s = String(id || "").toLowerCase();
+  if (s.includes("claude")) return "anthropic";
+  if (s.includes("gpt") || s.startsWith("o1") || s.startsWith("o3")) return "openai";
+  if (s.includes("gemini") || s.includes("gemma")) return "google";
+  if (s.includes("nova")) return "amazon";
+  if (s.includes("deepseek")) return "deepseek";
+  if (s.includes("grok")) return "xai";
+  if (s.includes("llama")) return "meta";
+  if (s.includes("mistral") || s.includes("codestral")) return "mistral";
+  return s.split(/[-.]/)[0] || s;
+}
+const judgeSameFamily = (cand, judge) => !!(cand && judge && familyOf(cand) === familyOf(judge));
+function SameFamilyWarning({ candidate, judge }) {
+  if (!judgeSameFamily(candidate, judge)) return null;
+  return (
+    <div className="mt-2 text-xs text-amber-600">
+      ⚠ Judge and candidate share a model family ({familyOf(candidate)}). A model judging its own
+      family tends to favor it (self-preference) — prefer a different-family judge for a fair verdict.
+    </div>
+  );
+}
+
 // Small per-section/-row refresh control — evals run async, so re-fetch without a full page reload.
 function RefreshButton({ onClick, label = "Refresh" }) {
   return (
@@ -86,6 +112,7 @@ function NewCampaign({ models, apps, onCreated }) {
             value={form.maxLossRate} onChange={(e) => set("maxLossRate", e.target.value)} />
         </div>
       </div>
+      <SameFamilyWarning candidate={form.candidateModel} judge={form.judgeModel} />
       {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
       <div className="mt-4">
         <button className="btn-secondary text-sm" disabled={busy || !form.application.trim() || !form.candidateModel} onClick={submit}>
@@ -394,6 +421,7 @@ function NewEval({ models, apps, onCreated }) {
           No replayable traffic for <b>{form.application.trim()}</b> in the last 60 days — nothing to evaluate yet (needs requests logged with payload capture on).
         </div>
       )}
+      <SameFamilyWarning candidate={form.candidateModel} judge={form.judgeModel} />
       {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
       {notice && <div className="mt-3 text-sm text-arbr-green-700">{notice}</div>}
       <div className="mt-3">
@@ -602,6 +630,7 @@ function BenchmarkDetail({ id, models, onClose }) {
             </div>
             <button className="btn-secondary text-sm" disabled={busy || !cand} onClick={runCand}>{busy ? "Starting…" : "Run"}</button>
           </div>
+          <SameFamilyWarning candidate={cand} judge={judge} />
           {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
           {notice && <div className="mt-2 text-sm text-arbr-green-700">{notice}</div>}
         </div>
