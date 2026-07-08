@@ -72,9 +72,12 @@ function estimateRunCost(items, baselineModel, candidateModel, judgeModel, getMo
 }
 
 // Kick off a run in the background. Validates cost ceiling up front. Returns the created EvalRun.
-async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = null, createdBy = "console", exploratory = false }) {
+async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = null, createdBy = "console", exploratory = false, candidateModel = null }) {
+  // The candidate can be supplied per-run (a reusable benchmark tests many candidates against one
+  // frozen set); it falls back to the dataset's own candidate for the classic one-shot eval.
+  const candidate = candidateModel || dataset.candidateModel;
   const items = await EvalItem.find({ datasetId: dataset._id }).lean();
-  const estimatedCostUsd = estimateRunCost(items, dataset.baselineModel, dataset.candidateModel, judgeModel);
+  const estimatedCostUsd = estimateRunCost(items, dataset.baselineModel, candidate, judgeModel);
 
   const run = await EvalRun.create({
     recommendationId: rec ? rec._id : null,
@@ -84,7 +87,7 @@ async function startRun({ rec, dataset, judgeModel, thresholds, maxRunCostUsd = 
     workflow: dataset.scope?.workflow || null,
     taskType: dataset.scope?.taskType || null,
     baselineModel: dataset.baselineModel,
-    candidateModel: dataset.candidateModel,
+    candidateModel: candidate,
     judgeModel: judgeModel || null,
     riskTier: dataset.riskTier,
     fidelity: dataset.piiMode === "raw_allowed" ? "high" : (dataset.piiMode === "metadata_only" ? "metadata_only" : "masked"),
@@ -127,9 +130,9 @@ async function executeRun(runId) {
   const settings = await require("../models/Settings").get().catch(() => ({}));
   const maskEnabled = !!settings.piiMaskingEnabled;
   const customPatterns = settings.customPiiPatterns || [];
-  const cm = pricing.getModel(dataset.candidateModel);
+  const cm = pricing.getModel(run.candidateModel);
   if (!cm || !eff.liveIds.includes(cm.provider)) {
-    return finish(run, [], `candidate model "${dataset.candidateModel}" is not on a live provider`);
+    return finish(run, [], `candidate model "${run.candidateModel}" is not on a live provider`);
   }
 
   const entries = [];
@@ -151,9 +154,9 @@ async function executeRun(runId) {
     }
     try {
       const candidate = await router.complete({
-        messages: item.messages, providerOverride: cm.provider, modelOverride: dataset.candidateModel,
+        messages: item.messages, providerOverride: cm.provider, modelOverride: run.candidateModel,
       });
-      const candCost = pricing.costFor(dataset.candidateModel, candidate.usage?.inputTokens || 0, candidate.usage?.outputTokens || 0).totalCost;
+      const candCost = pricing.costFor(run.candidateModel, candidate.usage?.inputTokens || 0, candidate.usage?.outputTokens || 0).totalCost;
       actualCost += candCost;
       const { formatPass, results } = runValidators(candidate.text, item.validators);
       const flip = Math.random() < 0.5; // A/B position de-bias
@@ -168,7 +171,7 @@ async function executeRun(runId) {
       const storedResp = clampText(maskEnabled ? maskPii(candidate.text || "", customPatterns) : (candidate.text || ""));
       await EvalResult.create({
         evalRunId: run._id, evalItemId: item._id, requestId: item.requestId,
-        baselineModel: dataset.baselineModel, candidateModel: dataset.candidateModel,
+        baselineModel: dataset.baselineModel, candidateModel: run.candidateModel,
         candidateResponse: storedResp, candidateCost: candCost, candidateLatencyMs: candidate.latencyMs || 0,
         judgeVerdict: scored ? scored.verdict : null,
         dimensionScores: scored ? scored.dimensionScores : {},
@@ -187,7 +190,7 @@ async function executeRun(runId) {
     } catch (err) {
       await EvalResult.create({
         evalRunId: run._id, evalItemId: item._id, requestId: item.requestId,
-        baselineModel: dataset.baselineModel, candidateModel: dataset.candidateModel, error: err.message,
+        baselineModel: dataset.baselineModel, candidateModel: run.candidateModel, error: err.message,
       });
       entries.push({ errored: true });
     }

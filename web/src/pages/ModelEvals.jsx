@@ -525,6 +525,177 @@ function OverrideDialog({ title, message, onConfirm, onCancel }) {
   );
 }
 
+// Leaderboard for one benchmark: score any model against the frozen set, ranked by quality/$.
+function BenchmarkDetail({ id, models, onClose }) {
+  const [bench, setBench] = useState(null);
+  const [cand, setCand] = useState("");
+  const [judge, setJudge] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const load = useCallback(() => { api.benchmark(id).then(setBench).catch((e) => setBench({ _error: e.message })); }, [id]);
+  useEffect(() => { load(); }, [load]);
+
+  const runCand = async () => {
+    setBusy(true); setErr(null); setNotice(null);
+    try {
+      await api.runBenchmark(id, { candidateModel: cand, judgeModel: judge || null });
+      setNotice("Scoring started — refresh in a moment for the verdict.");
+      setCand(""); load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  if (!bench) return <Drawer title="Benchmark" onClose={onClose}><Spinner /></Drawer>;
+  if (bench._error) return <Drawer title="Benchmark" onClose={onClose}><div className="text-sm text-red-600">{bench._error}</div></Drawer>;
+  const qpd = (e) => (e?.qualityPerDollar == null ? "—" : e.qualityPerDollar === null ? "—" : (!isFinite(e.qualityPerDollar) ? "free" : e.qualityPerDollar.toFixed(2)));
+  const rows = (bench.leaderboard || []).map((r, i) => ({ ...r, _rank: i + 1 }));
+  const cols = [
+    { key: "_rank", header: "#" },
+    { key: "candidateModel", header: "Candidate", render: (r) => <span className="font-medium">{r.candidateModel}</span> },
+    { key: "quality", header: "Quality", render: (r) => (r.efficiency?.qualityScore == null ? "—" : pct(r.efficiency.qualityScore)) },
+    { key: "cost1k", header: "Cost / 1k", render: (r) => (r.efficiency?.costPer1kUsd == null ? "—" : fmt.usd(r.efficiency.costPer1kUsd)) },
+    { key: "qpd", header: "Quality / $", render: (r) => <b>{qpd(r.efficiency)}</b> },
+    { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
+    { key: "status", header: "Outcome", render: (r) => { const o = runOutcome(r); return <Badge tone={o.tone}>{o.label}</Badge>; } },
+  ];
+
+  return (
+    <Drawer title={`Benchmark · ${bench.name}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-gray-500">{bench.scope?.application} · baseline <b>{bench.baselineModel}</b> · {fmt.num(bench.itemCount)} items</div>
+          <RefreshButton onClick={load} />
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-3">
+          <div className="text-sm font-semibold text-arbr-charcoal">Score a model</div>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <div>
+              <div className="label mb-1">Candidate</div>
+              <select className="input" value={cand} onChange={(e) => setCand(e.target.value)}>
+                <option value="">Select…</option>
+                {models.filter((m) => m.id !== bench.baselineModel).map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+              </select>
+            </div>
+            <div>
+              <div className="label mb-1">Judge <span className="text-gray-400">(optional)</span></div>
+              <select className="input" value={judge} onChange={(e) => setJudge(e.target.value)}>
+                <option value="">No judge (format checks only)</option>
+                {models.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+              </select>
+            </div>
+            <button className="btn-secondary text-sm" disabled={busy || !cand} onClick={runCand}>{busy ? "Starting…" : "Run"}</button>
+          </div>
+          {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
+          {notice && <div className="mt-2 text-sm text-arbr-green-700">{notice}</div>}
+        </div>
+
+        <div>
+          <div className="label mb-2">Leaderboard — ranked by quality per dollar (per 1k requests)</div>
+          <Table columns={cols} rows={rows} empty="No models scored yet — run one above." />
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
+// Reusable benchmarks: a named, frozen set of an app's traffic, scored against many candidates.
+function BenchmarksSection({ models, apps }) {
+  const [benches, setBenches] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [form, setForm] = useState({ name: "", application: "", baselineModel: "" });
+  const [baseOpts, setBaseOpts] = useState(null);
+  const [loadingBase, setLoadingBase] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const load = useCallback(() => { api.benchmarks().then(setBenches).catch(() => setBenches([])); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  // Baseline options come from the models that actually served the chosen app's traffic.
+  useEffect(() => {
+    const app = form.application.trim();
+    setForm((f) => (f.baselineModel ? { ...f, baselineModel: "" } : f));
+    if (!app) { setBaseOpts(null); return; }
+    let cancelled = false; setLoadingBase(true);
+    const t = setTimeout(() => {
+      api.evalTrafficModels({ application: app })
+        .then((rows) => { if (!cancelled) setBaseOpts(rows || []); })
+        .catch(() => { if (!cancelled) setBaseOpts([]); })
+        .finally(() => { if (!cancelled) setLoadingBase(false); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.application]);
+
+  const create = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await api.createBenchmark({ name: form.name.trim(), application: form.application.trim(), baselineModel: form.baselineModel });
+      setForm({ name: "", application: "", baselineModel: "" });
+      load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const del = async (b) => { setConfirmDel(null); await api.deleteBenchmark(b._id).catch(() => {}); load(); };
+  const valid = form.name.trim() && form.application.trim() && form.baselineModel;
+
+  const cols = [
+    { key: "name", header: "Benchmark", render: (b) => <span className="font-medium">{b.name}</span> },
+    { key: "application", header: "Application", render: (b) => b.scope?.application || "—" },
+    { key: "baselineModel", header: "Baseline", render: (b) => b.baselineModel || "—" },
+    { key: "itemCount", header: "Items", render: (b) => fmt.num(b.itemCount) },
+    { key: "runCount", header: "Models scored", render: (b) => fmt.num(b.runCount) },
+    { key: "actions", header: "", render: (b) => (
+      <span className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <button className="btn-outline text-xs" onClick={() => setOpenId(b._id)}>Leaderboard</button>
+        <button className="btn-outline text-xs text-red-600" onClick={() => setConfirmDel(b)}>Delete</button>
+      </span>
+    ) },
+  ];
+  return (
+    <Card title="Benchmarks" action={<RefreshButton onClick={load} />}>
+      <p className="mb-3 text-xs text-gray-500">
+        A named, frozen set of an application's traffic. Score any model against the same set and rank them by
+        quality-per-dollar on your own workload — generic leaderboards don't predict your traffic.
+      </p>
+      <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50/70 p-4">
+        <div className="text-sm font-semibold text-arbr-charcoal">New benchmark</div>
+        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div>
+            <div className="label mb-1">Name</div>
+            <input className="input w-full" placeholder="e.g. Support replies v1" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </div>
+          <div>
+            <div className="label mb-1">Application</div>
+            <input className="input w-full" list="bench-apps" placeholder="e.g. gyde-chat-client" value={form.application} onChange={(e) => set("application", e.target.value)} />
+            <datalist id="bench-apps">{apps.map((a) => <option key={a} value={a} />)}</datalist>
+          </div>
+          <div>
+            <div className="label mb-1">Baseline (reference)</div>
+            <select className="input w-full" value={form.baselineModel}
+              disabled={!form.application.trim() || loadingBase || (baseOpts != null && baseOpts.length === 0)}
+              onChange={(e) => set("baselineModel", e.target.value)}>
+              <option value="">{!form.application.trim() ? "Pick an application first" : loadingBase ? "Loading…" : "Select…"}</option>
+              {(baseOpts || []).map((o) => <option key={o.model} value={o.model}>{o.model} ({fmt.num(o.count)} replayable)</option>)}
+            </select>
+          </div>
+        </div>
+        {form.application.trim() && !loadingBase && baseOpts != null && baseOpts.length === 0 && (
+          <div className="mt-2 text-xs text-amber-600">No replayable traffic for <b>{form.application.trim()}</b> — nothing to benchmark yet.</div>
+        )}
+        {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
+        <div className="mt-3"><button className="btn-secondary text-sm" disabled={busy || !valid} onClick={create}>{busy ? "Building…" : "Create benchmark"}</button></div>
+      </div>
+      {benches === null ? <Spinner /> : <Table columns={cols} rows={benches} empty="No benchmarks yet — create one above." onRowClick={(b) => setOpenId(b._id)} />}
+      {openId && <BenchmarkDetail id={openId} models={models} onClose={() => setOpenId(null)} />}
+      {confirmDel && (
+        <ConfirmDialog title="Delete benchmark?" message={`This removes "${confirmDel.name}", its items, and all model scores against it.`}
+          confirmLabel="Delete" onConfirm={() => del(confirmDel)} onCancel={() => setConfirmDel(null)} />
+      )}
+    </Card>
+  );
+}
+
 // Pipeline stage header, so the page order reads as the actual flow:
 // offline eval → shadow → canary → promote.
 function StageHeading({ n, title, desc }) {
@@ -611,6 +782,7 @@ export default function ModelEvals() {
       </div>
 
       <StageHeading n="1" title="Offline eval" desc="Replay past traffic through a candidate and judge it against the baseline. No production impact." />
+      <BenchmarksSection models={models} apps={apps} />
       <EvalRunsSection models={models} apps={apps} />
 
       <StageHeading n="2" title="Shadow" desc="Mirror a sample of live traffic to the candidate without serving it, judged against the current model — a real-traffic check with no user impact." />

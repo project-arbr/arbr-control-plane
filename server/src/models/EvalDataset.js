@@ -7,6 +7,10 @@ const mongoose = require("mongoose");
 const evalDatasetSchema = new mongoose.Schema(
   {
     name: { type: String, default: "" },
+    // A benchmark is a NAMED, REUSABLE dataset: candidateModel is null (each candidate is chosen
+    // per run), and many EvalRuns reference it so models are scored against the same frozen set.
+    // Ephemeral one-shot eval datasets have isBenchmark=false.
+    isBenchmark: { type: Boolean, default: false, index: true },
     recommendationId: { type: mongoose.Schema.Types.ObjectId, ref: "Recommendation", default: null, index: true },
     scope: {
       application: { type: String, default: null },
