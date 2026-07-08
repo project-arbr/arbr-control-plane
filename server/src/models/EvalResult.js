@@ -15,6 +15,9 @@ const evalResultSchema = new mongoose.Schema(
     candidateLatencyMs: { type: Number, default: 0 },
 
     judgeVerdict: { type: String, enum: ["better", "equal", "worse", null], default: null },
+    // The judge's FIRST-pass verdict, kept when the "disprove it" pass overturned a "worse" call.
+    preDisproveVerdict: { type: String, enum: ["better", "equal", "worse", null], default: null },
+    disproved: { type: Boolean, default: false }, // a "worse" verdict was overturned on falsification
     dimensionScores: {
       correctness: { type: Number, default: null },
       completeness: { type: Number, default: null },

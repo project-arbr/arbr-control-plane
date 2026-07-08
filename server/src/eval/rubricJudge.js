@@ -146,6 +146,45 @@ async function judgeItem({ router, eff, judgeModel, userText, baselineText, cand
   }
 }
 
+// "Disprove it": a second pass over an item the judge called WORSE, which argues the OPPOSITE
+// and re-decides. Only worse verdicts that survive this falsification count — cutting false
+// "worse" (judge noise) that would unfairly fail a good candidate. (DoorDash's precision pass:
+// "attempt to falsify its own conclusions" — their single most important design decision.)
+// Returns { overturned: bool, reason }. overturned=true means the "worse" verdict did NOT hold.
+async function disproveWorse({ router, eff, judgeModel, userText, baselineText, candidateText }) {
+  if (!judgeModel) return { overturned: false };
+  const jm = pricing.getModel(judgeModel);
+  if (!jm || !eff?.liveIds?.includes(jm.provider)) return { overturned: false };
+  const prompt = [
+    "A first reviewer judged RESPONSE B to be WORSE than RESPONSE A for the same user request.",
+    "Challenge that: make the strongest honest case that B is actually AS GOOD AS or better than A",
+    "(equally correct, complete, and instruction-following), then decide.",
+    "",
+    "USER REQUEST:",
+    userText,
+    "",
+    "RESPONSE A (baseline):",
+    String(baselineText || "").slice(0, 6000),
+    "",
+    "RESPONSE B (candidate):",
+    String(candidateText || "").slice(0, 6000),
+    "",
+    'Reply with ONLY JSON: {"b_is_worse": true | false, "reason": "<one sentence>"}',
+    'Set "b_is_worse": false if the original "worse" verdict is not clearly justified.',
+  ].join("\n");
+  try {
+    const res = await router.complete({
+      messages: [{ role: "user", content: prompt }], providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
+    });
+    const m = String(res.text || "").match(/\{[\s\S]*\}/);
+    if (!m) return { overturned: false };
+    const j = JSON.parse(m[0]);
+    return { overturned: j.b_is_worse === false, reason: String(j.reason || "").slice(0, 300) };
+  } catch {
+    return { overturned: false };
+  }
+}
+
 module.exports = {
   buildRubricPrompt,
   parseRubricVerdict,
@@ -154,6 +193,7 @@ module.exports = {
   sameFamily,
   runValidators,
   judgeItem,
+  disproveWorse,
   RUBRIC_DIMS,
   lastUserText,
 };

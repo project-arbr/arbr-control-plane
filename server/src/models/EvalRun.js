@@ -27,6 +27,11 @@ const evalRunSchema = new mongoose.Schema(
     // signal on a small sample, NOT a promotion-grade result. The UI labels it as such.
     exploratory: { type: Boolean, default: false },
 
+    // "Disprove it" precision pass: re-examine every "worse" verdict and drop the ones that don't
+    // survive falsification (judge noise). On by default; the count of overturned verdicts is in
+    // summary.disprovedWorse.
+    disprovePass: { type: Boolean, default: true },
+
     // Cost guardrail — replay + judge calls are real spend. Estimated up front; the run aborts
     // (status:failed) rather than exceed maxRunCostUsd.
     estimatedCostUsd: { type: Number, default: 0 },
