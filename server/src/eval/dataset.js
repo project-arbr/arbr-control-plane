@@ -109,7 +109,7 @@ function projectText(record, piiMode, maskEnabled, customPatterns) {
 }
 
 // Create a dataset from traffic. Returns the persisted EvalDataset (status "ready" or "failed").
-async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowDays = DEFAULT_WINDOW_DAYS, createdBy = "console" } = {}) {
+async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowDays = DEFAULT_WINDOW_DAYS, createdBy = "console", isBenchmark = false, name = null } = {}) {
   const risk = riskForTier(tierForTask(rec.taskType));
   const target = targetCount || targetCountForRisk(risk);
   const settings = await Settings.get().catch(() => ({}));
@@ -120,8 +120,10 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
 
   const since = new Date(Date.now() - windowDays * 86400000);
   const dataset = await EvalDataset.create({
-    name: `${rec.taskType || "task"}: ${rec.currentModel} → ${rec.suggestedModel}`,
-    recommendationId: rec._id,
+    // A benchmark is user-named and candidate-agnostic (candidates are chosen per run).
+    name: name || `${rec.taskType || "task"}: ${rec.currentModel} → ${rec.suggestedModel}`,
+    isBenchmark: !!isBenchmark,
+    recommendationId: rec._id || null,
     scope: {
       application: rec.application || null, workflow: null, taskType: rec.taskType || null,
       currentModel: rec.currentModel || null, department: null, difficulty: null,

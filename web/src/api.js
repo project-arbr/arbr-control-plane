@@ -81,6 +81,13 @@ export const api = {
   createEval: (body) => req("/evals", { method: "POST", body: JSON.stringify(body) }),
   evalTrafficModels: ({ application } = {}) => req(`/evals/traffic-models${qs({ application })}`),
   evalRuns: (recommendationId) => req(`/evals/runs${qs({ recommendationId })}`),
+
+  // Reusable benchmarks ("DashBench"): a named frozen set, scored against many candidates.
+  benchmarks: () => req("/eval-benchmarks"),
+  benchmark: (id) => req(`/eval-benchmarks/${id}`),
+  createBenchmark: (body) => req("/eval-benchmarks", { method: "POST", body: JSON.stringify(body) }),
+  runBenchmark: (id, body) => req(`/eval-benchmarks/${id}/run`, { method: "POST", body: JSON.stringify(body) }),
+  deleteBenchmark: (id) => req(`/eval-benchmarks/${id}`, { method: "DELETE" }),
   evalRun: (id) => req(`/evals/runs/${id}`),
   deleteEvalRun: (id) => req(`/evals/runs/${id}`, { method: "DELETE" }),
   evalRunResults: (id) => req(`/evals/runs/${id}/results`),

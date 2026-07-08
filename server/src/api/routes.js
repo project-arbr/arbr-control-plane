@@ -38,6 +38,7 @@ const { summarizeEvalPairs } = require("../eval/logic");
 const evalDatasetBuilder = require("../eval/dataset");
 const evalReplay = require("../eval/replay");
 const evalThresholds = require("../eval/thresholds");
+const { efficiencyOf } = require("../eval/efficiency");
 const { sameFamily } = require("../eval/rubricJudge");
 const { tierForTask } = require("../classify/classifier");
 const RoutingExperiment = require("../models/RoutingExperiment");
@@ -820,6 +821,90 @@ router.get("/evals/traffic-models", async (req, res, next) => {
       { $sort: { count: -1 } },
     ]);
     res.json(rows.map((r) => ({ model: r._id.model, provider: r._id.provider, count: r.count })));
+  } catch (e) { next(e); }
+});
+
+// ── Reusable benchmarks ("DashBench") ─────────────────────────────────────────
+// A benchmark is a NAMED, frozen set of an application's traffic. Run many candidate models
+// against the SAME set and rank them by quality-per-dollar on your own workload — the point
+// DoorDash's DashBench proved: generic leaderboards don't predict your traffic.
+
+// Build a benchmark from an application's replayable traffic (candidate-agnostic).
+router.post("/eval-benchmarks", async (req, res, next) => {
+  try {
+    const { name, application, taskType, baselineModel, targetCount, windowDays } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ error: "name is required" });
+    if (!application) return res.status(400).json({ error: "application is required" });
+    if (!baselineModel) return res.status(400).json({ error: "baselineModel is required" });
+    // rec-shaped scope with no candidate — the benchmark is scored against many candidates later.
+    const scope = { _id: null, application, taskType: taskType || null, currentModel: baselineModel, suggestedModel: null };
+    const dataset = await evalDatasetBuilder.createFromTraffic({ rec: scope, targetCount, windowDays, isBenchmark: true, name: name.trim() });
+    if (dataset.status !== "ready") {
+      const body = dataset.toObject ? dataset.toObject() : dataset;
+      return res.status(422).json({ ...body, error: "no_replayable_traffic", message: dataset.error });
+    }
+    setImmediate(() => logAction("benchmark.create", "evalDataset", String(dataset._id), { name: name.trim(), application, baselineModel, itemCount: dataset.itemCount }));
+    res.status(201).json(dataset);
+  } catch (e) { next(e); }
+});
+
+// List benchmarks with their run counts.
+router.get("/eval-benchmarks", async (req, res, next) => {
+  try {
+    const benches = await EvalDataset.find({ isBenchmark: true }).sort({ createdAt: -1 }).lean();
+    const withCounts = await Promise.all(benches.map(async (b) => ({
+      ...b, runCount: await EvalRun.countDocuments({ datasetId: b._id }),
+    })));
+    res.json(withCounts);
+  } catch (e) { next(e); }
+});
+
+// One benchmark + its leaderboard: every candidate run, ranked by quality-per-dollar.
+router.get("/eval-benchmarks/:id", async (req, res, next) => {
+  try {
+    const bench = await EvalDataset.findById(req.params.id).lean().catch(() => null);
+    if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
+    const runs = await EvalRun.find({ datasetId: bench._id }).sort({ createdAt: -1 }).lean();
+    const leaderboard = runs.map((r) => ({
+      ...r, efficiency: efficiencyOf(r.summary, r.actualCostUsd),
+    })).sort((a, b) => (b.efficiency.qualityPerDollar ?? -1) - (a.efficiency.qualityPerDollar ?? -1));
+    res.json({ ...bench, leaderboard });
+  } catch (e) { next(e); }
+});
+
+// Score a candidate model against the benchmark (a new EvalRun over the same frozen items).
+router.post("/eval-benchmarks/:id/run", async (req, res, next) => {
+  try {
+    const bench = await EvalDataset.findById(req.params.id).catch(() => null);
+    if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
+    if (bench.status !== "ready") return res.status(409).json({ error: "benchmark not ready" });
+    const { candidateModel, judgeModel, maxRunCostUsd } = req.body || {};
+    if (!candidateModel) return res.status(400).json({ error: "candidateModel is required" });
+    if (candidateModel === bench.baselineModel) return res.status(400).json({ error: "candidate must differ from the benchmark baseline" });
+    if (bench.riskTier === "high" && judgeModel && sameFamily(judgeModel, candidateModel)) {
+      return res.status(422).json({ error: "judge_same_family", message: "For high-risk tasks the judge must not be from the candidate's model family." });
+    }
+    // The benchmark IS the sample, so don't gate on the promotion floor — score whatever it holds.
+    const thresholds = evalThresholds.defaultThresholds(evalThresholds.riskForTier(tierForTask(bench.scope?.taskType)));
+    thresholds.minItems = Math.max(1, bench.itemCount || 1);
+    const run = await evalReplay.startRun({ rec: null, dataset: bench, judgeModel: judgeModel || null, thresholds, candidateModel, maxRunCostUsd: maxRunCostUsd ?? null });
+    setImmediate(() => logAction("benchmark.run", "evalRun", String(run._id), { benchmarkId: String(bench._id), candidateModel, judgeModel: judgeModel || null }));
+    res.status(run.status === "failed" ? 422 : 201).json(run);
+  } catch (e) { next(e); }
+});
+
+// Delete a benchmark and everything derived from it (items, its runs, their results).
+router.delete("/eval-benchmarks/:id", async (req, res, next) => {
+  try {
+    const bench = await EvalDataset.findById(req.params.id).lean().catch(() => null);
+    if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
+    const runs = await EvalRun.find({ datasetId: bench._id }, { _id: 1 }).lean();
+    await EvalResult.deleteMany({ evalRunId: { $in: runs.map((r) => r._id) } });
+    await EvalRun.deleteMany({ datasetId: bench._id });
+    await EvalItem.deleteMany({ datasetId: bench._id });
+    await EvalDataset.deleteOne({ _id: bench._id });
+    setImmediate(() => logAction("benchmark.delete", "evalDataset", String(req.params.id), { name: bench.name }));
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
