@@ -28,12 +28,14 @@ function Summary() {
   if (err) return <div className="text-red-600">{err}</div>;
   if (!data) return <Spinner />;
 
-  const p50     = latency?.p50     != null ? fmt.ms(latency.p50)     : "—";
-  const p95     = latency?.p95     != null ? fmt.ms(latency.p95)     : "—";
-  const p99     = latency?.p99     != null ? fmt.ms(latency.p99)     : "—";
-  const ttftP50 = latency?.ttftP50 != null ? fmt.ms(latency.ttftP50) : "—";
-  const ttftP95 = latency?.ttftP95 != null ? fmt.ms(latency.ttftP95) : "—";
-  const hasttft = latency?.ttftP50 != null;
+  const ms = (v) => v != null ? fmt.ms(v) : "—";
+  const latRows = [
+    { label: "Total latency",     p50: latency?.p50,         p95: latency?.p95,         p99: latency?.p99         },
+    { label: "Gateway overhead",  p50: latency?.overheadP50, p95: latency?.overheadP95, p99: latency?.overheadP99 },
+    ...(latency?.ttftP50 != null
+      ? [{ label: "TTFT (streaming)", p50: latency?.ttftP50, p95: latency?.ttftP95, p99: null }]
+      : []),
+  ];
 
   return (
     <div className="space-y-6">
@@ -45,13 +47,34 @@ function Summary() {
         <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
 
-      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${hasttft ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
-        <Stat label="Latency p50" value={p50} sub="median (success)" />
-        <Stat label="Latency p95" value={p95} sub="95th percentile" />
-        <Stat label="Latency p99" value={p99} sub="99th percentile" />
-        {hasttft && <Stat label="TTFT p50" value={ttftP50} sub="streaming median" />}
-        {hasttft && <Stat label="TTFT p95" value={ttftP95} sub="streaming 95th pct" />}
-      </div>
+      <Card title="Latency breakdown">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100">
+              <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">Metric</th>
+              <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">Median</th>
+              <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">95%ile</th>
+              <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">99%ile</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {latRows.map(({ label, p50, p95, p99 }) => (
+              <tr key={label}>
+                <td className="py-2.5 text-gray-700">{label}</td>
+                <td className="py-2.5 text-right font-mono text-gray-600">{ms(p50)}</td>
+                <td className="py-2.5 text-right font-mono text-gray-600">{ms(p95)}</td>
+                <td className="py-2.5 text-right font-mono text-gray-600">{ms(p99)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {latency?.overheadP99 > 500 && (
+          <p className="mt-3 text-xs text-gray-400">
+            High 99%ile gateway overhead reflects AI task classification — the gateway makes a short LLM call to determine task type when AI routing is on.
+            Pin <code className="rounded bg-gray-100 px-1">taskType</code> in your requests to skip it.
+          </p>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
