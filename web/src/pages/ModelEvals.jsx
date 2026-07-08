@@ -558,6 +558,19 @@ function BenchmarkDetail({ id, models, onClose }) {
     { key: "cost1k", header: "Cost / 1k", render: (r) => (r.efficiency?.costPer1kUsd == null ? "—" : fmt.usd(r.efficiency.costPer1kUsd)) },
     { key: "qpd", header: "Quality / $", render: (r) => <b>{qpd(r.efficiency)}</b> },
     { key: "worse", header: "Worse-rate", render: (r) => pct(r.summary?.worseRate) },
+    { key: "judge", header: "Judge check", render: (r) => {
+      const j = r.judge;
+      if (!j || j.positionBias == null) return <span className="text-gray-400">—</span>;
+      const mag = Math.abs(j.positionBias);
+      const tone = mag < 0.15 ? "green" : mag < 0.3 ? "amber" : "red";
+      const label = mag < 0.15 ? "unbiased" : mag < 0.3 ? "some bias" : "biased";
+      return (
+        <span className="flex items-center gap-1.5" title={`position bias ${signedPct(j.positionBias)} · decisiveness ${pct(j.decisiveness)} · n=${j.n}`}>
+          <Badge tone={tone}>{label}</Badge>
+          <span className="text-xs text-gray-400">{signedPct(j.positionBias)}</span>
+        </span>
+      );
+    } },
     { key: "status", header: "Outcome", render: (r) => { const o = runOutcome(r); return <Badge tone={o.tone}>{o.label}</Badge>; } },
   ];
 
