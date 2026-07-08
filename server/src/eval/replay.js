@@ -9,7 +9,7 @@ const EvalRun = require("../models/EvalRun");
 const EvalResult = require("../models/EvalResult");
 const Recommendation = require("../models/Recommendation");
 const { clampText, maskPii } = require("../logging/piiFilter");
-const { judgeItem, runValidators, lastUserText } = require("./rubricJudge");
+const { judgeItem, disproveWorse, runValidators, lastUserText } = require("./rubricJudge");
 const { evaluateRun } = require("./thresholds");
 
 function percentile(sorted, p) {
@@ -30,6 +30,7 @@ function aggregate(entries) {
   const worse = judged.filter((e) => e.verdict === "worse").length;
   const critical = ok.filter((e) => e.criticalFailure).length;
   const formatPasses = ok.filter((e) => e.formatPass).length;
+  const disprovedWorse = ok.filter((e) => e.disproved).length; // "worse" calls overturned on falsification
 
   const prodCost = sum(ok, (e) => e.productionCost);
   const candCost = sum(ok, (e) => e.candidateCost);
@@ -46,6 +47,7 @@ function aggregate(entries) {
     total, judged: judged.length,
     candidateBetter: better, candidateEqual: equal, candidateWorse: worse,
     worseRate: judged.length ? worse / judged.length : 0,
+    disprovedWorse,
     criticalFailRate: ok.length ? critical / ok.length : 0,
     formatPassRate: ok.length ? formatPasses / ok.length : 1,
     prodCost, candidateCost: candCost,
@@ -168,24 +170,38 @@ async function executeRun(runId) {
       const judgeError = verdict && verdict.error ? verdict.error : null;
       const scored = verdict && !judgeError ? verdict : null;
 
+      // "Disprove it": re-examine a "worse" verdict; drop it if it doesn't survive falsification.
+      let finalVerdict = scored ? scored.verdict : null;
+      let disproved = false;
+      let disproveReason = null;
+      if (scored && scored.verdict === "worse" && run.disprovePass !== false) {
+        const dp = await disproveWorse({
+          router, eff, judgeModel: run.judgeModel,
+          userText: lastUserText(item.messages), baselineText: item.productionResponse, candidateText: candidate.text,
+        });
+        if (dp.overturned) { finalVerdict = "equal"; disproved = true; disproveReason = dp.reason; }
+      }
+
       const storedResp = clampText(maskEnabled ? maskPii(candidate.text || "", customPatterns) : (candidate.text || ""));
       await EvalResult.create({
         evalRunId: run._id, evalItemId: item._id, requestId: item.requestId,
         baselineModel: dataset.baselineModel, candidateModel: run.candidateModel,
         candidateResponse: storedResp, candidateCost: candCost, candidateLatencyMs: candidate.latencyMs || 0,
-        judgeVerdict: scored ? scored.verdict : null,
+        judgeVerdict: finalVerdict,
+        preDisproveVerdict: scored ? scored.verdict : null,
+        disproved,
         dimensionScores: scored ? scored.dimensionScores : {},
         criticalFailure: scored ? !!scored.criticalFailure : false,
         validatorResults: results, formatPass,
         abFlipped: scored ? !!scored.abFlipped : false,
-        judgeRationale: scored ? scored.judgeRationale : judgeError,
+        judgeRationale: disproved ? `[disprove pass overturned "worse"] ${disproveReason || ""}`.trim() : (scored ? scored.judgeRationale : judgeError),
       });
       entries.push({
-        verdict: scored ? scored.verdict : null,
+        verdict: finalVerdict,
         criticalFailure: scored ? !!scored.criticalFailure : false,
         formatPass, candidateCost: candCost, candidateLatencyMs: candidate.latencyMs || 0,
         productionCost: item.productionCost || 0, productionLatencyMs: item.productionLatencyMs || 0,
-        errored: false, judgeError,
+        errored: false, judgeError, disproved,
       });
     } catch (err) {
       await EvalResult.create({
