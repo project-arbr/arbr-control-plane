@@ -47,6 +47,12 @@ function Summary() {
         <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
+        <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
+        <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />
+      </div>
+
       <Card title="Latency breakdown">
         <table className="w-full text-sm">
           <thead>
@@ -75,12 +81,6 @@ function Summary() {
           </p>
         )}
       </Card>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
-        <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
-        <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />
-      </div>
 
       <TrendChart />
 
