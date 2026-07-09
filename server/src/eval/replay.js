@@ -278,4 +278,39 @@ async function finish(run, entries, hardError, actualCost = 0) {
   return run;
 }
 
-module.exports = { startRun, executeRun, aggregate, estimateRunCost };
+// Re-score a finished run from its stored results, applying human verdict overrides
+// (effective verdict = humanVerdict ?? judgeVerdict) and current per-item severities. Rebuilds the
+// summary via aggregate() and re-evaluates pass/fail, so a human correcting the judge can flip the
+// outcome. Cost/latency are unchanged by an override; they're recomputed from the same stored data.
+async function recomputeRun(runId) {
+  const run = await EvalRun.findById(runId);
+  if (!run || !["passed", "failed"].includes(run.status)) return run || null;
+  const results = await EvalResult.find({ evalRunId: run._id }).lean();
+  const itemIds = results.map((r) => r.evalItemId).filter(Boolean);
+  const items = await EvalItem.find({ _id: { $in: itemIds } }, { severity: 1, productionCost: 1, productionLatencyMs: 1 }).lean();
+  const byItem = new Map(items.map((it) => [String(it._id), it]));
+
+  const entries = results.map((r) => {
+    if (r.error) return { errored: true };
+    const it = byItem.get(String(r.evalItemId)) || {};
+    return {
+      verdict: r.humanVerdict || r.judgeVerdict || null,
+      severity: it.severity || "normal",
+      criticalFailure: !!r.criticalFailure,
+      formatPass: r.formatPass !== false,
+      candidateCost: r.candidateCost || 0, candidateLatencyMs: r.candidateLatencyMs || 0,
+      productionCost: it.productionCost || 0, productionLatencyMs: it.productionLatencyMs || 0,
+      errored: false, disproved: !!r.disproved,
+    };
+  });
+  const summary = aggregate(entries);
+  summary.humanOverrides = results.filter((r) => r.humanVerdict).length;
+  run.summary = summary;
+  const { passed, failures } = evaluateRun(summary, run.thresholds || {});
+  run.status = passed ? "passed" : "failed";
+  run.failures = failures;
+  await run.save();
+  return run;
+}
+
+module.exports = { startRun, executeRun, aggregate, estimateRunCost, recomputeRun };

@@ -558,6 +558,26 @@ router.get("/analytics/overview", async (req, res, next) => {
   try { res.json(await analytics.overview(req.query)); } catch (e) { next(e); }
 });
 
+// Adoption / acceptance-rate — the "production truth" beside benchmark scores: what humans actually
+// did with Arbr's suggestions (accepted vs dismissed) and its canaries (promoted vs rolled back).
+router.get("/analytics/acceptance", async (_req, res, next) => {
+  try {
+    const rc = Object.fromEntries((await Recommendation.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }])).map((r) => [r._id, r.n]));
+    const accepted = rc.accepted || 0, dismissed = rc.dismissed || 0, pending = rc.pending || 0;
+    const decided = accepted + dismissed;
+    const overridden = await Recommendation.countDocuments({ evalStatus: "overridden" });
+    const ec = Object.fromEntries((await RoutingExperiment.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }])).map((r) => [r._id, r.n]));
+    const promoted = ec.promoted || 0, rolledBack = ec.rolled_back || 0;
+    const canaryDecided = promoted + rolledBack;
+    res.json({
+      recommendations: { total: accepted + dismissed + pending, accepted, dismissed, pending, overridden,
+        acceptanceRate: decided ? accepted / decided : null },
+      canaries: { promoted, rolledBack, active: ec.active || 0, paused: ec.paused || 0,
+        promotionRate: canaryDecided ? promoted / canaryDecided : null },
+    });
+  } catch (e) { next(e); }
+});
+
 const VIEWS = {
   application: analytics.byApplication,
   team: analytics.byTeam,
@@ -872,7 +892,26 @@ router.get("/eval-benchmarks/:id", async (req, res, next) => {
       return { ...r, efficiency: efficiencyOf(r.summary, r.actualCostUsd), judge: judgeReliability(verdicts) };
     }));
     leaderboard.sort((a, b) => (b.efficiency.qualityPerDollar ?? -1) - (a.efficiency.qualityPerDollar ?? -1));
-    res.json({ ...bench, leaderboard });
+
+    // "Auto-benchmark" (cost-safe): connected, chat-capable models CHEAPER than the baseline that
+    // haven't been scored yet — the candidates most worth trying. Suggestions only; scoring (which
+    // spends tokens) stays a human click. Ranked by biggest saving vs the baseline.
+    const avgPrice = (m) => ((m?.inputPer1M || 0) + (m?.outputPer1M || 0)) / 2;
+    const basePrice = avgPrice(pricing.getModel(bench.baselineModel));
+    const scored = new Set(runs.map((r) => r.candidateModel));
+    let suggestedCandidates = [];
+    if (basePrice > 0) {
+      const { eff } = await getRouter().catch(() => ({}));
+      const liveIds = new Set(eff?.liveIds || []);
+      suggestedCandidates = pricing.listModels()
+        .filter((m) => liveIds.has(m.provider) && m.chatCapable !== false && m.id !== bench.baselineModel
+          && !scored.has(m.id) && avgPrice(m) > 0 && avgPrice(m) < basePrice)
+        .map((m) => ({ model: m.id, provider: m.provider, label: m.label || m.id, tier: m.tier,
+          savingVsBaselinePct: (basePrice - avgPrice(m)) / basePrice }))
+        .sort((a, b) => b.savingVsBaselinePct - a.savingVsBaselinePct)
+        .slice(0, 6);
+    }
+    res.json({ ...bench, leaderboard, suggestedCandidates });
   } catch (e) { next(e); }
 });
 
@@ -1052,6 +1091,21 @@ router.get("/evals/runs/:id/results", async (req, res, next) => {
       (b.criticalFailure - a.criticalFailure) ||
       ((order[a.judgeVerdict] ?? 3) - (order[b.judgeVerdict] ?? 3)));
     res.json(results);
+  } catch (e) { next(e); }
+});
+
+// Human-curated verdict: override (or clear) the judge on one result, then re-score the run.
+router.patch("/evals/results/:id", async (req, res, next) => {
+  try {
+    const { verdict } = req.body || {};
+    if (verdict != null && !["better", "equal", "worse"].includes(verdict)) {
+      return res.status(400).json({ error: "verdict must be better | equal | worse (or null to clear)" });
+    }
+    const result = await EvalResult.findByIdAndUpdate(req.params.id, { $set: { humanVerdict: verdict ?? null } }, { new: true }).lean().catch(() => null);
+    if (!result) return res.status(404).json({ error: "not found" });
+    const run = await evalReplay.recomputeRun(result.evalRunId); // re-score with the override
+    setImmediate(() => logAction("eval.verdict.override", "evalResult", String(result._id), { verdict: verdict ?? null }));
+    res.json({ result, run });
   } catch (e) { next(e); }
 });
 

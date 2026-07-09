@@ -83,6 +83,7 @@ export const api = {
   evalRuns: (recommendationId) => req(`/evals/runs${qs({ recommendationId })}`),
 
   // Reusable benchmarks ("DashBench"): a named frozen set, scored against many candidates.
+  acceptanceStats: () => req("/analytics/acceptance"),
   benchmarks: () => req("/eval-benchmarks"),
   benchmark: (id) => req(`/eval-benchmarks/${id}`),
   createBenchmark: (body) => req("/eval-benchmarks", { method: "POST", body: JSON.stringify(body) }),
@@ -96,6 +97,7 @@ export const api = {
   evalRun: (id) => req(`/evals/runs/${id}`),
   deleteEvalRun: (id) => req(`/evals/runs/${id}`, { method: "DELETE" }),
   evalRunResults: (id) => req(`/evals/runs/${id}/results`),
+  setResultVerdict: (resultId, verdict) => req(`/evals/results/${resultId}`, { method: "PATCH", body: JSON.stringify({ verdict }) }),
 
   // Routing experiments (canary rollout).
   routingExperiments: (status) => req(`/routing-experiments${qs({ status })}`),
