@@ -558,6 +558,26 @@ router.get("/analytics/overview", async (req, res, next) => {
   try { res.json(await analytics.overview(req.query)); } catch (e) { next(e); }
 });
 
+// Adoption / acceptance-rate — the "production truth" beside benchmark scores: what humans actually
+// did with Arbr's suggestions (accepted vs dismissed) and its canaries (promoted vs rolled back).
+router.get("/analytics/acceptance", async (_req, res, next) => {
+  try {
+    const rc = Object.fromEntries((await Recommendation.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }])).map((r) => [r._id, r.n]));
+    const accepted = rc.accepted || 0, dismissed = rc.dismissed || 0, pending = rc.pending || 0;
+    const decided = accepted + dismissed;
+    const overridden = await Recommendation.countDocuments({ evalStatus: "overridden" });
+    const ec = Object.fromEntries((await RoutingExperiment.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }])).map((r) => [r._id, r.n]));
+    const promoted = ec.promoted || 0, rolledBack = ec.rolled_back || 0;
+    const canaryDecided = promoted + rolledBack;
+    res.json({
+      recommendations: { total: accepted + dismissed + pending, accepted, dismissed, pending, overridden,
+        acceptanceRate: decided ? accepted / decided : null },
+      canaries: { promoted, rolledBack, active: ec.active || 0, paused: ec.paused || 0,
+        promotionRate: canaryDecided ? promoted / canaryDecided : null },
+    });
+  } catch (e) { next(e); }
+});
+
 const VIEWS = {
   application: analytics.byApplication,
   team: analytics.byTeam,
