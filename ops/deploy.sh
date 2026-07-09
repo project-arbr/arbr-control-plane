@@ -52,6 +52,16 @@ SEED_BEFORE="$(seed_of || true)"
 PREV_TAG="$(cat "$PREV_FILE" 2>/dev/null || echo main)"
 echo "==> Current tag: ${PREV_TAG}  →  deploying: ${TAG}"
 
+# 1.5 RECLAIM DISK before the pull. The VM root disk is only 20G and orphaned image
+# layers accumulate across image-based deploys until a pull dies with "no space left
+# on device". Dangling-only prune is SAFE: the image in use by the running container
+# and anything still tagged (current :main, the rollback target) are protected; only
+# untagged layers from prior deploys go. Everything is re-pullable from public GHCR.
+echo "==> Reclaiming disk (dangling images) before pull…"
+df -h / | awk 'NR==2{printf "    disk before: %s used, %s free\n",$5,$4}'
+sudo docker image prune -f >/dev/null 2>&1 || echo "!! prune skipped (non-fatal)"
+df -h / | awk 'NR==2{printf "    disk after:  %s used, %s free\n",$5,$4}'
+
 # 2. DEPLOY.
 deploy "$TAG"
 
