@@ -45,6 +45,31 @@ arbr = create_client(
 
 `base_url` and `api_key` fall back to `$ARBR_GATEWAY_URL` and `$ARBR_API_KEY`.
 
+## Team attribution — identifying developers
+
+When a team shares one gateway key, pass `user_id` to attribute each developer's requests
+separately. Set it at the client level so every call is attributed automatically:
+
+```python
+import os
+from arbr_client import create_client
+
+arbr = create_client(
+    application="opencode",
+    user_id=os.environ.get("ARBR_USER_ID"),   # e.g. "alice@company.com"
+    department="engineering",                  # optional team grouping
+)
+```
+
+Or override per-call when a single client instance serves multiple users:
+
+```python
+res = arbr.chat("…", user_id=current_user.email)
+```
+
+Each developer's spend and requests appear separately in **Overview → Applications → opencode**
+with no additional key management needed.
+
 ## `Client.chat(messages, *, ...) → ChatResponse`
 
 ```python

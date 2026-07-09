@@ -35,6 +35,33 @@ console.log(res.model, res.routingDecision);  // "gpt-4o-mini", "ai"
 | `retries` | `2` | Retries on network errors, timeouts, 429, 5xx. Exponential backoff + jitter. |
 | `fetch` | global `fetch` | Injectable for tests or custom agents. |
 
+## Team attribution — identifying developers
+
+When a team shares one gateway key, pass `userId` to attribute each developer's requests
+separately. Set it at the client level so every call is attributed automatically:
+
+```js
+const arbr = createClient({
+  baseUrl: process.env.ARBR_GATEWAY_URL,
+  apiKey: process.env.ARBR_API_KEY,
+  application: "opencode",
+  userId: process.env.ARBR_USER_ID,     // e.g. "alice@company.com"
+  department: "engineering",            // optional team grouping
+});
+```
+
+Or override per-call when a single client instance serves multiple users:
+
+```js
+await arbr.chat({
+  messages: "…",
+  userId: session.user.email,
+});
+```
+
+Each developer's spend and requests appear separately in **Overview → Applications → opencode**
+with no additional key management needed.
+
 ## `client.chat(messages, options?) → Promise<ChatResponse>`
 
 ```js
