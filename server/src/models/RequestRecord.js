@@ -11,7 +11,7 @@ const requestRecordSchema = new mongoose.Schema(
     // who / what
     application: { type: String, index: true },
     workflow: { type: String, index: true },
-    userId: { type: String },
+    userId: { type: String, index: true },
     department: { type: String, index: true },
 
     // model — requested vs actually served

@@ -338,9 +338,9 @@ async function handleOpenAICompat(req, res) {
   const timestamp = new Date();
   const meta = {
     application: appName,
-    workflow: "completion",
-    userId: req.apiKey?.userId || null,
-    department: "openai-compat",
+    workflow: body["x-arbr-workflow"] || "completion",
+    userId: body.user || null,
+    department: body["x-arbr-department"] || null,
   };
 
   // Normalize max_tokens → maxTokens for the routing layer.
