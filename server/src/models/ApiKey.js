@@ -17,6 +17,10 @@ const apiKeySchema = new mongoose.Schema(
     allowedModels: { type: [String], default: [] },
     // Override the global default model when this key sends model:"auto". null = use global.
     defaultModel: { type: String, default: null },
+    // Per-key attribution: attribute every request from this key to a specific user / team.
+    // Trusted (unlike self-reported body fields) because it's set at key-creation time.
+    userId:     { type: String, default: null },
+    department: { type: String, default: null },
     createdAt: { type: Date, default: Date.now },
     lastUsedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },

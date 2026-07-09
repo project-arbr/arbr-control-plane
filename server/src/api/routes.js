@@ -171,6 +171,7 @@ function keyView(d) {
     _id: d._id, name: d.name, application: d.application, prefix: d.prefix,
     enabled: d.enabled, rpm: d.rpm, createdAt: d.createdAt, lastUsedAt: d.lastUsedAt,
     allowedModels: d.allowedModels || [], defaultModel: d.defaultModel || null,
+    userId: d.userId || null, department: d.department || null,
   };
 }
 
@@ -183,7 +184,7 @@ router.get("/keys", async (_req, res, next) => {
 
 router.post("/keys", async (req, res, next) => {
   try {
-    const { name, application, rpm, allowedModels, defaultModel } = req.body || {};
+    const { name, application, rpm, allowedModels, defaultModel, userId, department } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: "name is required" });
     if (!application || !String(application).trim()) return res.status(400).json({ error: "application is required" });
     const secret = "ab_" + crypto.randomBytes(16).toString("hex");
@@ -195,9 +196,11 @@ router.post("/keys", async (req, res, next) => {
       rpm: Number(rpm) > 0 ? Number(rpm) : null,
       allowedModels: Array.isArray(allowedModels) ? allowedModels.filter(Boolean) : [],
       defaultModel: defaultModel ? String(defaultModel).trim() || null : null,
+      userId: userId ? String(userId).trim() || null : null,
+      department: department ? String(department).trim() || null : null,
     });
     auth.invalidate();
-    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application }));
+    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application, userId: doc.userId }));
     // The ONLY time the full secret is ever returned.
     res.json({ ...keyView(doc.toObject()), key: secret });
   } catch (e) { next(e); }
@@ -212,6 +215,8 @@ router.patch("/keys/:id", async (req, res, next) => {
     if (req.body.rpm === null || Number(req.body.rpm) > 0) update.rpm = req.body.rpm === null ? null : Number(req.body.rpm);
     if (Array.isArray(req.body.allowedModels)) update.allowedModels = req.body.allowedModels.filter(Boolean);
     if ("defaultModel" in req.body) update.defaultModel = req.body.defaultModel ? String(req.body.defaultModel).trim() || null : null;
+    if ("userId" in req.body) update.userId = req.body.userId ? String(req.body.userId).trim() || null : null;
+    if ("department" in req.body) update.department = req.body.department ? String(req.body.department).trim() || null : null;
     const doc = await ApiKey.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
     auth.invalidate();
     res.json(doc ? keyView(doc) : { error: "not found" });

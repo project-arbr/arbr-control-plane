@@ -6,13 +6,21 @@ import { Card, Badge, Spinner, Toggle, Tabs, useTabParam } from "../components/u
 
 function KeyRow({ k, onToggle, onRevoke, onSave }) {
   const [editing, setEditing] = useState(false);
-  const [form, setForm]       = useState({ name: k.name, application: k.application });
+  const [form, setForm]       = useState({ name: k.name, application: k.application, userId: k.userId || "", department: k.department || "" });
   const [saving, setSaving]   = useState(false);
 
   async function save() {
     if (!form.name.trim() || !form.application.trim()) return;
     setSaving(true);
-    try { await onSave({ name: form.name.trim(), application: form.application.trim() }); setEditing(false); }
+    try {
+      await onSave({
+        name: form.name.trim(),
+        application: form.application.trim(),
+        userId: form.userId.trim() || null,
+        department: form.department.trim() || null,
+      });
+      setEditing(false);
+    }
     finally { setSaving(false); }
   }
 
@@ -20,14 +28,30 @@ function KeyRow({ k, onToggle, onRevoke, onSave }) {
     <tr className="border-t border-gray-100">
       <td className="py-2 font-mono text-xs text-gray-600">{k.prefix}</td>
       <td className="py-2">
-        {editing
-          ? <input className="input w-36" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          : <span className="text-arbr-charcoal">{k.name}</span>}
+        {editing ? (
+          <div className="space-y-1">
+            <input className="input w-36" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name" />
+            <input className="input w-36" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} placeholder="User ID (optional)" />
+          </div>
+        ) : (
+          <div>
+            <div className="text-arbr-charcoal">{k.name}</div>
+            {k.userId && <div className="text-xs text-gray-400 truncate max-w-[140px]" title={k.userId}>{k.userId}</div>}
+          </div>
+        )}
       </td>
       <td className="py-2">
-        {editing
-          ? <input className="input w-40" value={form.application} onChange={(e) => setForm({ ...form, application: e.target.value })} />
-          : <Badge tone="charcoal">{k.application}</Badge>}
+        {editing ? (
+          <div className="space-y-1">
+            <input className="input w-40" value={form.application} onChange={(e) => setForm({ ...form, application: e.target.value })} placeholder="Application" />
+            <input className="input w-40" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Department (optional)" />
+          </div>
+        ) : (
+          <div>
+            <Badge tone="charcoal">{k.application}</Badge>
+            {k.department && <div className="mt-0.5 text-xs text-gray-400">{k.department}</div>}
+          </div>
+        )}
       </td>
       <td className="py-2 text-gray-600">{k.rpm ? `${k.rpm}/min` : "—"}</td>
       <td className="py-2 text-xs text-gray-500 max-w-[160px]">
@@ -43,7 +67,7 @@ function KeyRow({ k, onToggle, onRevoke, onSave }) {
           {editing ? (
             <>
               <button className="btn-secondary text-xs" disabled={saving} onClick={save}>{saving ? "…" : "Save"}</button>
-              <button className="btn-ghost text-xs" onClick={() => { setEditing(false); setForm({ name: k.name, application: k.application }); }}>Cancel</button>
+              <button className="btn-ghost text-xs" onClick={() => { setEditing(false); setForm({ name: k.name, application: k.application, userId: k.userId || "", department: k.department || "" }); }}>Cancel</button>
             </>
           ) : (
             <button className="btn-ghost text-xs" onClick={() => setEditing(true)}>Edit</button>
@@ -61,6 +85,8 @@ function ApiKeys({ onChange }) {
   const [keys, setKeys]               = useState(null);
   const [name, setName]               = useState("");
   const [application, setApplication] = useState("");
+  const [userId, setUserId]           = useState("");
+  const [department, setDepartment]   = useState("");
   const [rpm, setRpm]                 = useState("");
   const [defaultModel, setDefaultModel] = useState("");
   const [allowedModels, setAllowedModels] = useState("");
@@ -81,12 +107,14 @@ function ApiKeys({ onChange }) {
       const res = await api.createKey({
         name: name.trim(),
         application: application.trim(),
+        userId: userId.trim() || null,
+        department: department.trim() || null,
         rpm: rpm ? Number(rpm) : null,
         defaultModel: defaultModel.trim() || null,
         allowedModels: parsedAllowed,
       });
-      setCreated({ key: res.key, name: res.name, application: res.application });
-      setName(""); setApplication(""); setRpm(""); setDefaultModel(""); setAllowedModels("");
+      setCreated({ key: res.key, name: res.name, application: res.application, userId: res.userId });
+      setName(""); setApplication(""); setUserId(""); setDepartment(""); setRpm(""); setDefaultModel(""); setAllowedModels("");
       await load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
@@ -124,6 +152,7 @@ function ApiKeys({ onChange }) {
               `# .env`,
               `ARBR_GATEWAY_URL=${window.location.origin}`,
               `ARBR_API_KEY=${created.key}`,
+              ...(created.userId ? [`ARBR_USER_ID=${created.userId}`] : []),
               ``,
               `# Install`,
               `npm install arbr-client          # JavaScript`,
@@ -131,7 +160,10 @@ function ApiKeys({ onChange }) {
               ``,
               `# Quick start (JS)`,
               `const { createClient } = require("arbr-client");`,
-              `const arbr = createClient({ application: "${created.application || "my-app"}" });`,
+              `const arbr = createClient({`,
+              `  application: "${created.application || "my-app"}",`,
+              ...(created.userId ? [`  userId: process.env.ARBR_USER_ID,`] : []),
+              `});`,
               `const res = await arbr.chat("Hello", { model: "auto" });`,
               `console.log(res.text, res.model);`,
             ].join("\n")}</pre>
@@ -153,7 +185,15 @@ function ApiKeys({ onChange }) {
         </div>
         <div>
           <div className="label mb-1">Application (attribution)</div>
-          <input className="input w-48" placeholder="e.g. tester-app" value={application} onChange={(e) => setApplication(e.target.value)} />
+          <input className="input w-48" placeholder="e.g. opencode" value={application} onChange={(e) => setApplication(e.target.value)} />
+        </div>
+        <div>
+          <div className="label mb-1">User ID (optional)</div>
+          <input className="input w-48" placeholder="e.g. alice@company.com" value={userId} onChange={(e) => setUserId(e.target.value)} />
+        </div>
+        <div>
+          <div className="label mb-1">Department (optional)</div>
+          <input className="input w-36" placeholder="e.g. engineering" value={department} onChange={(e) => setDepartment(e.target.value)} />
         </div>
         <div>
           <div className="label mb-1">Rate limit (req/min, optional)</div>
