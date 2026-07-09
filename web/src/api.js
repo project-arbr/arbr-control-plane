@@ -83,6 +83,7 @@ export const api = {
   evalRuns: (recommendationId) => req(`/evals/runs${qs({ recommendationId })}`),
 
   // Reusable benchmarks ("DashBench"): a named frozen set, scored against many candidates.
+  acceptanceStats: () => req("/analytics/acceptance"),
   benchmarks: () => req("/eval-benchmarks"),
   benchmark: (id) => req(`/eval-benchmarks/${id}`),
   createBenchmark: (body) => req("/eval-benchmarks", { method: "POST", body: JSON.stringify(body) }),
