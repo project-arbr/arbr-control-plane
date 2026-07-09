@@ -88,6 +88,11 @@ export const api = {
   createBenchmark: (body) => req("/eval-benchmarks", { method: "POST", body: JSON.stringify(body) }),
   runBenchmark: (id, body) => req(`/eval-benchmarks/${id}/run`, { method: "POST", body: JSON.stringify(body) }),
   deleteBenchmark: (id) => req(`/eval-benchmarks/${id}`, { method: "DELETE" }),
+  // Curation: pin cases + set per-case severity.
+  benchmarkItems: (id) => req(`/eval-benchmarks/${id}/items`),
+  addBenchmarkItem: (id, body) => req(`/eval-benchmarks/${id}/items`, { method: "POST", body: JSON.stringify(body) }),
+  setEvalItemSeverity: (itemId, severity) => req(`/eval-items/${itemId}`, { method: "PATCH", body: JSON.stringify({ severity }) }),
+  deleteEvalItem: (itemId) => req(`/eval-items/${itemId}`, { method: "DELETE" }),
   evalRun: (id) => req(`/evals/runs/${id}`),
   deleteEvalRun: (id) => req(`/evals/runs/${id}`, { method: "DELETE" }),
   evalRunResults: (id) => req(`/evals/runs/${id}/results`),
