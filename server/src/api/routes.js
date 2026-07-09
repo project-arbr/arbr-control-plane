@@ -1055,6 +1055,21 @@ router.get("/evals/runs/:id/results", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Human-curated verdict: override (or clear) the judge on one result, then re-score the run.
+router.patch("/evals/results/:id", async (req, res, next) => {
+  try {
+    const { verdict } = req.body || {};
+    if (verdict != null && !["better", "equal", "worse"].includes(verdict)) {
+      return res.status(400).json({ error: "verdict must be better | equal | worse (or null to clear)" });
+    }
+    const result = await EvalResult.findByIdAndUpdate(req.params.id, { $set: { humanVerdict: verdict ?? null } }, { new: true }).lean().catch(() => null);
+    if (!result) return res.status(404).json({ error: "not found" });
+    const run = await evalReplay.recomputeRun(result.evalRunId); // re-score with the override
+    setImmediate(() => logAction("eval.verdict.override", "evalResult", String(result._id), { verdict: verdict ?? null }));
+    res.json({ result, run });
+  } catch (e) { next(e); }
+});
+
 // Clamp/normalize canary guardrail inputs to sane numbers (falls back to defaults).
 function sanitizeGuardrails(g) {
   const d = { maxErrorRateIncrease: 0.02, maxLatencyRegressionPct: 0.25, maxWorseRate: 0.10, minCostSavingPct: 0.10 };
