@@ -96,6 +96,7 @@ export const api = {
   evalRun: (id) => req(`/evals/runs/${id}`),
   deleteEvalRun: (id) => req(`/evals/runs/${id}`, { method: "DELETE" }),
   evalRunResults: (id) => req(`/evals/runs/${id}/results`),
+  setResultVerdict: (resultId, verdict) => req(`/evals/results/${resultId}`, { method: "PATCH", body: JSON.stringify({ verdict }) }),
 
   // Routing experiments (canary rollout).
   routingExperiments: (status) => req(`/routing-experiments${qs({ status })}`),
