@@ -536,8 +536,12 @@ function BenchmarkDetail({ id, models, onClose }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [items, setItems] = useState(null);
+  const [newCase, setNewCase] = useState({ requestId: "", severity: "critical" });
+  const [caseErr, setCaseErr] = useState(null);
   const load = useCallback(() => { api.benchmark(id).then(setBench).catch((e) => setBench({ _error: e.message })); }, [id]);
-  useEffect(() => { load(); }, [load]);
+  const loadItems = useCallback(() => { api.benchmarkItems(id).then(setItems).catch(() => setItems([])); }, [id]);
+  useEffect(() => { load(); loadItems(); }, [load, loadItems]);
 
   const runCand = async () => {
     setBusy(true); setErr(null); setNotice(null);
@@ -547,6 +551,15 @@ function BenchmarkDetail({ id, models, onClose }) {
       setCand(""); load();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
+  const addCase = async () => {
+    setCaseErr(null);
+    try {
+      await api.addBenchmarkItem(id, { requestId: newCase.requestId.trim(), severity: newCase.severity });
+      setNewCase({ requestId: "", severity: "critical" }); loadItems(); load();
+    } catch (e) { setCaseErr(e.message); }
+  };
+  const setSeverity = async (it, severity) => { await api.setEvalItemSeverity(it._id, severity).catch(() => {}); loadItems(); };
+  const removeCase = async (it) => { await api.deleteEvalItem(it._id).catch(() => {}); loadItems(); load(); };
 
   if (!bench) return <Drawer title="Benchmark" onClose={onClose}><Spinner /></Drawer>;
   if (bench._error) return <Drawer title="Benchmark" onClose={onClose}><div className="text-sm text-red-600">{bench._error}</div></Drawer>;
@@ -609,6 +622,40 @@ function BenchmarkDetail({ id, models, onClose }) {
         <div>
           <div className="label mb-2">Leaderboard — ranked by quality per dollar (per 1k requests)</div>
           <Table columns={cols} rows={rows} empty="No models scored yet — run one above." />
+          <div className="mt-1 text-xs text-gray-400">Worse-rate is severity-weighted; re-run a model after changing case severities to update its score.</div>
+        </div>
+
+        <div>
+          <div className="label mb-2">Cases ({items ? fmt.num(items.length) : "…"}) — severity weights the worse-rate (critical ×3, trivial ×0.3)</div>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <div>
+              <div className="label mb-1">Pin a request by ID</div>
+              <input className="input w-64" placeholder="e.g. a request that went wrong"
+                value={newCase.requestId} onChange={(e) => setNewCase((c) => ({ ...c, requestId: e.target.value }))} />
+            </div>
+            <div>
+              <div className="label mb-1">Severity</div>
+              <select className="input" value={newCase.severity} onChange={(e) => setNewCase((c) => ({ ...c, severity: e.target.value }))}>
+                <option value="trivial">trivial</option><option value="normal">normal</option><option value="critical">critical</option>
+              </select>
+            </div>
+            <button className="btn-outline text-sm" disabled={!newCase.requestId.trim()} onClick={addCase}>Add case</button>
+          </div>
+          {caseErr && <div className="mb-2 text-sm text-red-600">{caseErr}</div>}
+          {items === null ? <Spinner /> : items.length === 0 ? <div className="text-sm text-gray-400">No cases yet.</div> : (
+            <div className="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+              {items.map((it) => (
+                <div key={it._id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <select className="input !py-1 text-xs" value={it.severity} onChange={(e) => setSeverity(it, e.target.value)}>
+                    <option value="trivial">trivial</option><option value="normal">normal</option><option value="critical">critical</option>
+                  </select>
+                  <span className="w-32 shrink-0 text-xs text-gray-500">{it.taskType || "—"}{it.pinned ? " · pinned" : ""}</span>
+                  <span className="min-w-0 flex-1 truncate text-gray-600" title={it.preview}>{it.preview}</span>
+                  <button className="btn-outline shrink-0 text-xs text-red-600" onClick={() => removeCase(it)}>Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </Drawer>

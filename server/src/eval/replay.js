@@ -12,6 +12,10 @@ const { clampText, maskPii } = require("../logging/piiFilter");
 const { judgeItem, disproveWorse, runValidators, lastUserText } = require("./rubricJudge");
 const { evaluateRun } = require("./thresholds");
 
+// Curation weights for the severity-weighted worse-rate. "normal" = 1 so uncurated benchmarks are
+// unchanged; a critical regression counts 3x, a trivial one 0.3x.
+const SEVERITY_WEIGHT = { trivial: 0.3, normal: 1, critical: 3 };
+
 function percentile(sorted, p) {
   if (!sorted.length) return 0;
   const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
@@ -32,6 +36,18 @@ function aggregate(entries) {
   const formatPasses = ok.filter((e) => e.formatPass).length;
   const disprovedWorse = ok.filter((e) => e.disproved).length; // "worse" calls overturned on falsification
 
+  // Severity-weighted worse-rate: a critical miss counts more than a trivial one. Uniform "normal"
+  // severity → identical to the raw rate, so uncurated benchmarks are unaffected.
+  const wt = (e) => SEVERITY_WEIGHT[e.severity] ?? 1;
+  const judgedWeight = sum(judged, wt);
+  const worseWeight = sum(judged.filter((e) => e.verdict === "worse"), wt);
+  const worseRateWeighted = judgedWeight ? worseWeight / judgedWeight : 0;
+  const severityBreakdown = {};
+  for (const sev of Object.keys(SEVERITY_WEIGHT)) {
+    const g = judged.filter((e) => (e.severity || "normal") === sev);
+    if (g.length) severityBreakdown[sev] = { judged: g.length, worse: g.filter((e) => e.verdict === "worse").length };
+  }
+
   const prodCost = sum(ok, (e) => e.productionCost);
   const candCost = sum(ok, (e) => e.candidateCost);
   const prodLat = sum(ok, (e) => e.productionLatencyMs);
@@ -46,7 +62,10 @@ function aggregate(entries) {
   return {
     total, judged: judged.length,
     candidateBetter: better, candidateEqual: equal, candidateWorse: worse,
-    worseRate: judged.length ? worse / judged.length : 0,
+    // worseRate is the severity-WEIGHTED rate (drives the gate); worseRateRaw is the plain count.
+    worseRate: worseRateWeighted,
+    worseRateRaw: judged.length ? worse / judged.length : 0,
+    severityBreakdown,
     disprovedWorse,
     criticalFailRate: ok.length ? critical / ok.length : 0,
     formatPassRate: ok.length ? formatPasses / ok.length : 1,
@@ -198,6 +217,7 @@ async function executeRun(runId) {
       });
       entries.push({
         verdict: finalVerdict,
+        severity: item.severity || "normal",
         criticalFailure: scored ? !!scored.criticalFailure : false,
         formatPass, candidateCost: candCost, candidateLatencyMs: candidate.latencyMs || 0,
         productionCost: item.productionCost || 0, productionLatencyMs: item.productionLatencyMs || 0,

@@ -20,6 +20,13 @@ const evalItemSchema = new mongoose.Schema(
     promptHash: { type: String, default: null, index: true },
     responseHash: { type: String, default: null },
 
+    // Curation: how much a regression on THIS item matters. Weights the worse-rate so one critical
+    // miss counts more than several trivial ones (DoorDash's weighted recall). Human-set; default
+    // "normal" (weight 1) → an uncurated benchmark scores exactly as before.
+    severity: { type: String, enum: ["trivial", "normal", "critical"], default: "normal", index: true },
+    // Whether this case was hand-added (pinned) rather than sampled from traffic.
+    pinned: { type: Boolean, default: false },
+
     // Optional per-item output validators (json_schema | regex | contains | classification_label).
     validators: { type: [mongoose.Schema.Types.Mixed], default: [] },
     metadata: {

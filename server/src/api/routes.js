@@ -912,6 +912,70 @@ router.delete("/eval-benchmarks/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Curation: pin a specific logged request into a benchmark as a case (e.g. one that went wrong).
+router.post("/eval-benchmarks/:id/items", async (req, res, next) => {
+  try {
+    const bench = await EvalDataset.findById(req.params.id).catch(() => null);
+    if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
+    const { requestId, severity } = req.body || {};
+    if (!requestId) return res.status(400).json({ error: "requestId is required" });
+    const rec = await RequestRecord.findOne({ requestId }).lean().catch(() => null);
+    if (!rec) return res.status(404).json({ error: "request not found" });
+    if (!evalDatasetBuilder.isEligible(rec)) return res.status(422).json({ error: "not_replayable", message: "That request has no captured single-shot prompt + response to replay." });
+    if (await EvalItem.findOne({ datasetId: bench._id, requestId })) return res.status(409).json({ error: "already_in_benchmark", message: "That request is already a case in this benchmark." });
+
+    const settings = await Settings.get().catch(() => ({}));
+    const { messages, productionResponse } = evalDatasetBuilder.projectText(rec, bench.piiMode, !!settings.piiMaskingEnabled, settings.customPiiPatterns || []);
+    const sev = ["trivial", "normal", "critical"].includes(severity) ? severity : "normal";
+    const item = await EvalItem.create({
+      datasetId: bench._id, requestId: rec.requestId, application: rec.application || null,
+      workflow: rec.workflow || null, taskType: rec.taskType || null, currentModel: rec.model || null,
+      messages, productionResponse, productionCost: rec.totalCost || 0, productionLatencyMs: rec.latencyMs || 0,
+      promptHash: evalDatasetBuilder.promptHashOf(rec.messages), responseHash: evalDatasetBuilder.responseHashOf(rec.responseText),
+      severity: sev, pinned: true,
+    });
+    await EvalDataset.updateOne({ _id: bench._id }, { $inc: { itemCount: 1 } });
+    setImmediate(() => logAction("benchmark.item.add", "evalItem", String(item._id), { benchmarkId: String(bench._id), requestId, severity: sev }));
+    res.status(201).json(item);
+  } catch (e) { next(e); }
+});
+
+// List a benchmark's cases (for curation) — compact, with a response preview.
+router.get("/eval-benchmarks/:id/items", async (req, res, next) => {
+  try {
+    const bench = await EvalDataset.findById(req.params.id).lean().catch(() => null);
+    if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
+    const items = await EvalItem.find({ datasetId: bench._id },
+      { requestId: 1, taskType: 1, severity: 1, pinned: 1, productionResponse: 1 }).sort({ createdAt: -1 }).lean();
+    res.json(items.map((it) => ({
+      _id: it._id, requestId: it.requestId, taskType: it.taskType, severity: it.severity || "normal",
+      pinned: !!it.pinned, preview: String(it.productionResponse || "").slice(0, 140),
+    })));
+  } catch (e) { next(e); }
+});
+
+// Set a case's severity (weights the worse-rate on the next run).
+router.patch("/eval-items/:id", async (req, res, next) => {
+  try {
+    const { severity } = req.body || {};
+    if (!["trivial", "normal", "critical"].includes(severity)) return res.status(400).json({ error: "severity must be trivial | normal | critical" });
+    const item = await EvalItem.findByIdAndUpdate(req.params.id, { $set: { severity } }, { new: true }).lean().catch(() => null);
+    if (!item) return res.status(404).json({ error: "not found" });
+    res.json(item);
+  } catch (e) { next(e); }
+});
+
+// Remove a case from a benchmark.
+router.delete("/eval-items/:id", async (req, res, next) => {
+  try {
+    const item = await EvalItem.findById(req.params.id).lean().catch(() => null);
+    if (!item) return res.status(404).json({ error: "not found" });
+    await EvalItem.deleteOne({ _id: item._id });
+    await EvalDataset.updateOne({ _id: item.datasetId }, { $inc: { itemCount: -1 } });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 // ── Eval datasets / runs (read views) ─────────────────────────────────────────
 router.get("/evals/datasets", async (req, res, next) => {
   try {
