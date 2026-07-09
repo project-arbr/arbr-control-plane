@@ -827,6 +827,7 @@ export default function ModelEvals() {
   const [openId, setOpenId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   const [override, setOverride] = useState(null); // { campaign, message } when the gate blocks resume
+  const [adoption, setAdoption] = useState(null);
   const [err, setErr] = useState(null);
 
   const load = useCallback(() => {
@@ -838,6 +839,7 @@ export default function ModelEvals() {
     // Candidate + judge get CALLED during a run, so only offer connected, chat-capable models.
     api.models({ live: true, routable: true }).then((m) => setModels(m || [])).catch(() => {});
     api.facets().then((f) => setApps([...new Set(f?.applications || [])])).catch(() => {});
+    api.acceptanceStats().then(setAdoption).catch(() => {});
   }, [load]);
 
   // Activating a shadow campaign is gated on a passed offline eval (or an override). If the gate
@@ -890,6 +892,19 @@ export default function ModelEvals() {
         <h1 className="text-2xl font-bold text-arbr-charcoal">Model Evals</h1>
         <p className="mt-1 text-sm text-gray-500">Prove a cheaper model is no worse than the current one before it becomes a rule. The stages below follow that flow — offline eval → shadow → canary → promote.</p>
       </div>
+
+      {adoption && (adoption.recommendations.acceptanceRate != null || adoption.canaries.promotionRate != null) && (
+        <Card title="Adoption — the production-truth signal beside benchmark scores">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Recommendations accepted" value={adoption.recommendations.acceptanceRate == null ? "—" : pct(adoption.recommendations.acceptanceRate)}
+              sub={`${fmt.num(adoption.recommendations.accepted)} of ${fmt.num(adoption.recommendations.accepted + adoption.recommendations.dismissed)} decided`} />
+            <Stat label="Dismissed" value={fmt.num(adoption.recommendations.dismissed)} sub={`${fmt.num(adoption.recommendations.pending)} pending`} />
+            <Stat label="Canaries promoted" value={adoption.canaries.promotionRate == null ? "—" : pct(adoption.canaries.promotionRate)}
+              sub={`${fmt.num(adoption.canaries.promoted)} promoted · ${fmt.num(adoption.canaries.rolledBack)} rolled back`} />
+            <Stat label="Overrides" value={fmt.num(adoption.recommendations.overridden)} sub="accepted without a passed eval" />
+          </div>
+        </Card>
+      )}
 
       <StageHeading n="1" title="Offline eval" desc="Replay past traffic through a candidate and judge it against the baseline. No production impact." />
       <BenchmarksSection models={models} apps={apps} />
