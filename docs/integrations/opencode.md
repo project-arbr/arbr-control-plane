@@ -97,6 +97,42 @@ Run a prompt in OpenCode, then open the Arbr dashboard:
 If nothing shows up, check that `baseURL` ends in `/v1`, that `ARBR_API_KEY` is exported in the same
 shell OpenCode runs in, and that the key is valid in **Settings → API keys**.
 
+## Team usage — per-developer attribution
+
+When a team shares one Arbr key, send a `X-Arbr-User-Id` header to attribute each developer's
+requests separately in the dashboard. The `@ai-sdk/openai-compatible` provider supports default
+headers via `options.headers`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "arbr": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Arbr",
+      "options": {
+        "baseURL": "https://your-arbr-host/v1",
+        "apiKey": "{env:ARBR_API_KEY}",
+        "headers": {
+          "X-Arbr-User-Id": "{env:ARBR_USER_ID}"
+        }
+      }
+    }
+  }
+}
+```
+
+Each developer exports their own identifier before launching OpenCode:
+
+```sh
+export ARBR_API_KEY="ab_…"        # shared team key
+export ARBR_USER_ID="alice@company.com"   # each dev sets their own
+```
+
+After that, **Overview → Applications → opencode** shows a per-developer cost and request
+breakdown with no additional key management. You can also set `X-Arbr-Department` the same
+way to group by team (e.g. `"engineering"` or `"product"`).
+
 ## Related
 
 - [OpenAI-compatible endpoint](/gateway/openai-compat) — the API OpenCode talks to

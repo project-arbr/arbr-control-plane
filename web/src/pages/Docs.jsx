@@ -38,8 +38,11 @@ export default function Docs() {
 curl -X POST ${base}/v1/chat/completions \\
   -H 'Content-Type: application/json' \\
   -H 'Authorization: Bearer ab_…' \\
+  -H 'X-Arbr-User-Id: alice@company.com' \\
   -d '{ "model": "auto", "messages": [{ "role": "user", "content": "Hello" }], "max_tokens": 300 }'
-# model: "auto" lets Arbr route; pin a model id (e.g. "gpt-4o") to bypass policy.`;
+# model: "auto" lets Arbr route; pin a model id (e.g. "gpt-4o") to bypass policy.
+# X-Arbr-User-Id: optional — attributes this request to a team member in the dashboard.
+# X-Arbr-Department: optional — groups requests by team (e.g. "engineering").`;
 
   const nativeCurl = `# Native endpoint — richer attribution (application/workflow/department/taskType).
 curl -X POST ${base}/v1/chat \\
