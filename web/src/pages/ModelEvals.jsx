@@ -633,6 +633,19 @@ function BenchmarkDetail({ id, models, onClose }) {
           </div>
           {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
           {notice && <div className="mt-2 text-sm text-arbr-green-700">{notice}</div>}
+          {bench.suggestedCandidates?.length > 0 && (
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <div className="text-xs text-gray-500">Suggested — connected models cheaper than the baseline, not scored yet. Click to load one, then Run:</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {bench.suggestedCandidates.map((s) => (
+                  <button key={s.model} className="btn-outline text-xs" onClick={() => setCand(s.model)}
+                    title={`~${pct(s.savingVsBaselinePct)} cheaper than ${bench.baselineModel}`}>
+                    {s.label} · −{pct(s.savingVsBaselinePct)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>

@@ -892,7 +892,26 @@ router.get("/eval-benchmarks/:id", async (req, res, next) => {
       return { ...r, efficiency: efficiencyOf(r.summary, r.actualCostUsd), judge: judgeReliability(verdicts) };
     }));
     leaderboard.sort((a, b) => (b.efficiency.qualityPerDollar ?? -1) - (a.efficiency.qualityPerDollar ?? -1));
-    res.json({ ...bench, leaderboard });
+
+    // "Auto-benchmark" (cost-safe): connected, chat-capable models CHEAPER than the baseline that
+    // haven't been scored yet — the candidates most worth trying. Suggestions only; scoring (which
+    // spends tokens) stays a human click. Ranked by biggest saving vs the baseline.
+    const avgPrice = (m) => ((m?.inputPer1M || 0) + (m?.outputPer1M || 0)) / 2;
+    const basePrice = avgPrice(pricing.getModel(bench.baselineModel));
+    const scored = new Set(runs.map((r) => r.candidateModel));
+    let suggestedCandidates = [];
+    if (basePrice > 0) {
+      const { eff } = await getRouter().catch(() => ({}));
+      const liveIds = new Set(eff?.liveIds || []);
+      suggestedCandidates = pricing.listModels()
+        .filter((m) => liveIds.has(m.provider) && m.chatCapable !== false && m.id !== bench.baselineModel
+          && !scored.has(m.id) && avgPrice(m) > 0 && avgPrice(m) < basePrice)
+        .map((m) => ({ model: m.id, provider: m.provider, label: m.label || m.id, tier: m.tier,
+          savingVsBaselinePct: (basePrice - avgPrice(m)) / basePrice }))
+        .sort((a, b) => b.savingVsBaselinePct - a.savingVsBaselinePct)
+        .slice(0, 6);
+    }
+    res.json({ ...bench, leaderboard, suggestedCandidates });
   } catch (e) { next(e); }
 });
 
