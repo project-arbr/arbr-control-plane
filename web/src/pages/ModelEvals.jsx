@@ -221,6 +221,12 @@ function RunDetail({ id, onClose }) {
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
+  // Human-curated verdict: override the judge on an item; the run is re-scored server-side.
+  const overrideVerdict = async (resultId, verdict) => {
+    await api.setResultVerdict(resultId, verdict).catch(() => {});
+    load();
+  };
+
   // A passed eval seeds the next pipeline stages directly — no recommendation, no override
   // (the passed run itself is the gate, linked via requiredEvalRunId).
   const promote = async (fn, ok) => {
@@ -315,10 +321,20 @@ function RunDetail({ id, onClose }) {
             {results.slice(0, 20).map((r) => (
               <div key={r._id} className="rounded-lg border border-gray-200 p-3">
                 <div className="flex items-center gap-2">
-                  {r.judgeVerdict ? <Badge tone={VERDICT_TONE[r.judgeVerdict]}>{r.judgeVerdict}</Badge> : <Badge tone="gray">unjudged</Badge>}
+                  {(() => {
+                    const v = r.humanVerdict || r.judgeVerdict;
+                    return v ? <Badge tone={VERDICT_TONE[v]}>{v}{r.humanVerdict ? " · human" : ""}</Badge> : <Badge tone="gray">unjudged</Badge>;
+                  })()}
                   {r.criticalFailure && <Badge tone="red">critical</Badge>}
                   {!r.formatPass && <Badge tone="amber">format fail</Badge>}
                   {r.error && <span className="text-xs text-red-600">{r.error}</span>}
+                  <select className="input ml-auto !py-0.5 text-xs" title="Override the judge (re-scores the run)"
+                    value={r.humanVerdict || ""} onChange={(e) => overrideVerdict(r._id, e.target.value || null)}>
+                    <option value="">judge: {r.judgeVerdict || "—"}</option>
+                    <option value="better">mark better</option>
+                    <option value="equal">mark equal</option>
+                    <option value="worse">mark worse</option>
+                  </select>
                 </div>
                 {r.judgeRationale && <p className="mt-2 text-sm text-gray-600">{r.judgeRationale}</p>}
                 {r.candidateResponse && <CodeBlock code={r.candidateResponse} />}

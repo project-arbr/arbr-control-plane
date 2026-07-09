@@ -15,6 +15,9 @@ const evalResultSchema = new mongoose.Schema(
     candidateLatencyMs: { type: Number, default: 0 },
 
     judgeVerdict: { type: String, enum: ["better", "equal", "worse", null], default: null },
+    // A human's overriding verdict for this item (ground truth). When set, it beats the judge in
+    // scoring: the effective verdict = humanVerdict ?? judgeVerdict, and the run is re-scored.
+    humanVerdict: { type: String, enum: ["better", "equal", "worse", null], default: null },
     // The judge's FIRST-pass verdict, kept when the "disprove it" pass overturned a "worse" call.
     preDisproveVerdict: { type: String, enum: ["better", "equal", "worse", null], default: null },
     disproved: { type: Boolean, default: false }, // a "worse" verdict was overturned on falsification
