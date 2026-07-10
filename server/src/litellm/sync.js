@@ -107,9 +107,14 @@ async function fetchVersion() {
 // ── Build index from LiteLLM JSON ─────────────────────────────────────────────
 //
 // Returns { byKey: Map<"provider:id" → entry>, byProvider: Map<provider → Set<id>> }
-// Only includes prefixed keys (provider/model-id format) with mode=chat.
-// Bare-name keys (no slash) are skipped — they are all duplicated as prefixed
-// entries and their bare IDs are already in Arbr as built-in seeds.
+// Only includes entries with mode=chat.
+//
+// LiteLLM historically used an "openai/model-id" prefix for OpenAI models, but
+// switched to bare names (e.g. "gpt-4.1", "o3") without prefixes. We detect
+// those by matching well-known OpenAI model id prefixes and map them to
+// provider "openai". All other bare-name entries are skipped.
+
+const OPENAI_BARE_RE = /^(gpt-|chatgpt-|o\d)/;
 
 function buildIndex(data) {
   const byKey      = new Map();   // "provider:id" → ltEntry
@@ -119,10 +124,18 @@ function buildIndex(data) {
     if (ltEntry.mode !== "chat") continue;
 
     const slashIdx = ltKey.indexOf("/");
-    if (slashIdx === -1) continue; // skip bare-name entries
+    let prefix, id;
 
-    const prefix   = ltKey.slice(0, slashIdx);
-    const id       = ltKey.slice(slashIdx + 1);
+    if (slashIdx === -1) {
+      // Bare-name: only import known OpenAI ids; skip fine-tunes (ft:)
+      if (!OPENAI_BARE_RE.test(ltKey) || ltKey.startsWith("ft:")) continue;
+      prefix = "openai";
+      id     = ltKey;
+    } else {
+      prefix = ltKey.slice(0, slashIdx);
+      id     = ltKey.slice(slashIdx + 1);
+    }
+
     const provider = normalizeProvider(prefix);
 
     // Skip deprecated
