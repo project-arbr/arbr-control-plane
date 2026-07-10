@@ -215,10 +215,10 @@ async function run() {
     console.log(`[litellm] discovered ${added} new models across ${Object.keys(addedByProvider).length} providers`);
   }
 
-  // ── 2. CLEANUP: remove stale non-builtIn models ───────────────────────────
+  // ── 2. CLEANUP: remove stale models not in the current LiteLLM catalog ──
   const toDelete = [];
   for (const [provider, validIds] of byProvider) {
-    const stored = await ModelEntry.find({ provider, builtIn: false }, { id: 1 }).lean();
+    const stored = await ModelEntry.find({ provider }, { id: 1 }).lean();
     for (const m of stored) {
       if (!validIds.has(m.id)) toDelete.push({ provider, id: m.id });
     }

@@ -14,9 +14,7 @@ const settingsSchema = new mongoose.Schema(
     // When true, /v1/* requires a valid gateway API key (default off — backward compatible).
     requireApiKey: { type: Boolean, default: false },
     autoRouting: { type: Boolean, default: false }, // legacy — kept for migration
-    // Tracks the last applied seedModels.js version. registry.init() re-seeds when this
-    // differs from SEED_VERSION in seedModels.js.
-    modelSeedVersion: { type: Number, default: null },
+    modelSeedVersion: { type: Number, default: null }, // legacy — no longer used
     // AI-generated routing policy: task type → model id, editable + regeneratable.
     aiPolicy: {
       assignments:       { type: mongoose.Schema.Types.Mixed, default: null },
