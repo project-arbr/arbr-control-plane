@@ -48,13 +48,13 @@
   "dependencies": {
     "@langchain/anthropic": "^1.5.1",
     "@langchain/aws": "^1.4.2",
-    "@langchain/core": "^1.2.1",
+    "@langchain/core": "^1.2.2",
     "@langchain/google-genai": "^2.2.0",
-    "@langchain/openai": "^1.5.3",
+    "@langchain/openai": "^1.5.5",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "mongoose": "^9.7.3",
+    "mongoose": "^9.7.4",
     "uuid": "^14.0.1"
   },
   "devDependencies": {
