@@ -1142,6 +1142,11 @@ export default function Models() {
     try {
       const result = await api.syncBenchmarks();
       setBenchStatus({ lastSyncedAt: new Date().toISOString() });
+      if (result.litellm?.error) {
+        setSyncMsg(`Model sync failed: ${result.litellm.error}`);
+        setTimeout(() => setSyncMsg(null), 8000);
+        return;
+      }
       const lb      = result.livebench?.matched ?? 0;
       const ls      = result.lmsys?.matched    ?? 0;
       const lt      = result.litellm?.matched  ?? 0;

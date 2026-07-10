@@ -5,7 +5,6 @@
 
 const ModelEntry = require("../models/ModelEntry");
 const Settings = require("../models/Settings");
-const { run: seedModels, SEED_VERSION } = require("../seed/seedModels");
 const { clampMaxTokens } = require("./clamp");
 
 // Task types that are "cheap work" — safe candidates for a lighter model.
@@ -43,18 +42,20 @@ async function _load() {
 }
 
 // Called once at server boot after mongoose.connect().
-// Re-seeds when SEED_VERSION has changed (or collection is empty), then warms the cache.
+// LiteLLM sync is the single source of truth — no static seed.
+// On a fresh install (empty DB) we auto-sync so the registry isn't empty on first boot.
+// On existing installs we convert any legacy builtIn=true models to builtIn=false so
+// the sync cleanup step can manage them going forward.
 async function init() {
-  const s     = await Settings.get();
   const count = await ModelEntry.countDocuments();
-  if (count === 0 || s.modelSeedVersion !== SEED_VERSION) {
-    await seedModels(ModelEntry);
-    await Settings.findOneAndUpdate(
-      { key: "global" },
-      { $set: { modelSeedVersion: SEED_VERSION } },
-      { upsert: true }
+  if (count === 0) {
+    console.log("[registry] no models found — running initial LiteLLM sync…");
+    await require("../litellm/sync").run().catch((e) =>
+      console.warn("[registry] initial sync failed (run Sync Models in the UI):", e.message)
     );
-    console.log(`[registry] models seeded to version ${SEED_VERSION}`);
+  } else {
+    // Unmark legacy seed models so sync cleanup can manage them going forward.
+    await ModelEntry.updateMany({ builtIn: true }, { $set: { builtIn: false } });
   }
   await _load();
   console.log(`[registry] ${Object.keys(_cache).length} models loaded`);
