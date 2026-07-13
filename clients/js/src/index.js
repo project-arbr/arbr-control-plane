@@ -274,7 +274,35 @@ function createClient(options = {}) {
     );
   }
 
-  return { chat, stream, status, models, providers, taskTypes, baseUrl };
+  /**
+   * Generate embeddings — POST /v1/embeddings.
+   *
+   * OpenAI-compatible interface: `model` must be an embedding model whose
+   * provider is connected (e.g. "gemini-embedding-001", "text-embedding-3-small").
+   * `input` is a string or array of strings.
+   * `dimensions` is forwarded to the provider (for Gemini this becomes
+   * `outputDimensionality` — keep it at 768 if your index was built with that size).
+   *
+   * Returns the raw OpenAI-format response:
+   *   `{ object: "list", data: [{ object: "embedding", index, embedding: float[] }], model, usage }`
+   */
+  async function embeddings(opts = {}) {
+    const { model, input, dimensions, signal, timeoutMs: tms, retries: ret } = opts;
+    if (!model)       throw invalid("`model` is required for embeddings");
+    if (input == null) throw invalid("`input` is required for embeddings");
+    return requestWithRetries(
+      fetchImpl,
+      `${baseUrl}/v1/embeddings`,
+      {
+        method:  "POST",
+        headers: baseHeaders,
+        body:    JSON.stringify({ model, input, ...(dimensions != null && { dimensions }) }),
+      },
+      { timeoutMs: tms ?? timeoutMs, retries: ret ?? retries, signal }
+    );
+  }
+
+  return { chat, stream, status, models, providers, taskTypes, embeddings, baseUrl };
 }
 
 // ── LangChain-style adapter (duck-typed; no LangChain dependency) ─────────────

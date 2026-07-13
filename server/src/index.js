@@ -9,6 +9,7 @@ const registry = require("./pricing/registry");
 const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
+const { handleEmbeddings } = require("./gateway/embeddings");
 const { purgeOldRecords } = require("./maintenance/purge");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
 const canaryMonitor = require("./routing/canaryMonitor");
@@ -46,6 +47,10 @@ async function start() {
 
   // OpenAI-compatible endpoint — any client that speaks the OpenAI spec can use Arbr.
   app.post("/v1/chat/completions", auth.middleware, handleOpenAICompat);
+
+  // OpenAI-compatible embeddings endpoint — routes to the appropriate provider
+  // (Gemini or OpenAI-compat) based on the model ID, with full observability.
+  app.post("/v1/embeddings", auth.middleware, handleEmbeddings);
 
   // OpenAI-compatible model discovery — returns only models whose provider is
   // currently connected (live), with a toolCallSupported flag so clients know

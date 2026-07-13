@@ -368,6 +368,52 @@ class Client:
         for i in range(0, len(text), _STREAM_CHUNK_CHARS):
             yield text[i : i + _STREAM_CHUNK_CHARS]
 
+    # — embeddings —
+
+    def embeddings(
+        self,
+        input: Any,
+        *,
+        model: str,
+        dimensions: Optional[int] = None,
+        timeout_s: Optional[float] = None,
+        retries: Optional[int] = None,
+    ) -> dict:
+        """Generate embeddings — POST /v1/embeddings.
+
+        OpenAI-compatible interface. ``model`` must be an embedding model whose
+        provider is connected (e.g. ``"gemini-embedding-001"``,
+        ``"text-embedding-3-small"``). ``input`` is a string or list of strings.
+
+        ``dimensions`` is forwarded to the provider. For Gemini this becomes
+        ``outputDimensionality`` — keep it at 768 if your Elasticsearch index
+        was built with that dimensionality.
+
+        Returns the raw OpenAI-format dict::
+
+            {
+              "object": "list",
+              "data": [{"object": "embedding", "index": 0, "embedding": [...]}],
+              "model": "gemini-embedding-001",
+              "usage": {"prompt_tokens": 12, "total_tokens": 12},
+            }
+        """
+        body: dict[str, Any] = {"model": model, "input": input}
+        if dimensions is not None:
+            body["dimensions"] = dimensions
+        return _request_with_retries(
+            f"{self.base_url}/v1/embeddings",
+            method="POST",
+            body=body,
+            timeout_s=timeout_s if timeout_s is not None else self._timeout_s,
+            retries=retries if retries is not None else self._retries,
+            headers=self._headers,
+        )
+
+    async def aembeddings(self, input: Any, *, model: str, dimensions: Optional[int] = None, **kwargs: Any) -> dict:
+        """Async :meth:`embeddings`."""
+        return await asyncio.to_thread(self.embeddings, input, model=model, dimensions=dimensions, **kwargs)
+
     # — status —
 
     def status(self) -> dict:
