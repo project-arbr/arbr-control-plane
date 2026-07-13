@@ -165,6 +165,54 @@ const res = await arbr.chat({
 | `mid` | Balanced model | Code generation, support replies, extraction |
 | `premium` | Most capable model | Reasoning, architecture design, security audit |
 
+## `client.embeddings(options) → Promise<EmbeddingsResponse>`
+
+Generate vector embeddings — `POST /v1/embeddings`. OpenAI-compatible wire format, same observability as chat.
+
+```js
+// Single input
+const res = await arbr.embeddings({
+  model: "gemini-embedding-001",
+  input: "Summarise the customer's pain points",
+  dimensions: 768,   // must match your index size
+});
+const vector = res.data[0].embedding;  // float[] of length 768
+
+// Batch
+const res = await arbr.embeddings({
+  model: "gemini-embedding-001",
+  input: ["sentence one", "sentence two", "sentence three"],
+  dimensions: 768,
+});
+const vectors = res.data.map((d) => d.embedding);  // float[][] — one per input
+```
+
+**Options:**
+
+| Option | Required | Description |
+|---|---|---|
+| `model` | yes | Embedding model ID. Gemini: `"gemini-embedding-001"`. OpenAI: `"text-embedding-3-small"`, `"text-embedding-3-large"`, etc. |
+| `input` | yes | String or array of strings to embed. |
+| `dimensions` | no | Truncate output to this many dimensions. For Gemini this becomes `outputDimensionality`. **Must match your vector index size** — changing it after index creation breaks search. |
+| `timeoutMs`, `retries`, `signal` | no | Same per-call overrides as `chat()`. |
+
+**Response:**
+```js
+{
+  object: "list",
+  data: [{ object: "embedding", index: 0, embedding: [0.012, -0.045, …] }],
+  model: "gemini-embedding-001",
+  usage: { prompt_tokens: 8, total_tokens: 8 }
+}
+```
+
+Works as a drop-in for any OpenAI SDK targeting the gateway:
+```js
+import OpenAI from "openai";
+const openai = new OpenAI({ baseURL: "http://localhost:4100/v1", apiKey: "ab_…" });
+const res = await openai.embeddings.create({ model: "gemini-embedding-001", input: texts, dimensions: 768 });
+```
+
 ## `client.status() → Promise<StatusResponse>`
 
 ```js

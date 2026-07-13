@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 (2026-07-13)
+
+- **`embeddings()` / `aembeddings()`** — generate vector embeddings via `POST /v1/embeddings`. OpenAI-compatible wire format. Dispatches to Gemini (`gemini-embedding-001`) or any OpenAI-compat provider (`text-embedding-3-small`, etc.) with full observability parity to chat.
+
 ## 0.4.0 (2026-06-30)
 
 - **`Usage` dataclass**: gains `cached_read_tokens` and `cache_write_tokens` — populated from the gateway's prompt-cache token breakdown when Anthropic or OpenAI caching is active (`res.usage.cached_read_tokens`, `res.usage.cache_write_tokens`).

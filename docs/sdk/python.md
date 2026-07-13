@@ -183,6 +183,54 @@ res = arbr.chat("Summarise and extract key clauses from this contract: …", tas
 | `mid` | Balanced model | Code generation, support replies, extraction |
 | `premium` | Most capable model | Reasoning, architecture design, security audit |
 
+## `Client.embeddings(input, *, model, ...) → dict`
+
+Generate vector embeddings — `POST /v1/embeddings`. OpenAI-compatible wire format, same observability as chat.
+
+```python
+# Single input
+res = arbr.embeddings("Summarise the customer's pain points", model="gemini-embedding-001", dimensions=768)
+vector = res["data"][0]["embedding"]  # list[float] of length 768
+
+# Batch
+res = arbr.embeddings(
+    ["sentence one", "sentence two", "sentence three"],
+    model="gemini-embedding-001",
+    dimensions=768,
+)
+vectors = [d["embedding"] for d in res["data"]]  # list[list[float]]
+
+# Async
+res = await arbr.aembeddings(texts, model="gemini-embedding-001", dimensions=768)
+```
+
+**Parameters:**
+
+| Parameter | Required | Description |
+|---|---|---|
+| `input` | yes | String or list of strings to embed (positional). |
+| `model` | yes | Embedding model ID. Gemini: `"gemini-embedding-001"`. OpenAI: `"text-embedding-3-small"`, etc. |
+| `dimensions` | no | Truncate output to this many dimensions. For Gemini this becomes `outputDimensionality`. **Must match your vector index size.** |
+| `timeout_s`, `retries` | no | Same per-call overrides as `chat()`. |
+
+**Response dict:**
+```python
+{
+    "object": "list",
+    "data": [{"object": "embedding", "index": 0, "embedding": [0.012, -0.045, …]}],
+    "model": "gemini-embedding-001",
+    "usage": {"prompt_tokens": 8, "total_tokens": 8},
+}
+```
+
+Works as a drop-in for any OpenAI SDK targeting the gateway:
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:4100/v1", api_key="ab_…")
+resp = client.embeddings.create(model="gemini-embedding-001", input=texts, dimensions=768)
+vectors = [d.embedding for d in resp.data]
+```
+
 ## `Client.status() → dict`
 
 ```python
