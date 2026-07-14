@@ -1,4 +1,5 @@
 // App bootstrap: connect Mongo, mount the gateway + admin API, start listening.
+const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const express = require("express");
@@ -10,6 +11,7 @@ const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const { handleEmbeddings } = require("./gateway/embeddings");
+const { handleUpgrade } = require("./gateway/wsAuth");
 const { purgeOldRecords } = require("./maintenance/purge");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
 const canaryMonitor = require("./routing/canaryMonitor");
@@ -140,7 +142,9 @@ async function start() {
   // Eval replay worker: picks up queued eval runs (survives restarts; setImmediate did not).
   evalWorker.start();
 
-  app.listen(config.port, config.host, () => {
+  const server = http.createServer(app);
+  server.on("upgrade", handleUpgrade);
+  server.listen(config.port, config.host, () => {
     console.log("\n" + describe() + "\n");
     console.log(`  ready:       http://localhost:${config.port}`);
     console.log(`  gateway:     POST http://localhost:${config.port}/v1/chat`);
