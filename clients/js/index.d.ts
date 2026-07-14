@@ -169,6 +169,30 @@ export class GatewayError extends Error {
   cause?: unknown;
 }
 
+export interface EmbeddingsRequest {
+  model: string;
+  input: string | string[];
+  /** Truncate output to this many dimensions. Gemini maps this to `outputDimensionality`. */
+  dimensions?: number;
+  /** Per-call overrides. */
+  timeoutMs?: number;
+  retries?: number;
+  signal?: AbortSignal;
+}
+
+export interface EmbeddingObject {
+  object: "embedding";
+  index: number;
+  embedding: number[];
+}
+
+export interface EmbeddingsResponse {
+  object: "list";
+  data: EmbeddingObject[];
+  model: string;
+  usage: { prompt_tokens: number; total_tokens: number };
+}
+
 export interface Client {
   /** One routed completion via POST /v1/chat. */
   chat(opts: ChatRequest): Promise<ChatResponse>;
@@ -186,6 +210,8 @@ export interface Client {
   providers(opts?: { signal?: AbortSignal }): Promise<ProvidersResponse>;
   /** List all supported task types with tier and description — GET /v1/task-types. */
   taskTypes(opts?: { signal?: AbortSignal }): Promise<TaskTypesResponse>;
+  /** Generate embeddings — POST /v1/embeddings. OpenAI-compatible response format. */
+  embeddings(opts: EmbeddingsRequest): Promise<EmbeddingsResponse>;
   baseUrl: string;
 }
 

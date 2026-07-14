@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0 (2026-07-13)
+
+- **`embeddings()`** — generate vector embeddings via `POST /v1/embeddings`. OpenAI-compatible wire format (`{ model, input, dimensions? }`). Dispatches to Gemini (`gemini-embedding-001`) or any OpenAI-compat provider (`text-embedding-3-small`, etc.) with full observability parity to chat.
+- **TypeScript**: added `EmbeddingsRequest`, `EmbeddingObject`, `EmbeddingsResponse` interfaces; `embeddings()` on `Client`.
+
 ## 0.4.0 (2026-06-30)
 
 - **TypeScript**: `Usage` interface gains `cachedReadTokens` and `cacheWriteTokens` — now typed for prompt-cache token breakdown returned by the gateway when Anthropic or OpenAI prompt caching is active.
