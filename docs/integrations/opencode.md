@@ -33,7 +33,7 @@ global config). Register Arbr as an OpenAI-compatible provider:
       "name": "Arbr",
       "options": {
         "baseURL": "https://your-arbr-host/v1",
-        "apiKey": "{env:ARBR_API_KEY}"
+        "apiKey": "ARBR_API_KEY"
       },
       "models": {
         "claude-haiku-4-5": { "name": "Claude Haiku 4.5 (via Arbr)" },
@@ -47,7 +47,7 @@ global config). Register Arbr as an OpenAI-compatible provider:
 
 - `baseURL` points at your Arbr gateway with the `/v1` suffix — e.g. `http://localhost:4100/v1` for a
   local instance, or `https://your-arbr-host/v1` for a deployed one.
-- `apiKey` reads the key from the environment via `{env:ARBR_API_KEY}` so it never lands in the file.
+- `apiKey` is the name of the environment variable OpenCode reads the key from — `ARBR_API_KEY` — so the actual secret never lands in the file.
 - `models` lists the models you want OpenCode to offer. Each key is an Arbr model id — see
   **Models** in the dashboard, or [Model registry](/models), for valid ids.
 
@@ -112,9 +112,9 @@ headers via `options.headers`:
       "name": "Arbr",
       "options": {
         "baseURL": "https://your-arbr-host/v1",
-        "apiKey": "{env:ARBR_API_KEY}",
+        "apiKey": "ARBR_API_KEY",
         "headers": {
-          "X-Arbr-User-Id": "{env:ARBR_USER_ID}"
+          "X-Arbr-User-Id": "ARBR_USER_ID"
         }
       }
     }
