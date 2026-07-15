@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, fmt } from "../api.js";
 import { Spinner, Toggle } from "../components/ui.jsx";
@@ -54,6 +54,26 @@ function statusBadge(isKilled, neverUsed) {
 
 // ── card view ─────────────────────────────────────────────────────────────────
 
+function successColor(rate, failures) {
+  if (!rate || rate === "—") return "text-gray-300";
+  const n = parseFloat(rate);
+  if (n < 90 || failures > 0) return "text-red-500 font-semibold";
+  if (n < 99) return "text-amber-500 font-semibold";
+  return "text-arbr-charcoal";
+}
+
+function latencyColor(avgLatency) {
+  if (avgLatency == null) return "text-gray-300";
+  if (avgLatency > 5000) return "text-amber-500";
+  return "text-arbr-charcoal";
+}
+
+function statusDot(isKilled, neverUsed) {
+  if (isKilled) return <span className="h-2 w-2 rounded-full bg-red-400 shrink-0 mt-0.5" />;
+  if (neverUsed) return <span className="h-2 w-2 rounded-full bg-gray-300 shrink-0 mt-0.5" />;
+  return <span className="h-2 w-2 rounded-full bg-arbr-green-500 shrink-0 mt-0.5" />;
+}
+
 function AppCard({ app, stats, config, onToggleKill }) {
   const isKilled = config?.killSwitchEnabled ?? false;
   const isActive = !isKilled;
@@ -62,41 +82,80 @@ function AppCard({ app, stats, config, onToggleKill }) {
     ? (((stats.requests - (stats.failures || 0)) / stats.requests) * 100).toFixed(1) + "%"
     : "—";
 
+  const href = `/applications/${encodeURIComponent(app)}`;
+
+  let cardClass = "card group relative flex flex-col gap-0 p-0 overflow-hidden transition-all hover:shadow-md cursor-pointer";
+  if (isKilled) cardClass += " border-red-200";
+  else if (neverUsed) cardClass += " border-dashed border-gray-200";
+
   return (
-    <div className={`card flex flex-col gap-4 p-5 transition-all ${isKilled ? "border-red-200 bg-red-50/30" : neverUsed ? "border-gray-200 bg-gray-50/40" : ""}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <Link to={`/applications/${encodeURIComponent(app)}`} className="text-base font-semibold text-arbr-charcoal hover:text-arbr-green-700 hover:underline truncate block">
+    <Link to={href} className={cardClass}>
+      {/* Red left strip for disconnected */}
+      {isKilled && <div className="absolute inset-y-0 left-0 w-1 bg-red-400 rounded-l" />}
+
+      {/* Header */}
+      <div className={`flex items-start justify-between gap-2 px-4 pt-4 pb-3 ${isKilled ? "pl-5" : ""}`}>
+        <div className="flex items-start gap-2 min-w-0">
+          {statusDot(isKilled, neverUsed)}
+          <span className="text-base font-bold text-arbr-charcoal group-hover:text-arbr-green-700 leading-snug truncate">
             {app}
-          </Link>
-          <div className="mt-1">{statusBadge(isKilled, neverUsed)}</div>
+          </span>
         </div>
-        <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <div className="label">Requests</div>
-          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.num(stats.requests) : "—"}</div>
-        </div>
-        <div>
-          <div className="label">Cost</div>
-          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.usd(stats.cost) : "—"}</div>
-        </div>
-        <div>
-          <div className="label">Success</div>
-          <div className={`font-semibold ${stats?.failures > 0 ? "text-red-600" : "text-arbr-charcoal"}`}>{successRate}</div>
-        </div>
-        <div>
-          <div className="label">Avg latency</div>
-          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.ms(stats.avgLatency) : "—"}</div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Arrow on hover */}
+          <span className="text-gray-300 group-hover:text-arbr-green-500 transition-colors text-sm leading-none">→</span>
+          {/* Toggle — stops propagation so it doesn't navigate */}
+          <div onClick={(e) => e.preventDefault()}>
+            <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />
+          </div>
         </div>
       </div>
 
-      <Link to={`/applications/${encodeURIComponent(app)}`} className="mt-auto text-xs text-arbr-green-600 hover:underline self-start">
-        View details →
-      </Link>
-    </div>
+      {/* Divider */}
+      <div className="border-t border-gray-100 mx-4" />
+
+      {/* Primary stats */}
+      <div className="grid grid-cols-2 gap-px px-4 py-3">
+        <div>
+          <div className="text-2xl font-bold text-arbr-charcoal tabular-nums leading-none">
+            {neverUsed ? <span className="text-gray-300">—</span> : fmt.num(stats.requests)}
+          </div>
+          <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-gray-400">Requests</div>
+        </div>
+        <div>
+          <div className="text-2xl font-bold text-arbr-charcoal tabular-nums leading-none">
+            {neverUsed ? <span className="text-gray-300">—</span> : fmt.usd(stats.cost)}
+          </div>
+          <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-gray-400">Cost</div>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-gray-100 mx-4" />
+
+      {/* Secondary stats — inline */}
+      <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-gray-500">
+        <span className={successColor(successRate, stats?.failures)}>
+          {successRate}
+        </span>
+        <span className="text-gray-200">·</span>
+        <span className={latencyColor(stats?.avgLatency)}>
+          {stats ? fmt.ms(stats.avgLatency) : "—"}
+        </span>
+        {isKilled && (
+          <>
+            <span className="text-gray-200">·</span>
+            <span className="text-red-400 font-medium">Disconnected</span>
+          </>
+        )}
+        {neverUsed && !isKilled && (
+          <>
+            <span className="text-gray-200">·</span>
+            <span className="text-gray-400">No requests yet</span>
+          </>
+        )}
+      </div>
+    </Link>
   );
 }
 
