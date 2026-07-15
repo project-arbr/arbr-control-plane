@@ -52,106 +52,124 @@ function statusBadge(isKilled, neverUsed) {
   );
 }
 
-// ── card view ─────────────────────────────────────────────────────────────────
+// ── card view helpers ─────────────────────────────────────────────────────────
 
-function successColor(rate, failures) {
-  if (!rate || rate === "—") return "text-gray-300";
-  const n = parseFloat(rate);
-  if (n < 90 || failures > 0) return "text-red-500 font-semibold";
-  if (n < 99) return "text-amber-500 font-semibold";
-  return "text-arbr-charcoal";
+// Health = green (healthy), amber (degraded), red (failing/disconnected)
+function healthLevel(isKilled, neverUsed, successPct, avgLatency) {
+  if (isKilled) return "red";
+  if (neverUsed) return "none";
+  if (successPct < 90) return "red";
+  if (successPct < 99 || avgLatency > 5000) return "amber";
+  return "green";
 }
 
-function latencyColor(avgLatency) {
-  if (avgLatency == null) return "text-gray-300";
-  if (avgLatency > 5000) return "text-amber-500";
-  return "text-arbr-charcoal";
+const HEALTH_DOT = {
+  green: "bg-arbr-green-500",
+  amber: "bg-amber-400",
+  red:   "bg-red-400",
+  none:  "bg-gray-300",
+};
+
+const HEALTH_BORDER = {
+  green: "",
+  amber: "border-amber-200",
+  red:   "border-red-200",
+  none:  "border-dashed border-gray-200",
+};
+
+// <$0.01 for sub-cent so "$0.00" never appears as the hero number
+function fmtCost(n) {
+  const v = Number(n) || 0;
+  if (v > 0 && v < 0.01) return "<$0.01";
+  return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function statusDot(isKilled, neverUsed) {
-  if (isKilled) return <span className="h-2 w-2 rounded-full bg-red-400 shrink-0 mt-0.5" />;
-  if (neverUsed) return <span className="h-2 w-2 rounded-full bg-gray-300 shrink-0 mt-0.5" />;
-  return <span className="h-2 w-2 rounded-full bg-arbr-green-500 shrink-0 mt-0.5" />;
+// Compact latency: 985 ms → "985ms", 6400 ms → "6.4s"
+function fmtLatency(ms) {
+  if (ms == null) return null;
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms)}ms`;
 }
 
 function AppCard({ app, stats, config, onToggleKill }) {
-  const isKilled = config?.killSwitchEnabled ?? false;
-  const isActive = !isKilled;
+  const isKilled  = config?.killSwitchEnabled ?? false;
+  const isActive  = !isKilled;
   const neverUsed = !stats || stats.requests === 0;
-  const successRate = stats && stats.requests > 0
-    ? (((stats.requests - (stats.failures || 0)) / stats.requests) * 100).toFixed(1) + "%"
-    : "—";
+
+  const successPct = stats && stats.requests > 0
+    ? ((stats.requests - (stats.failures || 0)) / stats.requests) * 100
+    : 100;
+  const health = healthLevel(isKilled, neverUsed, successPct, stats?.avgLatency);
 
   const href = `/applications/${encodeURIComponent(app)}`;
 
-  let cardClass = "card group relative flex flex-col gap-0 p-0 overflow-hidden transition-all hover:shadow-md cursor-pointer";
-  if (isKilled) cardClass += " border-red-200";
-  else if (neverUsed) cardClass += " border-dashed border-gray-200";
+  // Only surface success rate when degraded — healthy cards stay quiet
+  const showSuccess = !neverUsed && successPct < 99;
+  const successLabel = `${successPct.toFixed(1)}% success`;
+
+  // Only surface latency when slow
+  const showLatency = !neverUsed && stats?.avgLatency > 5000;
 
   return (
-    <Link to={href} className={cardClass}>
-      {/* Red left strip for disconnected */}
-      {isKilled && <div className="absolute inset-y-0 left-0 w-1 bg-red-400 rounded-l" />}
+    <Link
+      to={href}
+      className={`card group relative flex flex-col gap-0 p-0 overflow-hidden transition-all hover:shadow-md cursor-pointer ${HEALTH_BORDER[health]}`}
+    >
+      {/* Coloured left accent for non-healthy cards */}
+      {health === "red"   && <div className="absolute inset-y-0 left-0 w-[3px] bg-red-400" />}
+      {health === "amber" && <div className="absolute inset-y-0 left-0 w-[3px] bg-amber-400" />}
 
-      {/* Header */}
-      <div className={`flex items-start justify-between gap-2 px-4 pt-4 pb-3 ${isKilled ? "pl-5" : ""}`}>
+      {/* Header — dot · name · toggle */}
+      <div className={`flex items-start justify-between gap-3 px-4 pt-4 pb-3 ${health !== "green" && health !== "none" ? "pl-5" : ""}`}>
         <div className="flex items-start gap-2 min-w-0">
-          {statusDot(isKilled, neverUsed)}
-          <span className="text-base font-bold text-arbr-charcoal group-hover:text-arbr-green-700 leading-snug truncate">
+          <span className={`h-2 w-2 rounded-full shrink-0 mt-[5px] ${HEALTH_DOT[health]}`} />
+          {/* Two-line wrap instead of truncate so names stay readable */}
+          <span className="text-[15px] font-bold text-arbr-charcoal group-hover:text-arbr-green-700 leading-snug break-words min-w-0">
             {app}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Arrow on hover */}
-          <span className="text-gray-300 group-hover:text-arbr-green-500 transition-colors text-sm leading-none">→</span>
-          {/* Toggle — stops propagation so it doesn't navigate */}
-          <div onClick={(e) => e.preventDefault()}>
-            <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />
-          </div>
+        <div className="shrink-0" onClick={(e) => e.preventDefault()}>
+          <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-gray-100 mx-4" />
-
-      {/* Primary stats */}
-      <div className="grid grid-cols-2 gap-px px-4 py-3">
-        <div>
-          <div className="text-2xl font-bold text-arbr-charcoal tabular-nums leading-none">
-            {neverUsed ? <span className="text-gray-300">—</span> : fmt.num(stats.requests)}
-          </div>
-          <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-gray-400">Requests</div>
-        </div>
-        <div>
-          <div className="text-2xl font-bold text-arbr-charcoal tabular-nums leading-none">
-            {neverUsed ? <span className="text-gray-300">—</span> : fmt.usd(stats.cost)}
-          </div>
-          <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-gray-400">Cost</div>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="border-t border-gray-100 mx-4" />
-
-      {/* Secondary stats — inline */}
-      <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-gray-500">
-        <span className={successColor(successRate, stats?.failures)}>
-          {successRate}
-        </span>
-        <span className="text-gray-200">·</span>
-        <span className={latencyColor(stats?.avgLatency)}>
-          {stats ? fmt.ms(stats.avgLatency) : "—"}
-        </span>
-        {isKilled && (
-          <>
-            <span className="text-gray-200">·</span>
-            <span className="text-red-400 font-medium">Disconnected</span>
-          </>
+      {/* Hero — Cost */}
+      <div className="px-4 pb-1">
+        {neverUsed ? (
+          <span className="text-2xl font-bold text-gray-300">—</span>
+        ) : (
+          <span className="text-2xl font-bold text-arbr-charcoal tabular-nums leading-none">
+            {fmtCost(stats.cost)}
+          </span>
         )}
-        {neverUsed && !isKilled && (
+        <span className="ml-1.5 text-xs text-gray-400">cost</span>
+      </div>
+
+      {/* Secondary line — req count · latency · exceptions only */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 pb-3 text-xs text-gray-400">
+        {neverUsed ? (
+          <span className="text-gray-300">No requests yet</span>
+        ) : (
           <>
+            <span>{fmt.num(stats.requests)} req</span>
             <span className="text-gray-200">·</span>
-            <span className="text-gray-400">No requests yet</span>
+            <span className={showLatency ? "text-amber-500 font-medium" : ""}>
+              {fmtLatency(stats.avgLatency)}
+            </span>
+            {showSuccess && (
+              <>
+                <span className="text-gray-200">·</span>
+                <span className={`font-medium px-1.5 py-0.5 rounded ${successPct < 90 ? "text-red-600 bg-red-50" : "text-amber-600 bg-amber-50"}`}>
+                  ⚠ {successLabel}
+                </span>
+              </>
+            )}
+            {isKilled && (
+              <>
+                <span className="text-gray-200">·</span>
+                <span className="text-red-500 font-medium">Disconnected</span>
+              </>
+            )}
           </>
         )}
       </div>
@@ -230,6 +248,25 @@ function AppTable({ apps, statsMap, configMap, onToggleKill, label }) {
       </div>
     </div>
   );
+}
+
+// Sort: disconnected first, then degraded, then by cost desc
+function sortedByPriority(appList, statsMap, configMap) {
+  const rank = (app) => {
+    const isKilled = configMap[app]?.killSwitchEnabled ?? false;
+    if (isKilled) return 0;
+    const s = statsMap[app];
+    if (!s || s.requests === 0) return 3;
+    const successPct = ((s.requests - (s.failures || 0)) / s.requests) * 100;
+    if (successPct < 90 || (s.avgLatency > 5000 && successPct < 99)) return 1;
+    if (successPct < 99 || s.avgLatency > 5000) return 2;
+    return 3;
+  };
+  return [...appList].sort((a, b) => {
+    const dr = rank(a) - rank(b);
+    if (dr !== 0) return dr;
+    return (statsMap[b]?.cost || 0) - (statsMap[a]?.cost || 0);
+  });
 }
 
 // ── view toggle button ────────────────────────────────────────────────────────
@@ -326,7 +363,7 @@ export default function Applications() {
           {apps.length > 0 && (
             view === "card" ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {apps.map((app) => (
+                {sortedByPriority(apps, statsMap, configMap).map((app) => (
                   <AppCard key={app} app={app} stats={statsMap[app] || null} config={configMap[app] || null} onToggleKill={toggleKill} />
                 ))}
               </div>
