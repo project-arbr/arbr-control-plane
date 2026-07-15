@@ -5,7 +5,9 @@
 const { v4: uuidv4 } = require("uuid");
 const { getRouter } = require("../providers/router");
 const { extractFinishReason } = require("../providers/llm-router");
-const { resolveRoute, invokeWithFallback, getAppConfig } = require("./handler");
+const {
+  resolveRoute, invokeWithFallback, getAppConfig, setGatewayHeaders,
+} = require("./core");
 const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
@@ -13,16 +15,6 @@ const { maybeShadowEval } = require("../eval/shadow");
 const { PROVIDERS } = require("../config");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
-
-// Set standard gateway tracing headers. Called before res.json() / res.flushHeaders()
-// so clients always see which model, provider, and routing decision served the request.
-function setGatewayHeaders(res, { requestId, model, provider, routing, taskType }) {
-  if (requestId) res.setHeader("X-Arbr-Request-ID", requestId);
-  if (model)     res.setHeader("X-Arbr-Model",      model);
-  if (provider)  res.setHeader("X-Arbr-Provider",   provider);
-  if (routing)   res.setHeader("X-Arbr-Routing",    routing);
-  if (taskType !== undefined) res.setHeader("X-Arbr-Task-Type", taskType || "");
-}
 
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and

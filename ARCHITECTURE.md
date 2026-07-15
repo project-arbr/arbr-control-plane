@@ -61,9 +61,10 @@ server/src/
   index.js          boot: mongo → registry.init() → mount routes → listen
   config.js         env-driven config + demo-mode detection
   gateway/          /v1 request handling
-    handler.js        native /v1/chat: resolveRoute + invokeWithFallback
+    core.js           shared resolveRoute / fallback / headers (both entry points)
+    handler.js        native /v1/chat + resolveRoute implementation
     openaiCompat.js   OpenAI-compatible /v1/chat/completions (raw proxy + native paths)
-    auth.js           data-plane API-key auth, attribution, rate limits
+    auth.js           data-plane API-key auth, attribution, shared rate limits
     capabilities.js   per-provider/model tool-call support
   routing/          ruleEngine · autoRouter · aiPolicy (scoring engine) · capEngine · cache
   classify/         task-type classification (provided / keyword / AI)
@@ -74,7 +75,8 @@ server/src/
   litellm/ lmsys/ livebench/   catalog + benchmark-score sync jobs (manual / on-demand)
   security/secrets.js   AES-256-GCM encryption of provider keys at rest
   maintenance/purge.js  retention purge of old request records
-  api/routes.js     dashboard / admin REST API (master-key gated)
+  api/routes.js     thin re-export of api/routes/* domain modules (master-key gated)
+  api/routes/       status, caps, keys, recommendations, evals, analytics, …
   models/           Mongoose schemas (see below)
 web/src/            React + Vite + Tailwind dashboard (api.js → /api)
 clients/            JS and Python SDKs (published separately)
