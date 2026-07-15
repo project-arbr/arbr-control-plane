@@ -67,6 +67,30 @@ async function setRequireApiKey(on) {
   return s.requireApiKey;
 }
 
+// Shared key validator — used by both HTTP middleware and the WS upgrade handler.
+// Returns the keyDoc if valid, null if no key was presented (anonymous request).
+// Throws an Error with .statusCode on invalid/revoked/rate-limited keys.
+async function resolveKey(authHeader) {
+  const raw = authHeader && authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+  if (!raw) return null;
+  const keys = await _keysByHash();
+  const doc = keys.get(hashKey(raw));
+  if (!doc) {
+    const err = new Error("Unknown, disabled, or revoked API key.");
+    err.statusCode = 401;
+    throw err;
+  }
+  if (overRpmLimit(doc.keyHash, doc.rpm)) {
+    const err = new Error(`API key "${doc.name}" is over its ${doc.rpm} requests/minute limit.`);
+    err.statusCode = 429;
+    throw err;
+  }
+  stampLastUsed(doc);
+  return doc;
+}
+
 // Express middleware for the data plane.
 async function middleware(req, res, next) {
   try {
@@ -115,4 +139,4 @@ async function middleware(req, res, next) {
   }
 }
 
-module.exports = { middleware, hashKey, invalidate, requireApiKeyOn, setRequireApiKey };
+module.exports = { middleware, resolveKey, hashKey, invalidate, requireApiKeyOn, setRequireApiKey };

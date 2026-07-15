@@ -72,6 +72,12 @@ const requestRecordSchema = new mongoose.Schema(
     // Shape: { basis, classificationUsed, rule?, policy?, defaultScope?, override? }
     routingExplain: { type: mongoose.Schema.Types.Mixed, default: null },
 
+    // Realtime voice sessions — audio token breakdown and total session wall-clock time.
+    // Populated only for taskType:"realtime-voice"; zero/null on all other records.
+    audioInputTokens:  { type: Number, default: 0 },
+    audioOutputTokens: { type: Number, default: 0 },
+    sessionDurationMs: { type: Number, default: null },
+
     // Captured context (full prompt + response). PII-masked at write time when
     // Settings.piiMaskingEnabled is on, and size-capped. Headers are intentionally NOT
     // stored (they carry Authorization/API keys). Governed by retentionDays auto-purge.
