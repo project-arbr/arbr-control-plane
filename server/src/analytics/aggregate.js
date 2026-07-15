@@ -1,6 +1,7 @@
 // MongoDB aggregation pipelines producing the scope's dashboard views.
 // All views accept the same filter object (date range + dimensions).
 const RequestRecord = require("../models/RequestRecord");
+const ApiKey = require("../models/ApiKey");
 const { computeRealisedSavings } = require("./savings");
 
 // Build a $match stage from filter query params.
@@ -146,7 +147,7 @@ async function spend({ dimension, value, from, to } = {}) {
 
 // Distinct values for filter dropdowns.
 async function facets() {
-  const [applications, workflows, departments, models, providers, taskTypes, users] = await Promise.all([
+  const [applications, workflows, departments, models, providers, taskTypes, users, keyApps] = await Promise.all([
     RequestRecord.distinct("application"),
     RequestRecord.distinct("workflow"),
     RequestRecord.distinct("department"),
@@ -154,8 +155,12 @@ async function facets() {
     RequestRecord.distinct("provider"),
     RequestRecord.distinct("taskType"),
     RequestRecord.distinct("userId"),
+    ApiKey.distinct("application", { enabled: true, revokedAt: null }),
   ]);
-  return { applications, workflows, departments, models, providers, taskTypes, users };
+  // Apps that have a key but have never made a request — shown as "newly added".
+  const appSet = new Set(applications);
+  const newApplications = keyApps.filter((a) => a && !appSet.has(a));
+  return { applications, newApplications, workflows, departments, models, providers, taskTypes, users };
 }
 
 // Per-provider health over the last 24h: error rate and average latency.
