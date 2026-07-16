@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, fmt } from "../api.js";
 import { Spinner, Toggle } from "../components/ui.jsx";
@@ -52,51 +52,128 @@ function statusBadge(isKilled, neverUsed) {
   );
 }
 
-// ── card view ─────────────────────────────────────────────────────────────────
+// ── card view helpers ─────────────────────────────────────────────────────────
+
+// Health = green (healthy), amber (degraded), red (failing/disconnected)
+function healthLevel(isKilled, neverUsed, successPct, avgLatency) {
+  if (isKilled) return "red";
+  if (neverUsed) return "none";
+  if (successPct < 90) return "red";
+  if (successPct < 99 || avgLatency > 5000) return "amber";
+  return "green";
+}
+
+const HEALTH_DOT = {
+  green: "bg-arbr-green-500",
+  amber: "bg-amber-400",
+  red:   "bg-red-400",
+  none:  "bg-gray-300",
+};
+
+const HEALTH_BORDER = {
+  green: "",
+  amber: "border-amber-200",
+  red:   "border-red-200",
+  none:  "border-dashed border-gray-200",
+};
+
+// <$0.01 for sub-cent so "$0.00" never appears as the hero number
+function fmtCost(n) {
+  const v = Number(n) || 0;
+  if (v > 0 && v < 0.01) return "<$0.01";
+  return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Compact latency: 985 ms → "985ms", 6400 ms → "6.4s"
+function fmtLatency(ms) {
+  if (ms == null) return null;
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms)}ms`;
+}
 
 function AppCard({ app, stats, config, onToggleKill }) {
-  const isKilled = config?.killSwitchEnabled ?? false;
-  const isActive = !isKilled;
+  const isKilled  = config?.killSwitchEnabled ?? false;
+  const isActive  = !isKilled;
   const neverUsed = !stats || stats.requests === 0;
-  const successRate = stats && stats.requests > 0
-    ? (((stats.requests - (stats.failures || 0)) / stats.requests) * 100).toFixed(1) + "%"
-    : "—";
+
+  const successPct = stats && stats.requests > 0
+    ? ((stats.requests - (stats.failures || 0)) / stats.requests) * 100
+    : 100;
+  const health = healthLevel(isKilled, neverUsed, successPct, stats?.avgLatency);
+
+  const href = `/applications/${encodeURIComponent(app)}`;
+
+  // Only surface success rate when degraded — healthy cards stay quiet
+  const showSuccess = !neverUsed && successPct < 99;
+  const successLabel = `${successPct.toFixed(1)}% success`;
+
+  // Only surface latency when slow
+  const showLatency = !neverUsed && stats?.avgLatency > 5000;
 
   return (
-    <div className={`card flex flex-col gap-4 p-5 transition-all ${isKilled ? "border-red-200 bg-red-50/30" : neverUsed ? "border-gray-200 bg-gray-50/40" : ""}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <Link to={`/applications/${encodeURIComponent(app)}`} className="text-base font-semibold text-arbr-charcoal hover:text-arbr-green-700 hover:underline truncate block">
+    <Link
+      to={href}
+      className={`card group relative flex flex-col gap-0 p-0 overflow-hidden transition-all hover:shadow-md cursor-pointer ${HEALTH_BORDER[health]}`}
+    >
+      {/* Coloured left accent for non-healthy cards */}
+      {health === "red"   && <div className="absolute inset-y-0 left-0 w-[3px] bg-red-400" />}
+      {health === "amber" && <div className="absolute inset-y-0 left-0 w-[3px] bg-amber-400" />}
+
+      {/* Header — dot · name · toggle */}
+      <div className={`flex items-start justify-between gap-3 px-4 pt-4 pb-3 ${health !== "green" && health !== "none" ? "pl-5" : ""}`}>
+        <div className="flex items-start gap-2 min-w-0">
+          <span className={`h-2 w-2 rounded-full shrink-0 mt-[5px] ${HEALTH_DOT[health]}`} />
+          {/* Two-line wrap instead of truncate so names stay readable */}
+          <span className="text-[15px] font-bold text-arbr-charcoal group-hover:text-arbr-green-700 leading-snug break-words min-w-0">
             {app}
-          </Link>
-          <div className="mt-1">{statusBadge(isKilled, neverUsed)}</div>
+          </span>
         </div>
-        <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <div className="label">Requests</div>
-          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.num(stats.requests) : "—"}</div>
-        </div>
-        <div>
-          <div className="label">Cost</div>
-          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.usd(stats.cost) : "—"}</div>
-        </div>
-        <div>
-          <div className="label">Success</div>
-          <div className={`font-semibold ${stats?.failures > 0 ? "text-red-600" : "text-arbr-charcoal"}`}>{successRate}</div>
-        </div>
-        <div>
-          <div className="label">Avg latency</div>
-          <div className="font-semibold text-arbr-charcoal">{stats ? fmt.ms(stats.avgLatency) : "—"}</div>
+        <div className="shrink-0" onClick={(e) => e.preventDefault()}>
+          <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />
         </div>
       </div>
 
-      <Link to={`/applications/${encodeURIComponent(app)}`} className="mt-auto text-xs text-arbr-green-600 hover:underline self-start">
-        View details →
-      </Link>
-    </div>
+      {/* Hero — Cost */}
+      <div className="px-4 pb-1">
+        {neverUsed ? (
+          <span className="text-2xl font-bold text-gray-300">—</span>
+        ) : (
+          <span className="text-2xl font-bold text-arbr-charcoal tabular-nums leading-none">
+            {fmtCost(stats.cost)}
+          </span>
+        )}
+        <span className="ml-1.5 text-xs text-gray-400">cost</span>
+      </div>
+
+      {/* Secondary line — req count · latency · exceptions only */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 pb-3 text-xs text-gray-400">
+        {neverUsed ? (
+          <span className="text-gray-300">No requests yet</span>
+        ) : (
+          <>
+            <span>{fmt.num(stats.requests)} req</span>
+            <span className="text-gray-200">·</span>
+            <span className={showLatency ? "text-amber-500 font-medium" : ""}>
+              {fmtLatency(stats.avgLatency)}
+            </span>
+            {showSuccess && (
+              <>
+                <span className="text-gray-200">·</span>
+                <span className={`font-medium px-1.5 py-0.5 rounded ${successPct < 90 ? "text-red-600 bg-red-50" : "text-amber-600 bg-amber-50"}`}>
+                  ⚠ {successLabel}
+                </span>
+              </>
+            )}
+            {isKilled && (
+              <>
+                <span className="text-gray-200">·</span>
+                <span className="text-red-500 font-medium">Disconnected</span>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </Link>
   );
 }
 
@@ -171,6 +248,25 @@ function AppTable({ apps, statsMap, configMap, onToggleKill, label }) {
       </div>
     </div>
   );
+}
+
+// Sort: disconnected first, then degraded, then by cost desc
+function sortedByPriority(appList, statsMap, configMap) {
+  const rank = (app) => {
+    const isKilled = configMap[app]?.killSwitchEnabled ?? false;
+    if (isKilled) return 0;
+    const s = statsMap[app];
+    if (!s || s.requests === 0) return 3;
+    const successPct = ((s.requests - (s.failures || 0)) / s.requests) * 100;
+    if (successPct < 90 || (s.avgLatency > 5000 && successPct < 99)) return 1;
+    if (successPct < 99 || s.avgLatency > 5000) return 2;
+    return 3;
+  };
+  return [...appList].sort((a, b) => {
+    const dr = rank(a) - rank(b);
+    if (dr !== 0) return dr;
+    return (statsMap[b]?.cost || 0) - (statsMap[a]?.cost || 0);
+  });
 }
 
 // ── view toggle button ────────────────────────────────────────────────────────
@@ -267,7 +363,7 @@ export default function Applications() {
           {apps.length > 0 && (
             view === "card" ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {apps.map((app) => (
+                {sortedByPriority(apps, statsMap, configMap).map((app) => (
                   <AppCard key={app} app={app} stats={statsMap[app] || null} config={configMap[app] || null} onToggleKill={toggleKill} />
                 ))}
               </div>
