@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@langchain/anthropic": "^1.5.1",
-    "@langchain/aws": "^1.4.2",
+    "@langchain/aws": "^1.4.3",
     "@langchain/core": "^1.2.2",
     "@langchain/google-genai": "^2.2.0",
     "@langchain/openai": "^1.5.5",
@@ -56,12 +56,12 @@
     "express": "^5.2.1",
     "mongoose": "^9.7.4",
     "uuid": "^14.0.1",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "concurrently": "^10.0.3",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "mongodb-memory-server": "^11.2.0",
     "supertest": "^7.2.2",
