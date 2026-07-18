@@ -1,8 +1,19 @@
-# Arbr Control Plane
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/arbr-wordmark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/arbr-wordmark.svg">
+    <img alt="Arbr" src="assets/brand/arbr-wordmark.svg" width="300">
+  </picture>
+</p>
 
-[![npm](https://img.shields.io/npm/v/arbr-client?label=arbr-client&color=698200)](https://www.npmjs.com/package/arbr-client)
-[![License: MIT](https://img.shields.io/badge/license-MIT-698200)](LICENSE)
-[![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-262626)](package.json)
+<h1 align="center">Arbr Control Plane</h1>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/arbr-client"><img alt="npm" src="https://img.shields.io/npm/v/arbr-client?label=arbr-client&color=2f37ff"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2f37ff"></a>
+  <a href="package.json"><img alt="Node ≥18" src="https://img.shields.io/badge/node-%E2%89%A518-171817"></a>
+  <a href="assets/brand/BRAND.md"><img alt="Brand guidelines" src="https://img.shields.io/badge/brand-guidelines-2f37ff"></a>
+</p>
 
 > See it, recommend it, then route it — cost & usage visibility, optimisation
 > recommendations, and controlled model routing on **explicit human approval**.
