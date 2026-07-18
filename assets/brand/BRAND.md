@@ -19,8 +19,9 @@ of truth.
 | `arbr-wordmark-dark.svg` | SVG, white | Wordmark for **dark** backgrounds. |
 | `arbr-wordmark.png` | PNG 1200×285, transparent | Raster fallback for light backgrounds (email, tools without SVG). |
 | `arbr-wordmark-dark.png` | PNG 1200×285, transparent | Raster fallback for dark backgrounds. |
-| `arbr-mark.svg` | SVG, ink `#171817` | The **A** apex mark alone. Favicons, avatars, app icons, tight square spaces. |
-| `arbr-mark.png` | PNG 512×512, transparent | Raster mark for favicons / social avatars. |
+| `arbr-mark.svg` | SVG, ink `#171817` | The **A** apex mark alone, transparent. Favicons, in-app icons, tight square spaces on a known background. |
+| `arbr-mark.png` | PNG 512×512, transparent | Raster mark for favicons. |
+| `arbr-avatar.svg` / `.png` | SVG / PNG 512×512, paper mark on ink | **Org / social avatar** — a solid-background lockup. Use this (not the transparent mark) anywhere the avatar sits on an unknown or varying background and gets cropped to a rounded square (GitHub org avatar, npm, X, etc.). |
 | `arbr-social-preview.png` | PNG 1280×640 | GitHub **social preview** (repo → Settings → Social preview) and OG/Twitter cards. |
 
 All SVGs use no external fonts — the letterforms are outlined paths, so they
