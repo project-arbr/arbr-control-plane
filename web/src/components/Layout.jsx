@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { getAdminToken } from "../api.js";
+import { Logo } from "./Logo.jsx";
 
 // ── Inline icons (16×16 stroke, no external dep) ──────────────────────────────
 const Icon = ({ children }) => (
@@ -108,18 +109,13 @@ const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
 function navClass({ isActive }) {
   return `mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
     isActive
-      ? "bg-arbr-green-50 text-arbr-green-700"
+      ? "bg-arbr-accent-50 text-arbr-charcoal font-semibold"
       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
   }`;
 }
 
 function Wordmark() {
-  return (
-    <div className="flex items-baseline gap-0.5">
-      <span className="text-xl font-bold tracking-tight text-arbr-charcoal">ARBR</span>
-      <span className="text-xl font-bold text-arbr-green-600">.</span>
-    </div>
-  );
+  return <Logo className="h-5 w-auto text-arbr-charcoal" />;
 }
 
 export default function Layout({ status, onSignOut, children }) {
@@ -213,8 +209,8 @@ export default function Layout({ status, onSignOut, children }) {
               Demo — no provider keys
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-arbr-green-200 bg-arbr-green-50 px-2 py-0.5 text-xs font-medium text-arbr-green-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-arbr-green-500" />
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
               {(status?.liveProviders || []).join(", ") || "Live"}
             </span>
           )}
@@ -224,7 +220,7 @@ export default function Layout({ status, onSignOut, children }) {
             </span>
           )}
           {status?.routingMode && status.routingMode !== "off" && (
-            <span className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+            <span className="inline-flex items-center rounded-md border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-arbr-charcoal">
               {status.routingMode === "ai" ? "AI routing" : "Cost guardrail"}
             </span>
           )}

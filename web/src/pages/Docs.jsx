@@ -142,10 +142,10 @@ res = arbr.chat("Summarise this ticket: ...", model="auto", max_tokens=300)   # 
       <Card title="Learn more">
         <p className="text-sm text-gray-600">
           Full guides live in the repo's <code>docs/</code> (VitePress): integration walkthroughs for
-          <a className="mx-1 text-arbr-green-700 underline" href="https://github.com/project-arbr/arbr-control-plane/tree/main/docs/integrations" target="_blank" rel="noreferrer">OpenCode / LibreChat / NVIDIA</a>,
-          plus <a className="mx-1 text-arbr-green-700 underline" href="https://github.com/project-arbr/arbr-control-plane/blob/main/docs/routing.md" target="_blank" rel="noreferrer">routing</a>,
-          <a className="mx-1 text-arbr-green-700 underline" href="https://github.com/project-arbr/arbr-control-plane/blob/main/docs/budgets.md" target="_blank" rel="noreferrer">budgets</a>, and the
-          <a className="mx-1 text-arbr-green-700 underline" href="https://github.com/project-arbr/arbr-control-plane/blob/main/docs/api-reference.md" target="_blank" rel="noreferrer">API reference</a>.
+          <a className="mx-1 text-arbr-accent-700 underline" href="https://github.com/project-arbr/arbr-control-plane/tree/main/docs/integrations" target="_blank" rel="noreferrer">OpenCode / LibreChat / NVIDIA</a>,
+          plus <a className="mx-1 text-arbr-accent-700 underline" href="https://github.com/project-arbr/arbr-control-plane/blob/main/docs/routing.md" target="_blank" rel="noreferrer">routing</a>,
+          <a className="mx-1 text-arbr-accent-700 underline" href="https://github.com/project-arbr/arbr-control-plane/blob/main/docs/budgets.md" target="_blank" rel="noreferrer">budgets</a>, and the
+          <a className="mx-1 text-arbr-accent-700 underline" href="https://github.com/project-arbr/arbr-control-plane/blob/main/docs/api-reference.md" target="_blank" rel="noreferrer">API reference</a>.
         </p>
       </Card>
     </div>

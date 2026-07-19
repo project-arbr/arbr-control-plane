@@ -17,7 +17,7 @@ function SaveRow({ saving, ok, err }) {
       <button className="btn-secondary text-sm" type="submit" disabled={saving}>
         {saving ? "Saving…" : "Save"}
       </button>
-      {ok  && <span className="text-sm text-arbr-green-600">Saved.</span>}
+      {ok  && <span className="text-sm text-arbr-accent-600">Saved.</span>}
       {err && <span className="text-sm text-red-600">{err}</span>}
     </div>
   );
@@ -199,7 +199,7 @@ function GuardrailsTab({ gov, setGov, save, saving, ok, err }) {
       <Card>
         <div className={`-mx-6 -mt-6 mb-4 rounded-t-lg px-6 py-3 ${isKilled ? "bg-red-50 border-b border-red-200" : "bg-gray-50 border-b border-gray-100"}`}>
           <div className="flex items-center gap-3">
-            <span className={`inline-flex h-2 w-2 rounded-full ${isKilled ? "bg-red-500 animate-pulse" : "bg-arbr-green-500"}`} />
+            <span className={`inline-flex h-2 w-2 rounded-full ${isKilled ? "bg-red-500 animate-pulse" : "bg-green-500"}`} />
             <span className={`text-sm font-semibold ${isKilled ? "text-red-700" : "text-arbr-charcoal"}`}>
               {isKilled ? "Gateway halted — all /v1/* requests returning 503" : "Gateway active"}
             </span>
@@ -514,7 +514,7 @@ function RecentEventsCard() {
         </div>
       )}
       <div className="mt-3 border-t border-gray-100 pt-3 text-right">
-        <Link to="/audit" className="text-xs text-arbr-green-600 hover:underline">View full audit log →</Link>
+        <Link to="/audit" className="text-xs text-arbr-accent-600 hover:underline">View full audit log →</Link>
       </div>
     </Card>
   );
@@ -636,7 +636,7 @@ function SystemInfoCard() {
     { label: "Active providers", value: status?.liveProviders?.length != null ? fmt.num(status.liveProviders.length) : "—" },
     { label: "Default model",    value: status?.defaultModel || "—" },
     { label: "Routing mode",     value: status?.routingMode || "—",
-      extra: <Link to="/routing" className="ml-2 text-xs text-arbr-green-600 hover:underline">Configure →</Link> },
+      extra: <Link to="/routing" className="ml-2 text-xs text-arbr-accent-600 hover:underline">Configure →</Link> },
   ];
 
   return (

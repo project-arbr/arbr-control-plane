@@ -27,14 +27,14 @@ function stepsFromEvalStatus(evalStatus) {
 }
 
 const DOT_CLASS = {
-  done:    "w-6 h-6 rounded-full bg-arbr-green-600 text-white flex items-center justify-center text-xs font-medium",
-  active:  "w-6 h-6 rounded-full border-2 border-arbr-green-600 text-arbr-green-600 flex items-center justify-center text-xs font-medium",
+  done:    "w-6 h-6 rounded-full bg-arbr-accent-600 text-white flex items-center justify-center text-xs font-medium",
+  active:  "w-6 h-6 rounded-full border-2 border-arbr-accent-600 text-arbr-accent-600 flex items-center justify-center text-xs font-medium",
   running: "w-6 h-6 rounded-full border-2 border-amber-400 text-amber-500 flex items-center justify-center text-xs font-medium animate-pulse",
   failed:  "w-6 h-6 rounded-full border-2 border-red-400 text-red-500 flex items-center justify-center text-xs font-medium",
   idle:    "w-6 h-6 rounded-full border-2 border-gray-200 text-gray-300 flex items-center justify-center text-xs font-medium",
 };
 const DOT_TEXT = {
-  done: "text-arbr-green-700 font-medium", active: "text-arbr-green-600 font-medium",
+  done: "text-arbr-accent-700 font-medium", active: "text-arbr-accent-600 font-medium",
   running: "text-amber-600", failed: "text-red-600", idle: "text-gray-300",
 };
 
@@ -50,7 +50,7 @@ function StepTracker({ steps }) {
             <span className={`text-xs ${DOT_TEXT[step.status]}`}>{step.label}</span>
           </div>
           {i < steps.length - 1 && (
-            <div className={`flex-1 h-px mx-3 min-w-8 ${step.status === "done" ? "bg-arbr-green-200" : "bg-gray-100"}`} />
+            <div className={`flex-1 h-px mx-3 min-w-8 ${step.status === "done" ? "bg-arbr-accent-200" : "bg-gray-100"}`} />
           )}
         </React.Fragment>
       ))}
@@ -66,7 +66,7 @@ function QualitySummary({ s }) {
       <Badge tone={s.worseRate > 0.05 ? "red" : "green"}>worse {pct(s.worseRate)}</Badge>
       {s.criticalFailRate != null && <Badge tone={s.criticalFailRate > 0 ? "red" : "gray"}>critical {pct(s.criticalFailRate)}</Badge>}
       <Badge tone="gray">format {pct(s.formatPassRate)}</Badge>
-      <Badge tone="green">cost -{pct(s.costSavingPct)}</Badge>
+      <Badge tone="charcoal">cost -{pct(s.costSavingPct)}</Badge>
       {s.avgLatencyDeltaPct != null && <Badge tone="gray">latency {s.avgLatencyDeltaPct > 0 ? "+" : ""}{pct(s.avgLatencyDeltaPct)}</Badge>}
     </div>
   );
@@ -115,7 +115,7 @@ function RecCard({ rec, models, onChange }) {
             {rec.taskType && <span className="text-xs text-gray-400 truncate hidden sm:block">· {rec.taskType}</span>}
             {rec.application && <span className="text-xs text-gray-400 truncate hidden sm:block">· {rec.application}</span>}
           </div>
-          <span className="shrink-0 text-sm font-semibold text-arbr-green-600">{fmt.usd(rec.projectedSavings)} saved</span>
+          <span className="shrink-0 text-sm font-semibold text-arbr-accent-600">{fmt.usd(rec.projectedSavings)} saved</span>
         </div>
       </Card>
     );
@@ -157,15 +157,15 @@ function RecCard({ rec, models, onChange }) {
             <span className="inline-block bg-gray-100 text-arbr-charcoal rounded px-2 py-1 text-xs font-mono">
               {rec.currentModel}
             </span>
-            <span className="text-xs text-arbr-green-600 pl-2 leading-none select-none">↓</span>
-            <span className="inline-block bg-arbr-green-50 text-arbr-green-700 border border-arbr-green-200 rounded px-2 py-1 text-xs font-mono">
+            <span className="text-xs text-arbr-accent-600 pl-2 leading-none select-none">↓</span>
+            <span className="inline-block bg-arbr-accent-50 text-arbr-accent-700 border border-arbr-accent-200 rounded px-2 py-1 text-xs font-mono">
               {rec.suggestedModel}
             </span>
           </div>
         </div>
         <div className="border-l border-gray-100 pl-6 shrink-0 text-right">
           <div className="label mb-1">Projected saving</div>
-          <div className="text-3xl font-bold text-arbr-green-600">{fmt.usd(rec.projectedSavings)}</div>
+          <div className="text-3xl font-bold text-arbr-accent-600">{fmt.usd(rec.projectedSavings)}</div>
           <div className="mt-0.5 text-xs text-gray-500">{fmt.usd(rec.currentCost)} → {fmt.usd(rec.projectedCost)}</div>
           <div className="mt-0.5 text-xs text-gray-400">{fmt.num(rec.requestCount)} requests</div>
         </div>
@@ -214,7 +214,7 @@ function RecCard({ rec, models, onChange }) {
               </button>
             </div>
           )}
-          {notice && <p className="mt-2 text-sm text-arbr-green-700">{notice}</p>}
+          {notice && <p className="mt-2 text-sm text-arbr-accent-700">{notice}</p>}
           {err    && <p className="mt-2 text-sm text-red-600">{err}</p>}
         </div>
         {rec.qualitySummary && (
@@ -289,7 +289,7 @@ function EmptyState({ analysis, busy, onMarkCheap }) {
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-sm font-semibold text-arbr-green-600">~{fmt.usd(o.projectedSavings)}</span>
+                <span className="text-sm font-semibold text-arbr-accent-600">~{fmt.usd(o.projectedSavings)}</span>
                 <button className="btn-outline text-xs" disabled={busy} onClick={() => onMarkCheap([o.taskType])}>
                   Mark cheap
                 </button>

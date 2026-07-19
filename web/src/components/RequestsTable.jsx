@@ -83,7 +83,7 @@ function explainRouting(r) {
 function RoutingExplanation({ r }) {
   const lines = explainRouting(r);
   return (
-    <div className="rounded-lg border border-arbr-green-200 bg-arbr-green-50 p-4">
+    <div className="rounded-lg border border-arbr-accent-200 bg-arbr-accent-50 p-4">
       <div className="mb-1 flex items-center gap-2">
         <span className="label">Why this routing</span>
         <Badge tone={ROUTING_TONE[r.routingDecision]}>{r.routingDecision}</Badge>

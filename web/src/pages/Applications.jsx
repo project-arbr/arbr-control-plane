@@ -45,8 +45,8 @@ function statusBadge(isKilled, neverUsed) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-arbr-green-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-arbr-green-600 inline-block" />
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-green-600 inline-block" />
       Active
     </span>
   );
@@ -64,7 +64,7 @@ function healthLevel(isKilled, neverUsed, successPct, avgLatency) {
 }
 
 const HEALTH_DOT = {
-  green: "bg-arbr-green-500",
+  green: "bg-green-500",
   amber: "bg-amber-400",
   red:   "bg-red-400",
   none:  "bg-gray-300",
@@ -124,7 +124,7 @@ function AppCard({ app, stats, config, onToggleKill }) {
         <div className="flex items-start gap-2 min-w-0">
           <span className={`h-2 w-2 rounded-full shrink-0 mt-[5px] ${HEALTH_DOT[health]}`} />
           {/* Two-line wrap instead of truncate so names stay readable */}
-          <span className="text-[15px] font-bold text-arbr-charcoal group-hover:text-arbr-green-700 leading-snug break-words min-w-0">
+          <span className="text-[15px] font-bold text-arbr-charcoal group-hover:text-arbr-accent-700 leading-snug break-words min-w-0">
             {app}
           </span>
         </div>
@@ -190,7 +190,7 @@ function AppRow({ app, stats, config, onToggleKill }) {
   return (
     <tr className={`border-b border-gray-100 last:border-0 transition-colors hover:bg-gray-50/60 ${isKilled ? "bg-red-50/20" : neverUsed ? "bg-gray-50/30" : ""}`}>
       <td className="py-3 pl-4 pr-3">
-        <Link to={`/applications/${encodeURIComponent(app)}`} className="font-medium text-arbr-charcoal hover:text-arbr-green-700 hover:underline">
+        <Link to={`/applications/${encodeURIComponent(app)}`} className="font-medium text-arbr-charcoal hover:text-arbr-accent-700 hover:underline">
           {app}
         </Link>
       </td>
@@ -201,7 +201,7 @@ function AppRow({ app, stats, config, onToggleKill }) {
       <td className="py-3 px-3 text-sm text-arbr-charcoal tabular-nums">{stats ? fmt.ms(stats.avgLatency) : "—"}</td>
       <td className="py-3 pl-3 pr-4">
         <div className="flex items-center justify-end gap-3">
-          <Link to={`/applications/${encodeURIComponent(app)}`} className="text-xs text-arbr-green-600 hover:underline whitespace-nowrap">
+          <Link to={`/applications/${encodeURIComponent(app)}`} className="text-xs text-arbr-accent-600 hover:underline whitespace-nowrap">
             View →
           </Link>
           <Toggle checked={isActive} onChange={() => onToggleKill(app, !isKilled)} label="connected" />

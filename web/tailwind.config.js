@@ -1,24 +1,28 @@
 /** @type {import('tailwindcss').Config} */
-// Arbr design system — developer-tool aesthetic.
+// Arbr design system — monochrome charcoal-on-paper brand (projectarbr.org).
+// Chrome is charcoal/paper only. `arbr.accent` is the interactive/emphasis ramp
+// (all charcoal tints); color is reserved for semantic status, using Tailwind's
+// stock green/amber/red at call sites. Source letterforms/colors: assets/brand/.
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
         arbr: {
-          green: {
-            50:  "#f0fdf4",
-            100: "#dcfce7",
-            200: "#bbf7d0",
-            300: "#86efac",
-            400: "#4ade80",
-            500: "#22c55e",
-            600: "#16a34a",
-            700: "#15803d",
-            800: "#166534",
+          charcoal: "#171817",  // brand ink: text, primary buttons, active/interactive states
+          ink:      "#0b0b0b",  // hover / near-black
+          paper:    "#f3f2ed",  // app background (warm off-white)
+          surface:  "#ffffff",  // cards
+          // Interactive + emphasis ramp — monochrome. Formerly the brand green;
+          // now charcoal tints so nav/tabs/toggles/links/bars read as quiet chrome.
+          accent: {
+            50:  "#f4f3f0",  // subtle active/panel fill on white
+            200: "#dddbd4",  // hairline borders
+            500: "#57564f",  // muted
+            600: "#171817",  // charcoal — primary interactive
+            700: "#141413",  // text / links
+            800: "#0b0b0b",  // deep
           },
-          charcoal: "#0f172a",
-          ink:      "#020617",
         },
         gray: {
           50:  "#f9fafb",
@@ -34,7 +38,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
       },
       borderRadius: {

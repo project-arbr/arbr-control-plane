@@ -548,7 +548,7 @@ export default function Routing({ onChange }) {
             </p>
             <div className="space-y-2">
               {MODE_OPTIONS.map(([k, label, desc]) => (
-                <label key={k} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${mode === k ? "border-arbr-green-600 bg-arbr-green-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <label key={k} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${mode === k ? "border-arbr-accent-600 bg-arbr-accent-50" : "border-gray-200 hover:border-gray-300"}`}>
                   <input type="radio" name="routingMode" className="mt-1" checked={mode === k} onChange={() => changeMode(k)} />
                   <div>
                     <div className="text-sm font-medium text-arbr-charcoal">{label}</div>
