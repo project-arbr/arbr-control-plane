@@ -104,18 +104,30 @@ function RecCard({ rec, models, onChange }) {
   // Collapsed card for accepted/dismissed recommendations.
   if (rec.status !== "pending") {
     const tone = rec.status === "accepted" ? "green" : "gray";
+    const via = rec.acceptedVia || (rec.evalStatus === "passed" ? "passed" : rec.evalStatus === "overridden" ? "overridden" : null);
+    const gated = via === "passed";
     return (
       <Card>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0 overflow-hidden">
             <Badge tone={tone}>{rec.status === "accepted" ? "Accepted" : "Dismissed"}</Badge>
+            {rec.status === "accepted" && (
+              <Badge tone={gated ? "green" : "amber"}>{gated ? "Quality-gated" : "Ungated"}</Badge>
+            )}
             <span className="text-sm text-arbr-charcoal font-mono truncate">
               {rec.currentModel} → {rec.suggestedModel}
             </span>
             {rec.taskType && <span className="text-xs text-gray-400 truncate hidden sm:block">· {rec.taskType}</span>}
             {rec.application && <span className="text-xs text-gray-400 truncate hidden sm:block">· {rec.application}</span>}
           </div>
-          <span className="shrink-0 text-sm font-semibold text-arbr-accent-600">{fmt.usd(rec.projectedSavings)} saved</span>
+          <div className="shrink-0 text-right">
+            <span className={`text-sm font-semibold ${gated ? "text-green-600" : "text-amber-600"}`}>
+              {fmt.usd(rec.projectedSavings)}
+            </span>
+            <div className="text-[10px] uppercase tracking-wide text-gray-400">
+              {gated ? "quality-held" : "projected only"}
+            </div>
+          </div>
         </div>
       </Card>
     );
@@ -165,9 +177,14 @@ function RecCard({ rec, models, onChange }) {
         </div>
         <div className="border-l border-gray-100 pl-6 shrink-0 text-right">
           <div className="label mb-1">Projected saving</div>
-          <div className="text-3xl font-bold text-arbr-accent-600">{fmt.usd(rec.projectedSavings)}</div>
+          <div className={`text-3xl font-bold ${evalStatus === "passed" ? "text-green-600" : "text-amber-600"}`}>
+            {fmt.usd(rec.projectedSavings)}
+          </div>
           <div className="mt-0.5 text-xs text-gray-500">{fmt.usd(rec.currentCost)} → {fmt.usd(rec.projectedCost)}</div>
           <div className="mt-0.5 text-xs text-gray-400">{fmt.num(rec.requestCount)} requests</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wide text-gray-400">
+            {evalStatus === "passed" ? "eval-backed" : "ungated until eval passes"}
+          </div>
         </div>
       </div>
 

@@ -4,6 +4,7 @@ const RequestRecord = require("../models/RequestRecord");
 const { costFor } = require("../pricing/registry");
 const { maskMessages, maskPii, clampText } = require("./piiFilter");
 const Settings = require("../models/Settings");
+const capEngine = require("../routing/capEngine");
 
 // record: {
 //   requestId, timestamp, application, workflow, userId, department,
@@ -62,6 +63,16 @@ async function write(record) {
       outputCost,
       totalCost,
     });
+
+    // Hard budget counters: only count successful, priced spend (not blocked/failed).
+    if (record.status === "success" && totalCost > 0 && record.knownPricing !== false) {
+      setImmediate(() =>
+        capEngine.recordSpend(totalCost, {
+          application: record.application,
+          provider: record.provider,
+        }).catch(() => {})
+      );
+    }
   } catch (err) {
     // Logging failures must not affect the user-facing call.
     console.error("[logger] failed to write request record:", err.message);

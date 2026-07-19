@@ -7,6 +7,7 @@
 const {
   resolveRoute,
   invokeWithFallback,
+  buildFallbackOrder,
   getAppConfig,
 } = require("./handler");
 
@@ -22,6 +23,7 @@ function setGatewayHeaders(res, { requestId, model, provider, routing, taskType 
 module.exports = {
   resolveRoute,
   invokeWithFallback,
+  buildFallbackOrder,
   getAppConfig,
   setGatewayHeaders,
 };

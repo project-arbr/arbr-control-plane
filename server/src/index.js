@@ -5,7 +5,7 @@ const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
-const { config, describe } = require("./config");
+const { config, describe, assertProductionReady } = require("./config");
 const registry = require("./pricing/registry");
 const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
@@ -27,8 +27,23 @@ const connections = require("./providers/connections");
 const WEB_DIST = path.resolve(__dirname, "../../web/dist");
 
 async function start() {
+  // Fail closed before any network bind when running as production.
+  assertProductionReady();
+
   await mongoose.connect(config.mongoUri);
   await registry.init(); // seed ModelEntry if empty + warm in-memory cache
+
+  // Production: force data-plane API keys on so anonymous /v1 calls are rejected.
+  if (config.isProduction) {
+    const Settings = require("./models/Settings");
+    const s = await Settings.get();
+    if (!s.requireApiKey) {
+      s.requireApiKey = true;
+      await s.save();
+      Settings.invalidateCache();
+      console.warn("[boot] production: requireApiKey forced ON (data-plane keys required).");
+    }
+  }
 
   const app = express();
   // Behind a reverse proxy (nginx/ALB) this yields correct client IPs + proto.

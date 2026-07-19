@@ -61,21 +61,25 @@ router.post("/recommendations/:id/accept", async (req, res, next) => {
       application: scope.application ?? rec.application ?? null,
       workflow: scope.workflow ?? rec.workflow ?? null,
     };
+    const qualityGate = gate.status === "passed" ? "passed" : "overridden";
     const rule = await Rule.create({
       condition,
       target: { provider: rec.suggestedProvider, model: rec.suggestedModel },
       enabled: false, // human must explicitly switch it on
       createdBy: "console",
       sourceRecommendation: rec._id,
+      qualityGate,
       note: rec.title,
     });
     rec.status = "accepted";
+    rec.acceptedVia = qualityGate;
     await rec.save();
     ruleEngine.invalidate();
     setImmediate(() => logAction("recommendation.accept", "recommendation", String(rec._id), {
-      via: gate.status, ruleId: String(rule._id), candidateModel: rec.suggestedModel, evalRunId: rec.evalRunId ? String(rec.evalRunId) : null,
+      via: qualityGate, ruleId: String(rule._id), candidateModel: rec.suggestedModel,
+      evalRunId: rec.evalRunId ? String(rec.evalRunId) : null, qualityGate,
     }));
-    res.json({ recommendation: rec, rule, acceptedVia: gate.status });
+    res.json({ recommendation: rec, rule, acceptedVia: qualityGate, qualityGate });
   } catch (e) { next(e); }
 });
 

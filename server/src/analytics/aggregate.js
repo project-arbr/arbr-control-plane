@@ -113,7 +113,7 @@ async function realisedSavings(filter) {
     { $match: { ...match, status: "success", $expr: { $ne: ["$modelRequested", "$model"] } } },
     {
       $group: {
-        _id: { requested: "$modelRequested", served: "$model" },
+        _id: { requested: "$modelRequested", served: "$model", qualityGate: { $ifNull: ["$qualityGate", null] } },
         requests: { $sum: 1 },
         promptTokens: { $sum: "$promptTokens" },
         completionTokens: { $sum: "$completionTokens" },
@@ -122,12 +122,31 @@ async function realisedSavings(filter) {
     },
   ]);
   const groups = grouped.map((g) => ({
-    requested: g._id.requested, served: g._id.served, requests: g.requests,
+    requested: g._id.requested, served: g._id.served, qualityGate: g._id.qualityGate,
+    requests: g.requests,
     promptTokens: g.promptTokens, completionTokens: g.completionTokens, actualCost: g.actualCost,
   }));
   const priceOf = (modelId, p, c) =>
     pricing.getModel(modelId) ? pricing.costFor(modelId, p, c).totalCost : null;
-  return computeRealisedSavings(groups, priceOf);
+  const base = computeRealisedSavings(groups, priceOf);
+  // Split by quality trust (from the rule that served the substitution, if any).
+  let gatedSaved = 0, ungatedSaved = 0, unknownSaved = 0;
+  for (const g of groups) {
+    const baselineCost = priceOf(g.requested, g.promptTokens, g.completionTokens);
+    if (baselineCost == null || !g.requested || g.requested === "auto") continue;
+    const saved = baselineCost - g.actualCost;
+    if (g.qualityGate === "passed") gatedSaved += saved;
+    else if (g.qualityGate === "overridden" || g.qualityGate === "ungated") ungatedSaved += saved;
+    else unknownSaved += saved;
+  }
+  return {
+    ...base,
+    byQualityGate: {
+      passed: gatedSaved,
+      ungated: ungatedSaved,
+      unknown: unknownSaved,
+    },
+  };
 }
 
 // Total cost for a scope over a window — powers cost caps. dimension/value are

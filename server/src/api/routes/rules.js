@@ -25,6 +25,7 @@ router.post("/rules", async (req, res, next) => {
         workflow: condition.workflow || null,
       },
       target, enabled: !!enabled, note,
+      qualityGate: "ungated", // manual rules have no eval proof
     });
     ruleEngine.invalidate();
     setImmediate(() => logAction("rule.create", "rule", rule._id, { condition: rule.condition, target, enabled: !!enabled }));

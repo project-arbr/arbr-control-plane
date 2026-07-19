@@ -68,14 +68,40 @@ function resolveDefault(body, eff) {
   return { provider, model };
 }
 
-// Try the chosen provider; on failure, retry the remaining live providers
-// (their default model). Returns { result, usedFallback }.
+// Build the ordered list of { provider, model } attempts for a failed primary call.
+// Pure helper — exported for unit tests.
+//   same-provider (default): primary, then this provider's default model if different
+//   cross-provider: primary, then every other live provider's default model
+//   none: primary only
+function buildFallbackOrder(provider, model, liveIds, defaultModels, scope = "same-provider") {
+  const primary = { provider, model };
+  if (scope === "none") return [primary];
+  if (scope === "cross-provider") {
+    const rest = (liveIds || [])
+      .filter((p) => p !== provider)
+      .map((p) => ({ provider: p, model: defaultModels[p] }))
+      .filter((x) => x.model);
+    return [primary, ...rest];
+  }
+  // same-provider
+  const light = defaultModels[provider];
+  if (light && light !== model) return [primary, { provider, model: light }];
+  return [primary];
+}
+
+// Try the chosen provider; on failure, retry per config.fallbackScope.
+// Returns { result, usedFallback }.
 async function invokeWithFallback(router, eff, { provider, model, messages, temperature, maxTokens }) {
-  const order = [provider, ...eff.liveIds.filter((p) => p !== provider)];
+  const order = buildFallbackOrder(
+    provider,
+    model,
+    eff.liveIds,
+    config.defaultModels,
+    config.fallbackScope
+  );
   let lastErr;
   for (let i = 0; i < order.length; i++) {
-    const p = order[i];
-    const m = i === 0 ? model : config.defaultModels[p];
+    const { provider: p, model: m } = order[i];
     try {
       const result = await router.complete({
         messages,
@@ -140,7 +166,12 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
       served = { provider: route.provider, model: route.model };
       routingDecision = "rule";
       explain.basis = "rule";
-      explain.rule = { condition: route.condition || null, note: route.note || null };
+      explain.rule = {
+        condition: route.condition || null,
+        note: route.note || null,
+        qualityGate: route.qualityGate || "ungated",
+      };
+      explain.qualityGate = route.qualityGate || "ungated";
     } else if (routingMode === "ai") {
       const aiMap = appDbConfig?.aiPolicyAssignments
         ? appDbConfig.aiPolicyAssignments
@@ -224,7 +255,18 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
     }
   }
 
-  return { served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain };
+  // qualityGate: only set when a human-approved rule (or canary promote path) chose the model.
+  let qualityGate = null;
+  if (routingDecision === "rule" && explain.qualityGate) {
+    qualityGate = explain.qualityGate;
+  } else if (routingDecision === "canary") {
+    qualityGate = "passed"; // canaries require a passed offline eval before activation
+  }
+
+  return {
+    served, routingDecision, taskType, classifiedBy, cls,
+    difficulty, difficultyScore, confidence, explain, qualityGate,
+  };
 }
 
 async function handleChat(req, res) {
@@ -291,9 +333,9 @@ async function handleChat(req, res) {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
   };
-  let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain;
+  let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain, qualityGate;
   try {
-    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain } =
+    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain, qualityGate } =
       await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, userId: meta.userId, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
@@ -347,6 +389,7 @@ async function handleChat(req, res) {
         cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
       served = { provider: target.provider, model: target.model };
       routingDecision = "budget";
+      qualityGate = null; // budget override is not eval-gated
     }
   }
 
@@ -440,6 +483,7 @@ async function handleChat(req, res) {
   if (usedFallback) {
     routingDecision = "fallback";
     explain.override = { type: "fallback", from: served.model, to: result.modelId };
+    qualityGate = null;
   }
 
   // Output guardrail — deny-list checked before sending response to caller.
@@ -505,7 +549,7 @@ async function handleChat(req, res) {
       cachedReadTokens: result.usage?.cachedReadTokens || 0,
       cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
       latencyMs: result.latencyMs, gatewayOverheadMs, status: "success",
-      routingDecision, cacheHit: false,
+      routingDecision, cacheHit: false, qualityGate: qualityGate || null,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
     });
@@ -517,4 +561,13 @@ async function handleChat(req, res) {
   });
 }
 
-module.exports = { handleChat, resolveRoute, invokeWithFallback, getAppConfig };
+module.exports = {
+  handleChat,
+  resolveRoute,
+  invokeWithFallback,
+<<<<<<< /tmp/q.41179
+=======
+  buildFallbackOrder,
+>>>>>>> /tmp/g.41179
+  getAppConfig,
+};

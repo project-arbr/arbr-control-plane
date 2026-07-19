@@ -63,5 +63,14 @@ router.delete("/caps/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Realign hard CapSpend counters from analytics aggregation (ops / after bulk import).
+router.post("/caps/reconcile", async (_req, res, next) => {
+  try {
+    const result = await capEngine.reconcileFromAnalytics();
+    setImmediate(() => logAction("cap.reconcile", "cap", null, result));
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
 
 module.exports = router;

@@ -1,5 +1,6 @@
 // Admin API routes — analytics
 const express = require("express");
+const Rule = require("../../models/Rule");
 const Recommendation = require("../../models/Recommendation");
 const analytics = require("../../analytics/aggregate");
 const RoutingExperiment = require("../../models/RoutingExperiment");
@@ -57,6 +58,55 @@ router.get("/analytics/timeseries", async (req, res, next) => {
 
 router.get("/analytics/realised-savings", async (req, res, next) => {
   try { res.json(await analytics.realisedSavings(req.query)); } catch (e) { next(e); }
+});
+
+// Projected / accepted savings split by quality trust (eval-passed vs overridden vs ungated).
+// Complements realised-savings (which is measured post-route) with the governance signal:
+// how much of the optimization funnel is quality-gated.
+router.get("/analytics/savings-trust", async (_req, res, next) => {
+  try {
+    const recs = await Recommendation.aggregate([
+      { $match: { status: "accepted" } },
+      {
+        $group: {
+          _id: { $ifNull: ["$acceptedVia", "ungated"] },
+          count: { $sum: 1 },
+          projectedSavings: { $sum: "$projectedSavings" },
+        },
+      },
+    ]);
+    const byVia = { passed: { count: 0, projectedSavings: 0 }, overridden: { count: 0, projectedSavings: 0 }, ungated: { count: 0, projectedSavings: 0 } };
+    for (const r of recs) {
+      const k = byVia[r._id] ? r._id : "ungated";
+      byVia[k].count += r.count;
+      byVia[k].projectedSavings += r.projectedSavings || 0;
+    }
+    const rules = await Rule.aggregate([
+      {
+        $group: {
+          _id: { $ifNull: ["$qualityGate", "ungated"] },
+          count: { $sum: 1 },
+          enabled: { $sum: { $cond: ["$enabled", 1, 0] } },
+        },
+      },
+    ]);
+    const rulesByGate = { passed: { count: 0, enabled: 0 }, overridden: { count: 0, enabled: 0 }, ungated: { count: 0, enabled: 0 } };
+    for (const r of rules) {
+      const k = rulesByGate[r._id] ? r._id : "ungated";
+      rulesByGate[k].count += r.count;
+      rulesByGate[k].enabled += r.enabled || 0;
+    }
+    const gatedSavings = byVia.passed.projectedSavings;
+    const totalAcceptedSavings = byVia.passed.projectedSavings + byVia.overridden.projectedSavings + byVia.ungated.projectedSavings;
+    res.json({
+      recommendations: byVia,
+      rules: rulesByGate,
+      gatedProjectedSavings: gatedSavings,
+      ungatedProjectedSavings: byVia.overridden.projectedSavings + byVia.ungated.projectedSavings,
+      totalAcceptedProjectedSavings: totalAcceptedSavings,
+      gatedShare: totalAcceptedSavings > 0 ? gatedSavings / totalAcceptedSavings : null,
+    });
+  } catch (e) { next(e); }
 });
 
 router.get("/analytics/facets", async (_req, res, next) => {

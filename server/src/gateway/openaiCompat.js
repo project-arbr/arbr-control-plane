@@ -149,7 +149,7 @@ function translateToolCalls(toolCalls) {
 async function proxyOpenAICompat(ctx) {
   const {
     res, body, served, modelRequested, meta, requestId, timestamp,
-    taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, eff, router, baseURL,
+    taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, qualityGate, eff, router, baseURL,
     settings, _reqStart,
   } = ctx;
 
@@ -164,7 +164,7 @@ async function proxyOpenAICompat(ctx) {
       logger.write({
         requestId, timestamp, ...meta,
         provider: served.provider, model: served.model, modelRequested,
-        taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, cacheHit: false,
+        taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, qualityGate: qualityGate || null, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages,
         ...extra,
@@ -352,9 +352,9 @@ async function handleOpenAICompat(req, res) {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
   };
-  let served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain;
+  let served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain, qualityGate;
   try {
-    ({ served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain } =
+    ({ served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain, qualityGate } =
       await resolveRoute(normalized, { router, eff, application: meta.application, workflow: meta.workflow, userId: meta.userId, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
@@ -385,6 +385,7 @@ async function handleOpenAICompat(req, res) {
       if (explain) explain.override = { type: "budget", action: "downgrade", from: served.model, to: target.model,
         cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
       served = { provider: target.provider, model: target.model }; routingDecision = "budget";
+      qualityGate = null;
     }
   }
 
@@ -437,7 +438,7 @@ async function handleOpenAICompat(req, res) {
       routing: routingDecision, taskType });
     return proxyOpenAICompat({
       res, body, served, modelRequested, meta, requestId, timestamp,
-      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, eff, router, baseURL: compatBaseURL,
+      taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain: explain, qualityGate: qualityGate || null, eff, router, baseURL: compatBaseURL,
       settings, _reqStart,
     });
   }
@@ -514,7 +515,7 @@ async function handleOpenAICompat(req, res) {
                 requestId, timestamp, ...meta,
                 provider: served.provider, model: served.model, modelRequested,
                 taskType, classifiedBy, latencyMs: Date.now() - start,
-                status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+                status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
                 errorMessage: `guardrail_violation: ${ruleName}`,
               }));
               res.write(`data: ${JSON.stringify({ error: { message: "Response blocked by content policy.", code: "guardrail_violation", rule: ruleName } })}\n\n`);
@@ -554,7 +555,7 @@ async function handleOpenAICompat(req, res) {
               requestId, timestamp, ...meta,
               provider: served.provider, model: served.model, modelRequested,
               taskType, classifiedBy, latencyMs: Date.now() - start,
-              status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+              status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
               errorMessage: `guardrail_violation: ${ruleName}`,
             }));
             return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
@@ -585,7 +586,7 @@ async function handleOpenAICompat(req, res) {
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, difficulty, difficultyScore, confidence,
           promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
-          latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
+          latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
           knownPricing: served.knownPricing,
           messages: body.messages, responseText: chunkText(aiMsg) || null,
         })
@@ -597,7 +598,7 @@ async function handleOpenAICompat(req, res) {
           requestId, timestamp, ...meta,
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
-          status: "failure", routingDecision, routingExplain: explain, cacheHit: false, errorMessage,
+          status: "failure", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false, errorMessage,
         })
       );
       if (body.stream) {
@@ -654,14 +655,14 @@ async function handleOpenAICompat(req, res) {
           requestId, timestamp, ...meta,
           provider: served.provider, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
-          status: "failure", routingDecision, routingExplain: explain, cacheHit: false, errorMessage,
+          status: "failure", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false, errorMessage,
         })
       );
       return;
     }
 
     const { result, usedFallback } = invocation;
-    if (usedFallback) { routingDecision = "fallback"; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
+    if (usedFallback) { routingDecision = "fallback"; qualityGate = null; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
 
     const promptTokens = result.usage?.inputTokens || 0;
     const completionTokens = result.usage?.outputTokens || 0;
@@ -677,7 +678,7 @@ async function handleOpenAICompat(req, res) {
           requestId, timestamp, ...meta,
           provider: result.providerId, model: result.modelId, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
-          status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+          status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
           errorMessage: `guardrail_violation: ${ruleName}`,
         }));
         res.write(`data: ${JSON.stringify({ error: { message: "Response blocked by content policy.", code: "guardrail_violation", rule: ruleName } })}\n\n`);
@@ -722,7 +723,7 @@ async function handleOpenAICompat(req, res) {
         provider: result.providerId, model: result.modelId, modelRequested,
         taskType, classifiedBy, difficulty, difficultyScore, confidence,
         promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
-        latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
+        latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages, responseText: result.text,
       })
@@ -749,8 +750,8 @@ async function handleOpenAICompat(req, res) {
       logger.write({
         requestId, timestamp, ...meta,
         provider: served.provider, model: served.model, modelRequested,
-        taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision,
-        errorMessage, routingExplain: explain,
+        taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision, qualityGate: qualityGate || null,
+        errorMessage, routingExplain: explain, qualityGate: qualityGate || null,
       })
     );
     return res.status(502).json({
@@ -759,7 +760,7 @@ async function handleOpenAICompat(req, res) {
   }
 
   const { result, usedFallback } = invocation;
-  if (usedFallback) { routingDecision = "fallback"; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
+  if (usedFallback) { routingDecision = "fallback"; qualityGate = null; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
 
   if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
     const { blocked, ruleName } = outputGuardrail.check(result.text, settings.outputGuardrailRules, meta.application);
@@ -768,7 +769,7 @@ async function handleOpenAICompat(req, res) {
         requestId, timestamp, ...meta,
         provider: result.providerId, model: result.modelId, modelRequested,
         taskType, classifiedBy, latencyMs: result.latencyMs,
-        status: "blocked", routingDecision, routingExplain: explain, cacheHit: false,
+        status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
         errorMessage: `guardrail_violation: ${ruleName}`,
       }));
       return res.status(422).json({ error: "guardrail_violation", message: "Response blocked by content policy.", rule: ruleName });
@@ -803,7 +804,7 @@ async function handleOpenAICompat(req, res) {
       totalTokens:      result.usage?.totalTokens  || 0,
       cachedReadTokens: result.usage?.cachedReadTokens || 0,
       cacheWriteTokens: result.usage?.cacheWriteTokens || 0,
-      latencyMs: result.latencyMs, gatewayOverheadMs: _llmStart - _reqStart, status: "success", routingDecision, routingExplain: explain, cacheHit: false,
+      latencyMs: result.latencyMs, gatewayOverheadMs: _llmStart - _reqStart, status: "success", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
       knownPricing: served.knownPricing,
       messages: body.messages, responseText: result.text,
     });

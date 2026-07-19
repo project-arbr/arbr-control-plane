@@ -128,11 +128,18 @@ router.post("/routing-experiments/:id/promote", async (req, res, next) => {
       target: { provider, model: exp.candidateModel },
       enabled: true, createdBy: "console",
       sourceRecommendation: exp.recommendationId || null,
+      qualityGate: "passed", // canary promote implies quality held in production traffic
       note: `promoted canary ${exp.baselineModel} → ${exp.candidateModel}`,
     });
     exp.status = "promoted"; exp.rolloutPct = 100; exp.ruleId = rule._id; exp.approvedBy = (req.body && req.body.approvedBy) || exp.approvedBy;
     await exp.save();
-    if (exp.recommendationId) await Recommendation.findByIdAndUpdate(exp.recommendationId, { status: "accepted" });
+    if (exp.recommendationId) {
+      await Recommendation.findByIdAndUpdate(exp.recommendationId, {
+        status: "accepted",
+        acceptedVia: "passed",
+        evalStatus: "passed",
+      });
+    }
     ruleEngine.invalidate();
     canaryEngine.invalidate();
     setImmediate(() => logAction("canary.promote", "routingExperiment", String(exp._id), { ruleId: String(rule._id), candidateModel: exp.candidateModel }));

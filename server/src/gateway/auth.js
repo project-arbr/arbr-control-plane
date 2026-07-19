@@ -29,19 +29,8 @@ async function _keysByHash() {
   return _cache.byHash;
 }
 
-// In-memory per-key sliding window for rpm limits. { keyHash -> number[] (ms timestamps) }
-const _windows = new Map();
-function overRpmLimit(keyHash, rpm) {
-  if (!rpm || rpm <= 0) return false;
-  const now = Date.now();
-  const cutoff = now - 60_000;
-  let arr = _windows.get(keyHash);
-  if (!arr) _windows.set(keyHash, (arr = []));
-  while (arr.length && arr[0] < cutoff) arr.shift();
-  if (arr.length >= rpm) return true;
-  arr.push(now);
-  return false;
-}
+// Multi-replica RPM (Mongo fixed-window counters; see routing/rateLimit.js).
+const { overRpmLimit } = require("../routing/rateLimit");
 
 // Throttled lastUsedAt stamping (at most once per minute per key, async).
 const _lastStamped = new Map();
@@ -99,10 +88,10 @@ async function middleware(req, res, next) {
       ? header.slice(7).trim()
       : (req.headers["x-api-key"] || "").trim() || null;
 
-    // Global RPM check — enforced before per-key limits.
+    // Global RPM check — enforced before per-key limits (shared across replicas).
     const s = await Settings.get();
     if (s.globalRpmGuardrail) {
-      if (overRpmLimit("__global__", s.globalRpmGuardrail)) {
+      if (await overRpmLimit("__global__", s.globalRpmGuardrail)) {
         return res.status(429).json({
           error: "rate_limit_exceeded",
           message: `Global gateway rate limit of ${s.globalRpmGuardrail} req/min reached.`,
@@ -116,7 +105,7 @@ async function middleware(req, res, next) {
       if (!doc) {
         return res.status(401).json({ error: "invalid_api_key", message: "Unknown, disabled, or revoked API key." });
       }
-      if (overRpmLimit(doc.keyHash, doc.rpm)) {
+      if (await overRpmLimit(`key:${doc.keyHash}`, doc.rpm)) {
         return res.status(429).json({
           error: "rate_limited",
           message: `API key "${doc.name}" is over its ${doc.rpm} requests/minute limit.`,
