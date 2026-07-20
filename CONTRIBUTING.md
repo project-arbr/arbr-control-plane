@@ -60,6 +60,15 @@ Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`
 - [ ] Commit messages follow Conventional Commits format
 - [ ] PR description explains *why*, not just *what*
 
+## Releasing (maintainers)
+
+1. Move the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) under the new version
+   heading with today's date, and update the compare links at the bottom.
+2. Bump `"version"` in the root `package.json` to match.
+3. Merge, then tag the release commit on `main`: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+4. The [release workflow](.github/workflows/release.yml) publishes semver-tagged images
+   to GHCR. Verify the `vX.Y.Z` image appears and `docker pull` of it boots with `/health` OK.
+
 ## Reporting bugs
 
 Open a [GitHub issue](https://github.com/project-arbr/arbr-control-plane/issues/new/choose).
