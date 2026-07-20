@@ -219,10 +219,6 @@ export default function Layout({ status, user, onSignOut, children }) {
             </button>
           )}
         </div>
-
-        <div className="px-5 pb-4 pt-1 font-mono text-[10px] text-gray-400">
-          Human approves · rules override.
-        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
