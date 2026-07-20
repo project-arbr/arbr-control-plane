@@ -2,6 +2,7 @@
 const express = require("express");
 const Rule = require("../../models/Rule");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const ruleEngine = require("../../routing/ruleEngine");
 const responseCache = require("../../routing/responseCache");
 const semanticCache = require("../../routing/semanticCache");
@@ -13,7 +14,7 @@ router.get("/rules", async (_req, res, next) => {
   try { res.json(await Rule.find().sort({ createdAt: -1 }).lean()); } catch (e) { next(e); }
 });
 
-router.post("/rules", async (req, res, next) => {
+router.post("/rules", requireRole("operator"), async (req, res, next) => {
   try {
     const { condition = {}, target, enabled = false, note = "" } = req.body || {};
     if (!target || !target.provider || !target.model) {
@@ -29,13 +30,13 @@ router.post("/rules", async (req, res, next) => {
       qualityGate: "ungated", // manual rules have no eval proof
     });
     ruleEngine.invalidate();
-    setImmediate(() => logAction("rule.create", "rule", rule._id, { condition: rule.condition, target, enabled: !!enabled }));
+    setImmediate(() => logAction("rule.create", "rule", rule._id, { condition: rule.condition, target, enabled: !!enabled }, req.user));
     res.json(rule);
   } catch (e) { next(e); }
 });
 
 // Toggle / update enabled state.
-router.patch("/rules/:id", async (req, res, next) => {
+router.patch("/rules/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const update = {};
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
@@ -43,29 +44,29 @@ router.patch("/rules/:id", async (req, res, next) => {
     const rule = await Rule.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!rule) return res.status(404).json({ error: "not found" });
     ruleEngine.invalidate();
-    setImmediate(() => logAction("rule.update", "rule", req.params.id, update));
+    setImmediate(() => logAction("rule.update", "rule", req.params.id, update, req.user));
     res.json(rule);
   } catch (e) { next(e); }
 });
 
-router.delete("/rules/:id", async (req, res, next) => {
+router.delete("/rules/:id", requireRole("operator"), async (req, res, next) => {
   try {
     await Rule.findByIdAndDelete(req.params.id);
     ruleEngine.invalidate();
-    setImmediate(() => logAction("rule.delete", "rule", req.params.id, null));
+    setImmediate(() => logAction("rule.delete", "rule", req.params.id, null, req.user));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
 
 // Clear the in-memory response cache (useful when testing routing on repeated prompts).
-router.post("/cache/clear", (_req, res) => {
+router.post("/cache/clear", requireRole("operator"), (_req, res) => {
   responseCache.clear();
   res.json({ cleared: true });
 });
 
 // Clear the semantic (embedding-based) cache independently.
-router.post("/cache/semantic/clear", (_req, res) => {
+router.post("/cache/semantic/clear", requireRole("operator"), (_req, res) => {
   semanticCache.clear();
   res.json({ cleared: true, size: 0 });
 });
@@ -80,7 +81,7 @@ router.get("/routing-mode", async (_req, res, next) => {
   try { res.json({ routingMode: await ruleEngine.getRoutingMode() }); } catch (e) { next(e); }
 });
 
-router.put("/routing-mode", async (req, res, next) => {
+router.put("/routing-mode", requireRole("administrator"), async (req, res, next) => {
   try {
     const mode = await ruleEngine.setRoutingMode(req.body?.mode);
     res.json({ routingMode: mode });

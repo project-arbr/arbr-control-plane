@@ -1,6 +1,7 @@
 // Admin API routes — governance
 const express = require("express");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const Settings = require("../../models/Settings");
 const { config } = require("../../config");
 
@@ -38,7 +39,7 @@ router.get("/governance", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.patch("/governance", async (req, res, next) => {
+router.patch("/governance", requireRole("administrator"), async (req, res, next) => {
   try {
     const body = req.body || {};
     const update = {};
@@ -88,7 +89,7 @@ router.patch("/governance", async (req, res, next) => {
     await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
     Settings.invalidateCache();
     const s = await Settings.get();
-    setImmediate(() => logAction("governance.update", "settings", "global", body));
+    setImmediate(() => logAction("governance.update", "settings", "global", body, req.user));
     res.json(governanceView(s));
   } catch (e) { next(e); }
 });

@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
 const { config, describe, assertProductionReady } = require("./config");
 const registry = require("./pricing/registry");
@@ -20,7 +21,9 @@ const { supportsTools } = require("./gateway/capabilities");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
 const adminRateLimit = require("./api/adminRateLimit");
+const csrf = require("./api/csrf");
 const apiRoutes = require("./api/routes");
+const authRoutes = require("./api/routes/auth");
 const connections = require("./providers/connections");
 
 // Built dashboard (created by `npm --prefix web run build`). When present, the
@@ -51,9 +54,22 @@ async function start() {
   app.set("trust proxy", true);
   app.use(cors({
     origin: config.corsOrigin,
+    // Sessions (F-04) ride in an httpOnly cookie — the browser only attaches it
+    // cross-origin (Vite :5173 → server :4100 in dev) when both this and the
+    // fetch call (see web/src/api.js) opt into credentialed requests.
+    credentials: true,
     exposedHeaders: ["X-Arbr-Request-ID", "X-Arbr-Model", "X-Arbr-Provider", "X-Arbr-Routing", "X-Arbr-Task-Type"],
   }));
   app.use(express.json({ limit: "2mb" }));
+  // CSRF protection IS applied — see csrf.protection two lines below
+  // (double-submit cookie via csrf-csrf, tested in
+  // server/test/integration/csrf.test.js). CodeQL's model doesn't recognize
+  // this library the way it recognizes csurf, so it still flags this line.
+  // codeql[js/missing-token-validation]
+  app.use(cookieParser());
+  // Mounted globally so every route is structurally CSRF-protected; only
+  // requests carrying a session cookie are actually validated (see csrf.js).
+  app.use(csrf.protection);
 
   // Liveness. `demoMode` reflects the EFFECTIVE provider state (env creds +
   // dashboard-connected creds), matching the console and gateway routing — not
@@ -131,8 +147,12 @@ async function start() {
     }
   });
 
-  // Dashboard / admin API — master-key gated when ARBR_ADMIN_KEY is set,
-  // rate-limited per source IP (see adminRateLimit.js).
+  // Identity endpoints (login/callback/logout/mode/me) — must be reachable
+  // before a session exists, so mounted ahead of adminAuth.middleware.
+  app.use("/api/auth", adminRateLimit.middleware, authRoutes);
+
+  // Dashboard / admin API — master-key or per-user identity gated (see
+  // adminAuth.js), rate-limited per source IP (see adminRateLimit.js).
   app.use("/api", adminRateLimit.middleware, adminAuth.middleware, apiRoutes);
 
   // Serve the built dashboard if it exists (single-port mode).
@@ -144,11 +164,13 @@ async function start() {
     });
   }
 
-  // Error handler.
-  // eslint-disable-next-line no-unused-vars
+  // Error handler. Respects a thrown error's own status (e.g. csrf-csrf's
+  // ForbiddenError is a real 403, not a server fault) instead of flattening
+  // everything to 500.
   app.use((err, _req, res, _next) => {
-    console.error("[api] error:", err);
-    res.status(500).json({ error: "internal_error", message: String(err.message || err) });
+    const status = err.status || err.statusCode || 500;
+    if (status >= 500) console.error("[api] error:", err);
+    res.status(status).json({ error: err.code || "internal_error", message: String(err.message || err) });
   });
 
   // Daily purge of request records older than the configured retention window.
@@ -170,6 +192,11 @@ async function start() {
   const server = http.createServer(app);
   server.on("upgrade", handleUpgrade);
   server.listen(config.port, config.host, () => {
+    // describe() masks the one credential-bearing value it prints
+    // (MONGO_URI, via maskMongoUri in config.js); everything else in the
+    // boot summary is non-secret operational config (ports, auth mode,
+    // issuer URL) meant to be visible in server logs.
+    // codeql[js/clear-text-logging]
     console.log("\n" + describe() + "\n");
     console.log(`  ready:       http://localhost:${config.port}`);
     console.log(`  gateway:     POST http://localhost:${config.port}/v1/chat`);

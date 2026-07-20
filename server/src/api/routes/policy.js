@@ -2,6 +2,7 @@
 const express = require("express");
 const RequestRecord = require("../../models/RequestRecord");
 const policyEngine = require("../../routing/policy");
+const { requireRole } = require("../rbac");
 const { TASK_TYPES } = require("../../classify/classifier");
 const pricing = require("../../pricing/registry");
 
@@ -18,7 +19,7 @@ router.get("/policy", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put("/policy", async (req, res, next) => {
+router.put("/policy", requireRole("administrator"), async (req, res, next) => {
   try {
     const body = req.body || {};
     // Validate task types against built-in catalog + any task types observed in traffic.

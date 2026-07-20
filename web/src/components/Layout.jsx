@@ -67,6 +67,14 @@ const icons = {
       <line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>
     </Icon>
   ),
+  users: (
+    <Icon>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </Icon>
+  ),
   docs: (
     <Icon>
       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
@@ -82,28 +90,35 @@ const icons = {
 };
 
 // ── Navigation definition ─────────────────────────────────────────────────────
-const NAV_GROUPS = [
-  { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
-    { to: "/models",   label: "Models",   icon: icons.models },
-    { to: "/settings", label: "Settings", icon: icons.settings },
-  ] },
-  { section: "See", hint: "Know what you're spending, and where", items: [
-    { to: "/", label: "Overview", end: true, icon: icons.overview },
-    { to: "/applications", label: "Applications", icon: icons.applications },
-  ] },
-  { section: "Recommend", hint: "Where a cheaper model fits", items: [
-    { to: "/recommendations", label: "Recommendations", icon: icons.recommend },
-  ] },
-  { section: "Route", hint: "Send traffic to the right model", items: [
-    { to: "/routing", label: "Routing",     icon: icons.routing },
-    { to: "/evals",   label: "Model Evals", icon: icons.evals },
-  ] },
-  { section: "Govern", hint: "Limits, guardrails, and records", items: [
+// "Users" only appears for administrators — under adminkey mode (no per-user
+// identity, req.user is the implicit master-key administrator) it always
+// shows, matching what the API actually allows.
+function buildNavGroups(canManageUsers) {
+  const govern = [
     { to: "/budgets",    label: "Budgets",    icon: icons.budgets },
     { to: "/governance", label: "Governance", icon: icons.governance },
     { to: "/audit",      label: "Audit",      icon: icons.audit },
-  ] },
-];
+  ];
+  if (canManageUsers) govern.push({ to: "/users", label: "Users", icon: icons.users });
+  return [
+    { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
+      { to: "/models",   label: "Models",   icon: icons.models },
+      { to: "/settings", label: "Settings", icon: icons.settings },
+    ] },
+    { section: "See", hint: "Know what you're spending, and where", items: [
+      { to: "/", label: "Overview", end: true, icon: icons.overview },
+      { to: "/applications", label: "Applications", icon: icons.applications },
+    ] },
+    { section: "Recommend", hint: "Where a cheaper model fits", items: [
+      { to: "/recommendations", label: "Recommendations", icon: icons.recommend },
+    ] },
+    { section: "Route", hint: "Send traffic to the right model", items: [
+      { to: "/routing", label: "Routing",     icon: icons.routing },
+      { to: "/evals",   label: "Model Evals", icon: icons.evals },
+    ] },
+    { section: "Govern", hint: "Limits, guardrails, and records", items: govern },
+  ];
+}
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
 
 function navClass({ isActive }) {
@@ -118,8 +133,10 @@ function Wordmark() {
   return <Logo className="h-5 w-auto text-arbr-charcoal" />;
 }
 
-export default function Layout({ status, onSignOut, children }) {
+export default function Layout({ status, user, onSignOut, children }) {
   const [collapsed, setCollapsed] = useState(new Set());
+  const canManageUsers = !user || user.role === "administrator";
+  const NAV_GROUPS = buildNavGroups(canManageUsers);
 
   function toggleSection(section) {
     setCollapsed((prev) => {
@@ -178,11 +195,17 @@ export default function Layout({ status, onSignOut, children }) {
         </nav>
 
         <div className="px-2 pb-2">
+          {user && (
+            <div className="mx-1 mb-1 px-3 py-1.5">
+              <div className="truncate text-[13px] font-medium text-gray-700" title={user.email}>{user.email}</div>
+              <div className="text-[10.5px] uppercase tracking-widest text-gray-400">{user.role}</div>
+            </div>
+          )}
           <NavLink to={FOOTER_LINK.to} className={navClass}>
             {FOOTER_LINK.icon}
             {FOOTER_LINK.label}
           </NavLink>
-          {getAdminToken() && onSignOut && (
+          {(getAdminToken() || user) && onSignOut && (
             <button
               onClick={onSignOut}
               className="mx-1 mt-0.5 flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-900"

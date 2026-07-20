@@ -3,6 +3,7 @@ const express = require("express");
 const Rule = require("../../models/Rule");
 const Recommendation = require("../../models/Recommendation");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const ruleEngine = require("../../routing/ruleEngine");
 const pricing = require("../../pricing/registry");
 const EvalRun = require("../../models/EvalRun");
@@ -25,6 +26,13 @@ function sanitizeGuardrails(g) {
   };
 }
 
+// A client can supply an override *reason*, but never who approved it — the
+// approver is always the authenticated caller, not a self-reported string.
+function trustedOverride(body, user) {
+  const reason = body && body.override && body.override.reason;
+  return reason ? { reason, approver: user.email } : null;
+}
+
 // ── Routing experiments (canary rollout, Phase 3) ─────────────────────────────
 router.get("/routing-experiments", async (req, res, next) => {
   try {
@@ -43,15 +51,16 @@ router.get("/routing-experiments/:id", async (req, res, next) => {
 // Create a canary directly (not from a recommendation) — e.g. from a passed offline eval.
 // Same gate as shadow/recommendation: a passed offline run (requiredEvalRunId) or an override.
 // Only auto-routed traffic is affected.
-router.post("/routing-experiments", async (req, res, next) => {
+router.post("/routing-experiments", requireRole("operator"), async (req, res, next) => {
   try {
     const b = req.body || {};
     if (!b.application) return res.status(400).json({ error: "application is required" });
     if (!b.baselineModel) return res.status(400).json({ error: "baselineModel is required" });
     if (!b.candidateModel) return res.status(400).json({ error: "candidateModel is required" });
 
+    const override = trustedOverride(b, req.user);
     const offlineRun = b.requiredEvalRunId ? await EvalRun.findById(b.requiredEvalRunId).lean().catch(() => null) : null;
-    const gate = evalThresholds.canActivateShadow(offlineRun, b.override);
+    const gate = evalThresholds.canActivateShadow(offlineRun, override);
     if (!gate.allowed) return res.status(409).json({ error: "eval_required", message: gate.reason });
 
     const exp = await RoutingExperiment.create({
@@ -62,22 +71,23 @@ router.post("/routing-experiments", async (req, res, next) => {
       rolloutPct: b.rolloutPct != null ? Math.min(100, Math.max(0, Number(b.rolloutPct))) : 10,
       guardrails: sanitizeGuardrails(b.guardrails),
       metricsWindowMinutes: b.metricsWindowMinutes != null ? Math.max(5, Number(b.metricsWindowMinutes)) : 60,
-      status: "active", createdBy: "console", approvedBy: b.approvedBy || (b.override && b.override.approver) || null,
+      status: "active", createdBy: "console", approvedBy: req.user.email,
     });
     canaryEngine.invalidate();
-    setImmediate(() => logAction("canary.create", "routingExperiment", String(exp._id), { application: b.application, candidateModel: b.candidateModel, rolloutPct: exp.rolloutPct }));
+    setImmediate(() => logAction("canary.create", "routingExperiment", String(exp._id), { application: b.application, candidateModel: b.candidateModel, rolloutPct: exp.rolloutPct }, req.user));
     res.status(201).json(exp);
   } catch (e) { next(e); }
 });
 
 // Create a canary from a passed recommendation (only auto-routed traffic is affected).
-router.post("/recommendations/:id/create-canary", async (req, res, next) => {
+router.post("/recommendations/:id/create-canary", requireRole("operator"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
     const b = req.body || {};
+    const override = trustedOverride(b, req.user);
     const offlineRun = rec.evalRunId ? await EvalRun.findById(rec.evalRunId).lean().catch(() => null) : null;
-    const gate = evalThresholds.canActivateShadow(offlineRun, b.override); // same "passed offline or override" bar
+    const gate = evalThresholds.canActivateShadow(offlineRun, override); // same "passed offline or override" bar
     if (!gate.allowed) return res.status(409).json({ error: "eval_required", message: gate.reason });
 
     const exp = await RoutingExperiment.create({
@@ -88,17 +98,17 @@ router.post("/recommendations/:id/create-canary", async (req, res, next) => {
       rolloutPct: b.rolloutPct != null ? Math.min(100, Math.max(0, Number(b.rolloutPct))) : 10,
       guardrails: sanitizeGuardrails(b.guardrails),
       metricsWindowMinutes: b.metricsWindowMinutes != null ? Math.max(5, Number(b.metricsWindowMinutes)) : 60,
-      status: "active", createdBy: "console", approvedBy: b.approvedBy || null,
+      status: "active", createdBy: "console", approvedBy: req.user.email,
     });
     rec.experimentId = exp._id;
     await rec.save();
     canaryEngine.invalidate();
-    setImmediate(() => logAction("canary.create", "routingExperiment", String(exp._id), { recommendationId: String(rec._id), rolloutPct: exp.rolloutPct }));
+    setImmediate(() => logAction("canary.create", "routingExperiment", String(exp._id), { recommendationId: String(rec._id), rolloutPct: exp.rolloutPct }, req.user));
     res.status(201).json(exp);
   } catch (e) { next(e); }
 });
 
-router.patch("/routing-experiments/:id", async (req, res, next) => {
+router.patch("/routing-experiments/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const b = req.body || {};
     const update = {};
@@ -109,13 +119,13 @@ router.patch("/routing-experiments/:id", async (req, res, next) => {
     const exp = await RoutingExperiment.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).lean();
     if (!exp) return res.status(404).json({ error: "not found" });
     canaryEngine.invalidate();
-    setImmediate(() => logAction("canary.update", "routingExperiment", req.params.id, update));
+    setImmediate(() => logAction("canary.update", "routingExperiment", req.params.id, update, req.user));
     res.json(exp);
   } catch (e) { next(e); }
 });
 
 // Manual rollback — stop diverting traffic; the candidate is abandoned but logs are kept.
-router.post("/routing-experiments/:id/rollback", async (req, res, next) => {
+router.post("/routing-experiments/:id/rollback", requireRole("operator"), async (req, res, next) => {
   try {
     const reason = (req.body && req.body.reason) || "manual rollback";
     const exp = await RoutingExperiment.findByIdAndUpdate(
@@ -123,13 +133,13 @@ router.post("/routing-experiments/:id/rollback", async (req, res, next) => {
     ).lean();
     if (!exp) return res.status(404).json({ error: "not found" });
     canaryEngine.invalidate();
-    setImmediate(() => logAction("canary.rollback", "routingExperiment", req.params.id, { reason }));
+    setImmediate(() => logAction("canary.rollback", "routingExperiment", req.params.id, { reason }, req.user));
     res.json(exp);
   } catch (e) { next(e); }
 });
 
 // Promote — go to 100% by creating an ENABLED, reversible rule and marking the rec accepted.
-router.post("/routing-experiments/:id/promote", async (req, res, next) => {
+router.post("/routing-experiments/:id/promote", requireRole("operator"), async (req, res, next) => {
   try {
     const exp = await RoutingExperiment.findById(req.params.id);
     if (!exp) return res.status(404).json({ error: "not found" });
@@ -144,7 +154,7 @@ router.post("/routing-experiments/:id/promote", async (req, res, next) => {
       qualityGate: "passed", // canary promote implies quality held in production traffic
       note: `promoted canary ${exp.baselineModel} → ${exp.candidateModel}`,
     });
-    exp.status = "promoted"; exp.rolloutPct = 100; exp.ruleId = rule._id; exp.approvedBy = (req.body && req.body.approvedBy) || exp.approvedBy;
+    exp.status = "promoted"; exp.rolloutPct = 100; exp.ruleId = rule._id; exp.approvedBy = req.user.email;
     await exp.save();
     if (exp.recommendationId) {
       await Recommendation.findByIdAndUpdate(exp.recommendationId, {
@@ -155,12 +165,12 @@ router.post("/routing-experiments/:id/promote", async (req, res, next) => {
     }
     ruleEngine.invalidate();
     canaryEngine.invalidate();
-    setImmediate(() => logAction("canary.promote", "routingExperiment", String(exp._id), { ruleId: String(rule._id), candidateModel: exp.candidateModel }));
+    setImmediate(() => logAction("canary.promote", "routingExperiment", String(exp._id), { ruleId: String(rule._id), candidateModel: exp.candidateModel }, req.user));
     res.json({ experiment: exp, rule });
   } catch (e) { next(e); }
 });
 
-router.post("/recommendations/:id/dismiss", async (req, res, next) => {
+router.post("/recommendations/:id/dismiss", requireRole("operator"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findByIdAndUpdate(
       req.params.id, { status: "dismissed" }, { new: true }

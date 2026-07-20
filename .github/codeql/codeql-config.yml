@@ -1,0 +1,10 @@
+name: "Arbr CodeQL config"
+
+# Test harnesses intentionally build minimal Express apps that skip
+# production middleware (rate limiting, CSRF, real auth) to isolate the
+# route logic under test — that's not a vulnerability in the app itself.
+# Excluding test dirs avoids re-litigating that tradeoff on every new test file.
+paths-ignore:
+  - server/test
+  - clients/js/test
+  - clients/python/tests

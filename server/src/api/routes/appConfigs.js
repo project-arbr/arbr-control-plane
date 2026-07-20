@@ -1,6 +1,7 @@
 // Admin API routes — appConfigs
 const express = require("express");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const aiPolicy = require("../../routing/aiPolicy");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 const Settings = require("../../models/Settings");
@@ -27,7 +28,7 @@ router.get("/app-configs/:app", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put("/app-configs/:app", async (req, res, next) => {
+router.put("/app-configs/:app", requireRole("operator"), async (req, res, next) => {
   try {
     const { killSwitchEnabled, killSwitchMessage, modelOptOut, aiPolicyAssignments } = req.body || {};
     const update = {};
@@ -40,12 +41,12 @@ router.put("/app-configs/:app", async (req, res, next) => {
       { $set: update },
       { new: true, upsert: true }
     ).lean();
-    setImmediate(() => logAction("appConfig.update", "appConfig", req.params.app, update));
+    setImmediate(() => logAction("appConfig.update", "appConfig", req.params.app, update, req.user));
     res.json(cfg);
   } catch (e) { next(e); }
 });
 
-router.post("/app-configs/:app/generate-policy", async (req, res, next) => {
+router.post("/app-configs/:app/generate-policy", requireRole("operator"), async (req, res, next) => {
   try {
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "no live providers — cannot generate policy" });
@@ -58,7 +59,7 @@ router.post("/app-configs/:app/generate-policy", async (req, res, next) => {
       { $set: { aiPolicyAssignments: assignments } },
       { new: true, upsert: true }
     ).lean();
-    setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels, goal }));
+    setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels, goal }, req.user));
     const simulation = await aiPolicy.simulate({ assignments, application: req.params.app, windowDays: Number(req.body?.windowDays) || 14 });
     res.json({ assignments, generatedAt, generatorModel: generatorModel.id, cfg, simulation });
   } catch (e) { next(e); }
@@ -76,14 +77,14 @@ router.post("/app-configs/:app/simulate", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/app-configs/:app/set-default-policy", async (req, res, next) => {
+router.post("/app-configs/:app/set-default-policy", requireRole("administrator"), async (req, res, next) => {
   try {
     const cfg = await ApplicationConfig.findOne({ applicationName: req.params.app }).lean();
     if (!cfg?.aiPolicyAssignments) return res.status(400).json({ error: "No custom policy set for this application." });
     await Settings.updateOne({ key: "global" }, { $set: { aiPolicy: cfg.aiPolicyAssignments } }, { upsert: true });
     Settings.invalidateCache();
     aiPolicy.invalidate?.();
-    setImmediate(() => logAction("appConfig.setDefaultPolicy", "settings", "global", { from: req.params.app }));
+    setImmediate(() => logAction("appConfig.setDefaultPolicy", "settings", "global", { from: req.params.app }, req.user));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

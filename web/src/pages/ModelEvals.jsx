@@ -517,7 +517,7 @@ function CanarySection() {
 
   const act = async (fn) => { setErr(null); try { await fn(); load(); } catch (e) { setErr(e.message); } };
   const rollback = (id) => act(() => api.rollbackExperiment(id, "manual rollback from dashboard"));
-  const promote = (id) => act(() => api.promoteExperiment(id, "console"));
+  const promote = (id) => act(() => api.promoteExperiment(id));
 
   const cols = [
     { key: "models", header: "Baseline → candidate", render: (e) => <span>{e.baselineModel} → <b>{e.candidateModel}</b></span> },
@@ -542,11 +542,11 @@ function CanarySection() {
   );
 }
 
-// In-app override dialog (replaces a chain of native window.prompt calls) — collects a reason +
-// approver to start a gated stage without a passed eval. Deliberate escape hatch, clearly labelled.
+// In-app override dialog (replaces a chain of native window.prompt calls) — collects a reason
+// to start a gated stage without a passed eval. Deliberate escape hatch, clearly labelled.
+// The approver is the signed-in user, recorded server-side — not entered here.
 function OverrideDialog({ title, message, onConfirm, onCancel }) {
   const [reason, setReason] = useState("");
-  const [approver, setApprover] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -557,15 +557,11 @@ function OverrideDialog({ title, message, onConfirm, onCancel }) {
             <div className="label mb-1">Override reason</div>
             <input className="input w-full" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why start without a passed eval?" />
           </div>
-          <div>
-            <div className="label mb-1">Approver</div>
-            <input className="input w-full" value={approver} onChange={(e) => setApprover(e.target.value)} placeholder="your name" />
-          </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn-primary" disabled={!reason.trim() || !approver.trim()}
-            onClick={() => onConfirm({ reason: reason.trim(), approver: approver.trim() })}>Start anyway</button>
+          <button className="btn-primary" disabled={!reason.trim()}
+            onClick={() => onConfirm({ reason: reason.trim() })}>Start anyway</button>
         </div>
       </div>
     </div>
@@ -867,9 +863,9 @@ export default function ModelEvals() {
       else setErr(e.message);
     }
   };
-  const confirmOverride = async ({ reason, approver }) => {
+  const confirmOverride = async ({ reason }) => {
     const c = override.campaign; setOverride(null); setErr(null);
-    try { await api.updateEvalCampaign(c._id, { status: "active", override: { reason, approver } }); load(); }
+    try { await api.updateEvalCampaign(c._id, { status: "active", override: { reason } }); load(); }
     catch (e) { setErr(e.message); }
   };
   const remove = async (c) => { setConfirmDel(null); await api.deleteEvalCampaign(c._id); load(); };

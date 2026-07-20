@@ -32,6 +32,9 @@ Everything is served by **one process on one port** (`PORT`, default 4100): the 
 - Exception by design: `GET /api/status` also accepts a valid **gateway** key, so SDK
   healthchecks (`client.status()`) work without the admin credential. `/health` is public
   (liveness only, no data).
+- For more than one operator, `ARBR_ADMIN_KEY` alone doesn't give individual revocation or
+  per-user audit attribution — see [Accountable admin access](docs/auth.md) for OIDC / GCP IAP /
+  reverse-proxy modes that add real per-user identity on top of the same gate.
 
 Generate strong keys:
 

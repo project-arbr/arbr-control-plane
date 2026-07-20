@@ -14,9 +14,13 @@ const apiRoutes = require("../../src/api/routes");
 let mongod;
 let agent;
 
+// Tests mount apiRoutes directly (bypassing adminAuth.middleware), so req.user
+// must be stubbed the same way adminAuth would set it in adminkey/master-key mode.
+const stubAdmin = (req, _res, next) => { req.user = { id: "test", email: "test-admin@test", role: "administrator" }; next(); };
 function buildApp() {
   const app = express();
   app.use(express.json());
+  app.use(stubAdmin);
   app.use("/api", apiRoutes);
   return app;
 }

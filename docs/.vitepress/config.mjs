@@ -61,6 +61,7 @@ export default defineConfig({
           { text: 'Routing', link: '/routing' },
           { text: 'Model registry', link: '/models' },
           { text: 'Budgets & governance', link: '/budgets' },
+          { text: 'Accountable admin access', link: '/auth' },
         ]
       },
       {

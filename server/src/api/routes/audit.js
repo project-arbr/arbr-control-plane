@@ -31,12 +31,14 @@ router.get("/audit/export", async (req, res, next) => {
     }
     const rows = await AuditLog.find(match).sort({ timestamp: -1 }).limit(10000).lean();
     const header = "timestamp,action,entity,entityId,actor,changes\n";
+    // actor is a plain string on pre-F-04 rows, { id, email, role } on new ones.
+    const actorDisplay = (actor) => (typeof actor === "string" ? actor : actor && actor.email) || "unknown";
     const csv = rows.map((r) => [
       new Date(r.timestamp).toISOString(),
       r.action || "",
       r.entity || "",
       r.entityId || "",
-      r.actor || "admin",
+      actorDisplay(r.actor),
       JSON.stringify(r.changes || {}).replace(/"/g, '""'),
     ].map((v) => `"${v}"`).join(",")).join("\n");
     res.setHeader("Content-Type", "text/csv");

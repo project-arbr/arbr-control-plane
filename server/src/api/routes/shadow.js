@@ -2,6 +2,7 @@
 const express = require("express");
 const Recommendation = require("../../models/Recommendation");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const EvalCampaign = require("../../models/EvalCampaign");
 const EvalPair = require("../../models/EvalPair");
 const EvalRun = require("../../models/EvalRun");
@@ -10,6 +11,13 @@ const { summarizeEvalPairs } = require("../../eval/logic");
 const evalThresholds = require("../../eval/thresholds");
 
 const router = express.Router();
+
+// A client can supply an override *reason*, but never who approved it — the
+// approver is always the authenticated caller, not a self-reported string.
+function trustedOverride(body, user) {
+  const reason = body && body.override && body.override.reason;
+  return reason ? { reason, approver: user.email } : null;
+}
 
 // ── Shadow-eval campaigns ─────────────────────────────────────────────────────
 router.get("/eval/campaigns", async (req, res, next) => {
@@ -22,11 +30,11 @@ router.get("/eval/campaigns", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/eval/campaigns", async (req, res, next) => {
+router.post("/eval/campaigns", requireRole("operator"), async (req, res, next) => {
   try {
     const b = req.body || {};
     const { application, candidateModel, judgeModel, sampleRate, thresholds, name, baselineModel, scope,
-      requiredEvalRunId, maxDailyShadowBudgetUsd, maxCandidateErrors, startDate, endDate, override } = b;
+      requiredEvalRunId, maxDailyShadowBudgetUsd, maxCandidateErrors, startDate, endDate } = b;
     if (!application) return res.status(400).json({ error: "application is required" });
     if (!candidateModel) return res.status(400).json({ error: "candidateModel is required" });
 
@@ -34,7 +42,7 @@ router.post("/eval/campaigns", async (req, res, next) => {
     // otherwise it is created PAUSED with the reason, ready to activate once the eval passes.
     const wantActive = b.status !== "paused";
     const offlineRun = requiredEvalRunId ? await EvalRun.findById(requiredEvalRunId).lean().catch(() => null) : null;
-    const gate = evalThresholds.canActivateShadow(offlineRun, override);
+    const gate = evalThresholds.canActivateShadow(offlineRun, trustedOverride(b, req.user));
     const status = wantActive && gate.allowed ? "active" : "paused";
     const statusReason = status === "paused" && wantActive ? gate.reason : null;
 
@@ -55,7 +63,7 @@ router.post("/eval/campaigns", async (req, res, next) => {
       },
     });
     invalidateCampaignCache();
-    setImmediate(() => logAction("evalCampaign.create", "evalCampaign", String(doc._id), { application, candidateModel, status }));
+    setImmediate(() => logAction("evalCampaign.create", "evalCampaign", String(doc._id), { application, candidateModel, status }, req.user));
     res.status(201).json(doc);
   } catch (e) { next(e); }
 });
@@ -74,7 +82,7 @@ router.get("/eval/campaigns/:id", async (req, res, next) => {
 });
 
 // Start a shadow campaign directly from a recommendation (requires its offline eval passed).
-router.post("/recommendations/:id/start-shadow", async (req, res, next) => {
+router.post("/recommendations/:id/start-shadow", requireRole("operator"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
@@ -83,7 +91,7 @@ router.post("/recommendations/:id/start-shadow", async (req, res, next) => {
     if (!application) return res.status(400).json({ error: "application is required (recommendations are not app-scoped)" });
 
     const offlineRun = rec.evalRunId ? await EvalRun.findById(rec.evalRunId).lean().catch(() => null) : null;
-    const gate = evalThresholds.canActivateShadow(offlineRun, b.override);
+    const gate = evalThresholds.canActivateShadow(offlineRun, trustedOverride(b, req.user));
     if (!gate.allowed) return res.status(409).json({ error: "eval_required", message: gate.reason });
 
     const campaign = await EvalCampaign.create({
@@ -101,7 +109,7 @@ router.post("/recommendations/:id/start-shadow", async (req, res, next) => {
     rec.shadowCampaignId = campaign._id;
     await rec.save();
     invalidateCampaignCache();
-    setImmediate(() => logAction("eval.shadow.start", "evalCampaign", String(campaign._id), { recommendationId: String(rec._id), via: offlineRun?.status === "passed" ? "passed" : "override" }));
+    setImmediate(() => logAction("eval.shadow.start", "evalCampaign", String(campaign._id), { recommendationId: String(rec._id), via: offlineRun?.status === "passed" ? "passed" : "override" }, req.user));
     res.status(201).json(campaign);
   } catch (e) { next(e); }
 });
@@ -113,7 +121,7 @@ router.get("/eval/campaigns/:id/pairs", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.patch("/eval/campaigns/:id", async (req, res, next) => {
+router.patch("/eval/campaigns/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const b = req.body || {};
     const existing = await EvalCampaign.findById(req.params.id).lean().catch(() => null);
@@ -125,7 +133,7 @@ router.patch("/eval/campaigns/:id", async (req, res, next) => {
       if (b.status === "active" && existing.status !== "active") {
         const runId = b.requiredEvalRunId || existing.requiredEvalRunId;
         const offlineRun = runId ? await EvalRun.findById(runId).lean().catch(() => null) : null;
-        const gate = evalThresholds.canActivateShadow(offlineRun, b.override);
+        const gate = evalThresholds.canActivateShadow(offlineRun, trustedOverride(b, req.user));
         if (!gate.allowed) return res.status(409).json({ error: "eval_required", message: gate.reason });
         update.statusReason = null;
         update.candidateErrorCount = 0; // reset the safety counter on a fresh activation
@@ -151,7 +159,7 @@ router.patch("/eval/campaigns/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/eval/campaigns/:id", async (req, res, next) => {
+router.delete("/eval/campaigns/:id", requireRole("operator"), async (req, res, next) => {
   try {
     await EvalCampaign.findByIdAndDelete(req.params.id);
     await EvalPair.deleteMany({ campaignId: req.params.id });
