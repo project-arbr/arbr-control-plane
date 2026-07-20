@@ -1,6 +1,6 @@
 # Deployment
 
-One standalone instance per organisation — the same model as a LiteLLM proxy or shared MLflow tracking server. A single VM with Docker Compose; TLS terminated by nginx or an ALB.
+One standalone instance per organisation — the same model as a LiteLLM proxy or shared MLflow tracking server. A single VM with Docker Compose 2.24.4 or newer; TLS terminated by nginx or an ALB.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ cp .env.example .env
 #   ARBR_ENCRYPTION_KEY=<generate>
 #   SEED_ON_BOOT=false          ← REQUIRED in production
 #   OPENAI_API_KEY=sk-...       ← at least one provider key
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 curl -s localhost:4100/health   # → {"ok":true}
 ```
 
@@ -49,7 +49,10 @@ Generate strong keys:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-After boot: sign in → Settings → API keys → create a key per app → flip **Require API keys** on.
+The production profile activates fail-closed startup checks, disables demo seeding, binds
+port 4100 to loopback, and forces gateway API-key authentication on. If either required key
+is missing, ARBR refuses to start. After boot: sign in → Settings → API keys → create a key
+per app.
 
 ## nginx (TLS via certbot)
 
@@ -101,7 +104,8 @@ Point apps at the **internal** address (`http://10.x.x.x:4100`) — gateway traf
 - [ ] `ARBR_ADMIN_KEY` set (dashboard/admin API locked)
 - [ ] `ARBR_ENCRYPTION_KEY` set (dashboard-stored provider keys encrypted)
 - [ ] `SEED_ON_BOOT=false` (seeding **wipes request records** — demo only)
-- [ ] Gateway API keys issued per application; **Require API keys** flipped ON
+- [ ] Started with `docker-compose.prod.yml` (fail-closed mode; gateway keys forced on)
+- [ ] Gateway API keys issued per application
 - [ ] TLS at the proxy; port 4100 not internet-reachable directly
 - [ ] MongoDB not publicly bound; backups scheduled (`mongodump` cron or Atlas)
 - [ ] Provider keys via environment / secret manager (env takes precedence over dashboard-stored)
