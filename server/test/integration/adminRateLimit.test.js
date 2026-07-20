@@ -1,33 +1,26 @@
 "use strict";
 // The admin API previously had no rate limiting at all (flagged by CodeQL
 // js/missing-rate-limiting across every route handler). This exercises the
-// fix: a per-source-IP guardrail mounted ahead of admin auth.
-const { test, before, after, beforeEach } = require("node:test");
+// fix: a per-source-IP guardrail (express-rate-limit) mounted ahead of
+// admin auth.
+const { test, before } = require("node:test");
 const assert = require("node:assert/strict");
-const { MongoMemoryServer } = require("mongodb-memory-server");
-const mongoose = require("mongoose");
 const express = require("express");
 const supertest = require("supertest");
 
-process.env.ARBR_ADMIN_KEY = "";
-
-const RateBucket = require("../../src/models/RateBucket");
 const adminRateLimit = require("../../src/api/adminRateLimit");
 const { config } = require("../../src/config");
 
-let mongod, agent;
+let agent;
 
-before(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
+before(() => {
   const app = express();
   app.use(adminRateLimit.middleware, (_req, res) => res.json({ ok: true }));
   agent = supertest(app);
 });
-after(async () => { await mongoose.disconnect(); await mongod.stop(); });
-beforeEach(async () => { await RateBucket.deleteMany({}); });
 
 test("requests pass under the guardrail", async () => {
+  adminRateLimit.middleware.resetKey("::ffff:127.0.0.1");
   const res = await agent.get("/anything");
   assert.equal(res.status, 200);
 });
@@ -35,6 +28,7 @@ test("requests pass under the guardrail", async () => {
 test("429s once the per-IP guardrail is exceeded", async (t) => {
   const original = config.adminRpmGuardrail;
   config.adminRpmGuardrail = 2;
+  adminRateLimit.middleware.resetKey("::ffff:127.0.0.1");
   t.after(() => { config.adminRpmGuardrail = original; });
 
   await agent.get("/anything");
