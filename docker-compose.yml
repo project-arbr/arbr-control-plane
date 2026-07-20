@@ -50,6 +50,20 @@ services:
       DEFAULT_PROVIDER: ${DEFAULT_PROVIDER:-}
       # CORS is moot in single-port mode (same origin), but harmless.
       CORS_ORIGIN: http://localhost:4100
+      # Per-user identity (F-04). Default "adminkey" (unset) keeps today's
+      # single-shared-key behavior — everything below is opt-in.
+      ARBR_AUTH_MODE: ${ARBR_AUTH_MODE:-}
+      ARBR_OIDC_ISSUER: ${ARBR_OIDC_ISSUER:-}
+      ARBR_OIDC_CLIENT_ID: ${ARBR_OIDC_CLIENT_ID:-}
+      ARBR_OIDC_CLIENT_SECRET: ${ARBR_OIDC_CLIENT_SECRET:-}
+      ARBR_OIDC_REDIRECT_URI: ${ARBR_OIDC_REDIRECT_URI:-}
+      ARBR_OIDC_ALLOWED_DOMAINS: ${ARBR_OIDC_ALLOWED_DOMAINS:-}
+      ARBR_TRUSTED_HEADER_STRATEGY: ${ARBR_TRUSTED_HEADER_STRATEGY:-}
+      ARBR_IAP_AUDIENCE: ${ARBR_IAP_AUDIENCE:-}
+      ARBR_PROXY_AUTH_HEADER: ${ARBR_PROXY_AUTH_HEADER:-}
+      ARBR_PROXY_SECRET_HEADER: ${ARBR_PROXY_SECRET_HEADER:-}
+      ARBR_PROXY_AUTH_SECRET: ${ARBR_PROXY_AUTH_SECRET:-}
+      ARBR_SESSION_TTL_HOURS: ${ARBR_SESSION_TTL_HOURS:-}
     ports:
       # Behind a same-host reverse proxy (nginx), bind to loopback instead:
       #   - "127.0.0.1:4100:4100"
