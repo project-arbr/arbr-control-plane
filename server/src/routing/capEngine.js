@@ -42,8 +42,17 @@ function windowKey(period, now = new Date()) {
   return `month:${y}-${m}`;
 }
 
-function _matches(cap, { application, provider }) {
-  if (!cap.dimension) return true; // global
+// Which caps a given spend event counts against.
+//
+// Arbr's own internal calls (classification, policy generation, eval judging) are real
+// money on the customer's provider key, so they DO count against a global cap. They do
+// NOT count against a scoped cap: a per-application or per-provider cap is a control
+// over that scope's traffic, and overhead belongs to no customer scope. Internal
+// records carry no application, so the application branch already excludes them; the
+// provider branch needs an explicit guard because they do carry a real provider.
+function _matches(cap, { application, provider, internalKind = null }) {
+  if (!cap.dimension) return true; // global — includes internal spend
+  if (internalKind) return false;  // scoped caps never see Arbr's own overhead
   if (cap.dimension === "application") return cap.value === application;
   if (cap.dimension === "provider") return cap.value === provider;
   return false; // other dimensions not enforced at the gateway (yet)
@@ -63,14 +72,14 @@ async function getSpend(cap, now = new Date()) {
 }
 
 // Atomic $inc after a priced request. No-ops for zero/negative cost.
-async function recordSpend(totalCost, { application, provider } = {}) {
+async function recordSpend(totalCost, { application, provider, internalKind = null } = {}) {
   const cost = Number(totalCost) || 0;
   if (cost <= 0) return;
   const caps = await _enforcingCaps();
   const now = new Date();
   const ops = [];
   for (const cap of caps) {
-    if (!_matches(cap, { application, provider })) continue;
+    if (!_matches(cap, { application, provider, internalKind })) continue;
     const key = windowKey(cap.period, now);
     ops.push(
       CapSpend.findOneAndUpdate(
@@ -148,6 +157,9 @@ async function reconcileFromAnalytics() {
       dimension: cap.dimension,
       value: cap.value,
       from: windowStart(cap.period, now.getTime()),
+      // Must mirror _matches, or reconciliation would overwrite the counters with a
+      // differently-scoped total and reintroduce the drift it exists to fix.
+      includeInternal: !cap.dimension,
     });
     const key = windowKey(cap.period, now);
     await CapSpend.findOneAndUpdate(

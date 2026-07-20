@@ -14,6 +14,7 @@ const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const { handleEmbeddings } = require("./gateway/embeddings");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
 const { purgeOldRecords } = require("./maintenance/purge");
+const { backfillInternalKind } = require("./maintenance/backfillInternalKind");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
 const canaryMonitor = require("./routing/canaryMonitor");
 const evalWorker = require("./eval/worker");
@@ -36,6 +37,7 @@ async function start() {
 
   await mongoose.connect(config.mongoUri);
   await registry.init(); // seed ModelEntry if empty + warm in-memory cache
+  await backfillInternalKind(); // idempotent; no-op after the first run
 
   // Production: force data-plane API keys on so anonymous /v1 calls are rejected.
   if (config.isProduction) {

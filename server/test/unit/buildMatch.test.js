@@ -3,9 +3,30 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { buildMatch } = require("../../src/analytics/aggregate");
 
-test("empty filter returns empty match object", () => {
-  assert.deepEqual(buildMatch({}), {});
-  assert.deepEqual(buildMatch(), {});
+// Default-deny: an empty filter is NOT an empty match. Every view that doesn't opt in
+// gets customer traffic only, so Arbr's own internal calls can never be attributed to a
+// customer application by a query that forgot to exclude them.
+test("empty filter excludes internal records by default", () => {
+  assert.deepEqual(buildMatch({}), { internalKind: null });
+  assert.deepEqual(buildMatch(), { internalKind: null });
+});
+
+test("internalScope selects the internal/customer split", () => {
+  assert.deepEqual(buildMatch({ internalScope: "customer" }), { internalKind: null });
+  assert.deepEqual(buildMatch({ internalScope: "internal" }), { internalKind: { $ne: null } });
+  // "all" imposes no constraint — headline totals include real overhead.
+  assert.deepEqual(buildMatch({ internalScope: "all" }), {});
+});
+
+test("internalScope composes with dimension filters", () => {
+  assert.deepEqual(
+    buildMatch({ application: "checkout", internalScope: "all" }),
+    { application: "checkout" }
+  );
+  assert.deepEqual(
+    buildMatch({ application: "checkout" }),
+    { application: "checkout", internalKind: null }
+  );
 });
 
 test("from/to builds timestamp range", () => {

@@ -48,8 +48,11 @@ async function metricsFor(exp) {
   if (exp.scope?.taskType) scope.taskType = exp.scope.taskType;
   const proj = { status: 1, totalCost: 1, latencyMs: 1 };
 
-  const cand = await RequestRecord.find({ ...scope, timestamp: { $gte: since }, routingDecision: "canary", model: exp.candidateModel }, proj).lean();
-  const base = await RequestRecord.find({ ...scope, timestamp: { $gte: since }, routingDecision: { $ne: "canary" }, model: exp.baselineModel }, proj).lean();
+  // Customer traffic only. An internal call that happens to use the baseline model
+  // would otherwise land in the baseline arm and skew the comparison.
+  const customer = RequestRecord.CUSTOMER_ONLY;
+  const cand = await RequestRecord.find({ ...scope, ...customer, timestamp: { $gte: since }, routingDecision: "canary", model: exp.candidateModel }, proj).lean();
+  const base = await RequestRecord.find({ ...scope, ...customer, timestamp: { $gte: since }, routingDecision: { $ne: "canary" }, model: exp.baselineModel }, proj).lean();
 
   const stats = (rows) => {
     const total = rows.length;

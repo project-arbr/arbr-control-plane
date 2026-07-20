@@ -73,6 +73,8 @@ async function write(record) {
         capEngine.recordSpend(totalCost, {
           application: record.application,
           provider: record.provider,
+          // Arbr's own overhead counts against a global cap but not a scoped one.
+          internalKind: record.internalKind || null,
         }).catch(() => {})
       );
     }

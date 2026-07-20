@@ -13,7 +13,7 @@ router.get("/policy", async (_req, res, next) => {
   try {
     const d = await policyEngine.describe();
     // Merge built-in task types with any app-provided task types observed in traffic.
-    const observed = (await RequestRecord.distinct("taskType")).filter(Boolean).map((x) => String(x).toLowerCase());
+    const observed = (await RequestRecord.distinct("taskType", RequestRecord.CUSTOMER_ONLY)).filter(Boolean).map((x) => String(x).toLowerCase());
     const allTypes = [...new Set([...TASK_TYPES, ...observed])].sort();
     res.json({ ...d, taskTypes: allTypes });
   } catch (e) { next(e); }
@@ -25,7 +25,7 @@ router.put("/policy", requireRole("administrator"), async (req, res, next) => {
     // Validate task types against built-in catalog + any task types observed in traffic.
     let cheapTaskTypes;
     if (Array.isArray(body.cheapTaskTypes)) {
-      const observed = (await RequestRecord.distinct("taskType")).filter(Boolean).map((x) => String(x).toLowerCase());
+      const observed = (await RequestRecord.distinct("taskType", RequestRecord.CUSTOMER_ONLY)).filter(Boolean).map((x) => String(x).toLowerCase());
       const known = new Set([...TASK_TYPES, ...observed]);
       cheapTaskTypes = body.cheapTaskTypes.map((x) => String(x).toLowerCase()).filter((x) => known.has(x));
     }

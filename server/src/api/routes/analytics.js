@@ -12,6 +12,14 @@ router.get("/analytics/overview", async (req, res, next) => {
   try { res.json(await analytics.overview(req.query)); } catch (e) { next(e); }
 });
 
+// Arbr's own overhead — what the control plane spent on the customer's provider keys
+// making calls for itself (task classification, policy generation, eval judging,
+// connection tests). Real money, counted in the headline total, but excluded from every
+// customer dimension view because it belongs to no application.
+router.get("/analytics/internal-spend", async (req, res, next) => {
+  try { res.json(await analytics.internalSpend(req.query)); } catch (e) { next(e); }
+});
+
 // Adoption / acceptance-rate — the "production truth" beside benchmark scores: what humans actually
 // did with Arbr's suggestions (accepted vs dismissed) and its canaries (promoted vs rolled back).
 router.get("/analytics/acceptance", async (_req, res, next) => {

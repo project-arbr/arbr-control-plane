@@ -3,6 +3,20 @@
 // savings are measurable and later phases can learn which substitutions held up.
 const mongoose = require("mongoose");
 
+// The kinds of LLM call Arbr makes on its own behalf. One entry per internal call
+// site; see server/src/internal/ for the wrapper that stamps these.
+const INTERNAL_KINDS = [
+  "classifier",         // routing-path task classification
+  "policy-generation",  // AI routing policy / per-app policy generation
+  "shadow-candidate",   // shadow campaign candidate call
+  "shadow-judge",       // shadow campaign LLM-as-judge
+  "eval-replay",        // eval run candidate replay
+  "eval-judge",         // eval run rubric judge
+  "eval-disprove",      // eval run "disprove worse" second pass
+  "connection-test",    // admin: test a provider connection
+  "model-test",         // admin: test a registry model
+];
+
 const requestRecordSchema = new mongoose.Schema(
   {
     requestId: { type: String, required: true, unique: true, index: true },
@@ -37,6 +51,26 @@ const requestRecordSchema = new mongoose.Schema(
     // false = pass-through model with no pricing entry; cost is logged as $0 and must be
     // EXCLUDED from spend/savings claims rather than treated as free. Surfaced in analytics.
     knownPricing: { type: Boolean, default: true, index: true },
+
+    // Non-null = a call Arbr made FOR ITSELF (task classification, policy generation,
+    // eval judging, connection tests) rather than customer traffic it proxied. This is
+    // real money on the customer's provider key, so it COUNTS in headline spend — but it
+    // is excluded from every per-application / workflow / user dimension view, from
+    // facets, recommendations, eval datasets and error alerting, because it belongs to
+    // no customer application.
+    //
+    // null (or absent, on records written before this field existed) = customer traffic.
+    // Mongo matches missing fields with `{ internalKind: null }`, so the exclusion
+    // predicate is already correct for historical records without a backfill.
+    internalKind: {
+      type: String,
+      enum: [...INTERNAL_KINDS, null],
+      default: null,
+      index: true, // deliberately not sparse: null is the value most queries filter on
+    },
+    // Debug-only provenance (which request/campaign/run triggered this overhead).
+    // Deliberately NOT a top-level indexed dimension, so no group-by can surface it.
+    internalContext: { type: mongoose.Schema.Types.Mixed, default: null },
 
     // performance + outcome
     latencyMs: { type: Number, default: 0 },
@@ -96,4 +130,11 @@ const requestRecordSchema = new mongoose.Schema(
   { collection: "request_records" }
 );
 
-module.exports = mongoose.model("RequestRecord", requestRecordSchema);
+const RequestRecord = mongoose.model("RequestRecord", requestRecordSchema);
+
+// Predicates for the internal/customer split, so no caller hand-writes the shape.
+RequestRecord.CUSTOMER_ONLY = { internalKind: null };
+RequestRecord.INTERNAL_ONLY = { internalKind: { $ne: null } };
+RequestRecord.INTERNAL_KINDS = INTERNAL_KINDS;
+
+module.exports = RequestRecord;

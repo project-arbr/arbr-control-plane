@@ -89,7 +89,10 @@ async function recompute() {
   // Aggregate token totals per (application, taskType, model, provider) so recommendations can
   // be scoped to the app whose traffic justifies them (routing is already app-aware).
   const agg = await RequestRecord.aggregate([
-    { $match: { status: "success" } },
+    // Customer traffic only. Recommending that Arbr downgrade its own classifier is
+    // not actionable advice for a customer, and it would be scoped to an application
+    // that doesn't exist.
+    { $match: { status: "success", ...RequestRecord.CUSTOMER_ONLY } },
     {
       $group: {
         _id: { application: "$application", taskType: "$taskType", model: "$model", provider: "$provider" },
@@ -180,7 +183,7 @@ function analyzeGroups(groups, cheapTaskTypes, { isPremium, suggestLightTarget, 
 async function analyze() {
   const policy = await getEffective();
   const agg = await RequestRecord.aggregate([
-    { $match: { status: "success" } },
+    { $match: { status: "success", ...RequestRecord.CUSTOMER_ONLY } },
     { $group: {
         _id: { taskType: "$taskType", model: "$model", provider: "$provider" },
         requests: { $sum: 1 },
