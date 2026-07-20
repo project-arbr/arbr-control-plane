@@ -15,6 +15,7 @@ const { maybeShadowEval } = require("../eval/shadow");
 const { PROVIDERS } = require("../config");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
+const promptInjection = require("./promptInjection");
 
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
@@ -324,6 +325,15 @@ async function handleOpenAICompat(req, res) {
   // Max-tokens guardrail: clamp body.max_tokens to the configured ceiling.
   if (settings.maxTokensGuardrail && body.max_tokens > settings.maxTokensGuardrail) {
     body.max_tokens = settings.maxTokensGuardrail;
+  }
+
+  // Prompt injection detection — checked before routing/invoke, always returns JSON.
+  if (settings.promptInjectionDetectionEnabled) {
+    const injApp = req.apiKey?.application || "openai-compat";
+    const { blocked, ruleName } = promptInjection.check(body.messages, settings.promptInjectionRules, injApp);
+    if (blocked) {
+      return res.status(400).json({ error: { message: "Request blocked: potential prompt injection detected.", type: "invalid_request_error", code: "prompt_injection_detected", rule: ruleName } });
+    }
   }
 
   const requestId = uuidv4();
