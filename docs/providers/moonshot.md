@@ -36,6 +36,6 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "moonshot",
     "model": "moonshot-v1-8k",
-    "messages": "Write a product description for wireless earbuds."
+    "messages": [{ "role": "user", "content": "Write a product description for wireless earbuds." }]
   }'
 ```

@@ -35,7 +35,7 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "groq",
     "model": "llama-3.1-8b-instant",
-    "messages": "What is the capital of France?"
+    "messages": [{ "role": "user", "content": "What is the capital of France?" }]
   }'
 ```
 

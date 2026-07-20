@@ -39,7 +39,7 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "openai",
     "model": "gpt-4o-mini",
-    "messages": "Summarise this ticket in two sentences: my order never arrived."
+    "messages": [{ "role": "user", "content": "Summarise this ticket in two sentences: my order never arrived." }]
   }'
 ```
 
@@ -60,7 +60,7 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "openai",
     "model": "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "messages": "Hello"
+    "messages": [{ "role": "user", "content": "Hello" }]
   }'
 ```
 

@@ -23,11 +23,23 @@ recommendations, evaluation gates, and rollout.
 Streaming works the same way as any other provider — requests flow Application → Arbr →
 LiteLLM → the underlying provider, response bytes streamed back unchanged.
 
-## Already using `LITELLM_BASE_URL`?
+## Env-only setup via `LITELLM_BASE_URL`
 
-There's an older, still-supported path: set `OPENAI_BASE_URL` to your LiteLLM instance and
-requests with `provider: "openai"` get forwarded there, accepting any model string LiteLLM
-understands — even ones not in Arbr's registry. That flexibility comes at a cost: models
-never explicitly imported have no pricing data, so cost tracking and recommendations can't see
-them accurately. See [OpenAI](/providers/openai#using-as-a-litellm-proxy) for that setup. The
-dashboard flow above is recommended whenever cost visibility matters.
+There's also a builtin, env-configured path that registers a genuine `litellm` provider in
+Arbr's provider registry, distinct from the dashboard flow above (which creates a
+`CustomProvider` record) and from the unrelated `OPENAI_BASE_URL` redirect trick documented in
+[OpenAI](/providers/openai#using-as-a-litellm-proxy) (which reuses the `openai` provider
+instead of registering a new one):
+
+```env [.env]
+LITELLM_BASE_URL=http://localhost:4000
+LITELLM_API_KEY=your-litellm-master-key
+LITELLM_DEFAULT_MODEL=gpt-4o-mini   # optional
+```
+
+Set these before starting the server — `litellm` is only added to the provider registry at
+boot, and a restart is required to pick up changes. Once set, route requests with
+`"provider": "litellm"`. As with the `OPENAI_BASE_URL` trick, models aren't pre-registered
+with pricing this way — register them via `POST /api/models` with `{ "provider": "litellm" }`
+if you want cost tracking, or use the dashboard **Connect** flow above for automatic pricing
+import instead.
