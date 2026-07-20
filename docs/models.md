@@ -149,4 +149,4 @@ To pull the latest models and pricing from LiteLLM:
 | Refresh | Pricing, context window, and capability flags are updated on **every** existing model, built-in or not. `tier`, `label`, `builtIn`, and `enabled` are never touched by sync |
 | Cleanup | Models no longer present in the LiteLLM catalog are deleted — but only entries with `builtIn: false` |
 
-Built-in models can be **disabled** (toggle in Settings → Models) but not deleted. Custom/synced models can be deleted.
+Built-in models can be **disabled** (toggle on the Models page) but not deleted. Custom/synced models can be deleted.
