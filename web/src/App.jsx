@@ -26,6 +26,14 @@ export default function App() {
   const [authMode, setAuthMode] = useState("adminkey");
   const [user, setUser] = useState(null); // { id, email, role } once authed under oidc/trusted-header
 
+  // Always re-fetch the real auth mode before showing Login — its default value
+  // is only ever correct by accident (e.g. never updated if the very first
+  // refreshStatus() call succeeds, since that path has no reason to touch it).
+  const goToLogin = async () => {
+    try { setAuthMode((await api.authMode()).mode); } catch { /* keep prior value */ }
+    setAuthState("login");
+  };
+
   const refreshStatus = () =>
     api.status()
       .then(async (s) => {
@@ -33,10 +41,9 @@ export default function App() {
         setAuthState("open");
         try { setUser((await api.currentUser()).user); } catch { setUser(null); }
       })
-      .catch(async (e) => {
+      .catch((e) => {
         if (e.status !== 401) return;
-        try { setAuthMode((await api.authMode()).mode); } catch { /* keep default */ }
-        setAuthState("login");
+        return goToLogin();
       });
   useEffect(() => { refreshStatus(); }, []);
 
@@ -46,7 +53,7 @@ export default function App() {
     resetCsrfToken();
     setStatus(null);
     setUser(null);
-    setAuthState("login");
+    await goToLogin();
   };
 
   if (authState === "login") return <Login mode={authMode} onAuthed={refreshStatus} />;
