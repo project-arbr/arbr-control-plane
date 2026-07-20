@@ -69,7 +69,8 @@ export default function Audit() {
     {
       key: "actor",
       header: "By",
-      render: (r) => <Badge tone="gray">{r.actor || "admin"}</Badge>,
+      // actor is a plain string on pre-F-04 rows, { id, email, role } on new ones.
+      render: (r) => <Badge tone="gray">{(typeof r.actor === "string" ? r.actor : r.actor?.email) || "admin"}</Badge>,
     },
   ];
 
