@@ -135,6 +135,8 @@ client.chat.completions.create(
 | `extra_body.provider` | `provider` (pass-through routing) |
 | — | `application` → mapped from gateway API key |
 
+`workflow`, `department`, and `userId` aren't OpenAI fields, but Arbr still captures them for attribution: `workflow` from an `x-arbr-workflow` header, `department` from an `x-arbr-department` header or the API key's own `department`, and `userId` from the standard OpenAI `user` field, an `x-arbr-user-id` header, or the API key's `userId` — checked in that order.
+
 ## Chat UI integration (LibreChat, OpenWebUI, etc.)
 
 Set the base URL to `http://your-arbr-host:4100` and your gateway key as the API key. The UI works immediately — every message is now routed, logged, and governed by Arbr.

@@ -78,7 +78,7 @@ curl -X POST http://localhost:4100/v1/chat \
 | `model` | Model that actually served the response |
 | `modelRequested` | Model you asked for (`"auto"` when you deferred) |
 | `provider` | Provider that served the response |
-| `routingDecision` | `explicit` \| `passthrough` \| `rule` \| `auto` \| `ai` \| `cache` \| `fallback` \| `budget` |
+| `routingDecision` | `explicit` \| `passthrough` \| `rule` \| `auto` \| `ai` \| `cache` \| `semantic_cache` \| `fallback` \| `budget` \| `canary` \| `external` |
 | `classifiedBy` | How `taskType` was determined: `provided` \| `keyword` \| `ai` |
 | `cacheHit` | Whether the response was served from Arbr's response cache |
 | `usage.inputTokens` | Total prompt tokens (includes any cached tokens) |
@@ -108,11 +108,19 @@ Cost is logged as `$0` until you add a pricing entry for the model in **Settings
 
 ## Error responses
 
+The `error` field is usually a short code, but a couple of cases below put the literal message text there instead — check `message` (or the note) rather than assuming `error` is always machine-matchable.
+
 | Status | `error` field | Meaning |
 |---|---|---|
-| 400 | `invalid_request` | Missing or malformed fields |
-| 401 | `invalid_api_key` | Missing/unknown gateway API key when Require API keys is on |
+| 400 | `"messages array is required"` (literal text, not a code) | `messages` is missing, empty, or not an array |
+| 400 | `prompt_injection_detected` | Request blocked by prompt-injection detection |
+| 401 | `invalid_api_key` | Missing/unknown/revoked gateway API key when Require API keys is on |
+| 401 | `expired_api_key` | The gateway API key's `expiresAt` has passed |
+| 403 | (the model's own message text; also carries `code: "model_not_allowed"`) | Resolved model isn't in the key's `allowedModels` |
+| 422 | `guardrail_violation` | Response blocked by an output guardrail rule |
 | 429 | `budget_exceeded` | A `block` budget cap is breached |
 | 429 | `rate_limited` | Per-key RPM limit hit |
 | 502 | `provider_error` | All providers failed |
 | 503 | `demo_mode` | No provider keys configured |
+| 503 | `maintenance_mode` | Maintenance mode is enabled |
+| 503 | `app_kill_switch` | The calling application's kill-switch is enabled |
