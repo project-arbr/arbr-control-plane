@@ -565,9 +565,6 @@ module.exports = {
   handleChat,
   resolveRoute,
   invokeWithFallback,
-<<<<<<< /tmp/q.41179
-=======
   buildFallbackOrder,
->>>>>>> /tmp/g.41179
   getAppConfig,
 };
