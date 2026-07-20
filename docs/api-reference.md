@@ -43,6 +43,10 @@ Arbr-native endpoint. See [Native endpoint](/gateway/native) for full docs.
 
 OpenAI-compatible endpoint. See [OpenAI-compatible endpoint](/gateway/openai-compat) for full docs.
 
+### `POST /v1/ingest`
+
+Reports metadata for calls that already happened elsewhere (a partner's own gateway, LiteLLM, ...) with no live provider call. See [Observe-only ingestion](/gateway/observe-only-ingestion) for full docs.
+
 ---
 
 ## Model registry
