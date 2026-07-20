@@ -107,7 +107,7 @@
 | 2 | Automatic retries | Exponential backoff per provider | Single-fallback retry on failure | Partial |
 | 3 | Provider fallback | ✅ | ✅ Falls back to next live provider | Covered |
 | 4 | Load balancing (multi-instance) | ✅ Weighted, round-robin | ❌ | Missing |
-| 5 | Traffic splitting / canary | ✅ Route X% to model A, Y% to B | ❌ | Missing |
+| 5 | Traffic splitting / canary | ✅ Route X% to model A, Y% to B | ✅ Eval-gated canary rollout with configurable rolloutPct, guardrails, auto-rollback | Covered |
 | 6 | Conditional routing | ✅ | ✅ Rule-based + AI policy routing | Covered |
 | 7 | Request timeouts | ✅ | ✅ | Covered |
 | 8 | Exact-match caching | ✅ | ✅ | Covered |
@@ -224,6 +224,10 @@ The four items formerly listed as Priority 1 have since shipped:
 | **API key expiry + rotation** | `expiresAt` on the ApiKey model, enforced at the gateway; one-click rotation via the admin API. |
 | **Prompt injection detection** | Built-in pattern library plus custom per-app rules, alongside PII masking. |
 
+Separately, **traffic splitting / canary rollout** (previously listed under Priority 2) has
+also shipped: eval-gated canary experiments with configurable `rolloutPct`, guardrails
+(error rate, latency, cost saving, shadow worse-rate), and automatic rollback on breach.
+
 ### Priority 1 — Build Next
 
 Nothing carried over from the prior Priority 1 list — see Priority 2 below for the next
@@ -233,7 +237,6 @@ candidates.
 
 | Feature | Why | Effort |
 |---------|-----|--------|
-| **Traffic splitting / canary** | Route X% of production traffic to model A, Y% to model B. Builds directly on existing routing infrastructure. Core governance use case: "send 5% to GPT-4o-mini, compare cost/quality." | Medium (2 days) |
 | **Cache TTL configuration** | Expose TTL setting in admin UI; reuses existing cache infrastructure. Admins need control over how long cached responses remain valid. | Small (0.5 day) |
 | **Feedback collection** | Thumbs up/down per response, piped back to Arbr. Enables quality-weighted analytics and eventual fine-tuning signal. | Medium (1.5 days) |
 | **Monitoring-only guardrail mode** | Log guardrail violations without blocking requests. Critical for rolling out new guardrail rules without disrupting production. | Small (0.5 day) |
@@ -278,10 +281,9 @@ Portkey wins on breadth — 1600+ providers, 12+ guardrail partners, full prompt
 Arbr's moat is **routing intelligence** — AI-generated policies, cost-aware downgrade, per-app overrides, shadow eval campaigns, realised savings tracking, and benchmark-integrated decision-making. Portkey has none of this. Portkey routes but doesn't optimize; Arbr routes and learns.
 
 **The gap that matters most:**
-Output guardrails and semantic caching have since shipped, closing Arbr's two most visible gaps
-against Portkey. The next-clearest gaps are traffic splitting / canary rollouts and prompt
-versioning + templates (see Priority 2) — those are where Arbr users would see the next
-measurable value.
+Output guardrails, semantic caching, and canary rollouts have since shipped, closing
+Arbr's most visible gaps against Portkey. The next-clearest gap is prompt versioning +
+templates (see Priority 2) — that's where Arbr users would see the next measurable value.
 
 **The positioning play:**
 Arbr shouldn't try to match Portkey's provider breadth (1600 vs. 15 is a losing race). The winning angle is: *intelligent, cost-optimizing, self-hosted gateway for teams that want their AI spend to be data-driven, not just routed.*
