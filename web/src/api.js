@@ -151,6 +151,7 @@ export const api = {
   createKey: (body) => req("/keys", { method: "POST", body: JSON.stringify(body) }),
   updateKey: (id, body) => req(`/keys/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   revokeKey: (id) => req(`/keys/${id}`, { method: "DELETE" }),
+  rotateKey: (id) => req(`/keys/${id}/rotate`, { method: "POST" }),
   requireApiKey: () => req("/require-api-key"),
   setRequireApiKey: (on) => req("/require-api-key", { method: "PUT", body: JSON.stringify({ on }) }),
 

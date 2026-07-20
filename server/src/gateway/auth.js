@@ -71,6 +71,11 @@ async function resolveKey(authHeader) {
     err.statusCode = 401;
     throw err;
   }
+  if (doc.expiresAt && doc.expiresAt < new Date()) {
+    const err = new Error(`API key "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.`);
+    err.statusCode = 401;
+    throw err;
+  }
   if (await overRpmLimit(`key:${doc.keyHash}`, doc.rpm)) {
     const err = new Error(`API key "${doc.name}" is over its ${doc.rpm} requests/minute limit.`);
     err.statusCode = 429;
@@ -104,6 +109,9 @@ async function middleware(req, res, next) {
       const doc = keys.get(hashKey(raw));
       if (!doc) {
         return res.status(401).json({ error: "invalid_api_key", message: "Unknown, disabled, or revoked API key." });
+      }
+      if (doc.expiresAt && doc.expiresAt < new Date()) {
+        return res.status(401).json({ error: "expired_api_key", message: `API key "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.` });
       }
       if (await overRpmLimit(`key:${doc.keyHash}`, doc.rpm)) {
         return res.status(429).json({

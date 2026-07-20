@@ -4,10 +4,20 @@ import { Card, Badge, Spinner, Toggle, Tabs, useTabParam } from "../components/u
 
 // ── Key row — inline edit of name + application ───────────────────────────────
 
-function KeyRow({ k, onToggle, onRevoke, onSave }) {
+function expiryBadge(expiresAt) {
+  if (!expiresAt) return null;
+  const exp = new Date(expiresAt);
+  const daysLeft = Math.ceil((exp - Date.now()) / 86400000);
+  if (daysLeft < 0) return <Badge tone="red">Expired</Badge>;
+  if (daysLeft <= 7) return <Badge tone="amber">Expires in {daysLeft}d</Badge>;
+  return <span className="text-xs text-gray-400">{exp.toLocaleDateString()}</span>;
+}
+
+function KeyRow({ k, onToggle, onRevoke, onSave, onRotate }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm]       = useState({ name: k.name, application: k.application, userId: k.userId || "", department: k.department || "" });
   const [saving, setSaving]   = useState(false);
+  const [rotating, setRotating] = useState(false);
 
   async function save() {
     if (!form.name.trim() || !form.application.trim()) return;
@@ -22,6 +32,12 @@ function KeyRow({ k, onToggle, onRevoke, onSave }) {
       setEditing(false);
     }
     finally { setSaving(false); }
+  }
+
+  async function rotate() {
+    if (!window.confirm(`Rotate key "${k.name}"? The old key will stop working immediately.`)) return;
+    setRotating(true);
+    try { await onRotate(); } finally { setRotating(false); }
   }
 
   return (
@@ -60,6 +76,7 @@ function KeyRow({ k, onToggle, onRevoke, onSave }) {
           ? <div className="truncate" title={k.allowedModels.join(", ")}>{k.allowedModels.length} allowed</div>
           : <div className="text-gray-300">unrestricted</div>}
       </td>
+      <td className="py-2">{expiryBadge(k.expiresAt) ?? <span className="text-xs text-gray-300">never</span>}</td>
       <td className="py-2 text-gray-500">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "never"}</td>
       <td className="py-2"><Toggle checked={k.enabled} onChange={onToggle} label="enable key" /></td>
       <td className="py-2 text-right">
@@ -72,6 +89,7 @@ function KeyRow({ k, onToggle, onRevoke, onSave }) {
           ) : (
             <button className="btn-ghost text-xs" onClick={() => setEditing(true)}>Edit</button>
           )}
+          <button className="btn-ghost text-xs" disabled={rotating} onClick={rotate}>{rotating ? "…" : "Rotate"}</button>
           <button className="btn-ghost text-xs" onClick={onRevoke}>Revoke</button>
         </div>
       </td>
@@ -90,6 +108,7 @@ function ApiKeys({ onChange }) {
   const [rpm, setRpm]                 = useState("");
   const [defaultModel, setDefaultModel] = useState("");
   const [allowedModels, setAllowedModels] = useState("");
+  const [expiresAt, setExpiresAt]     = useState("");
   const [created, setCreated]         = useState(null);
   const [copied, setCopied]           = useState(false);
   const [busy, setBusy]               = useState(false);
@@ -112,12 +131,19 @@ function ApiKeys({ onChange }) {
         rpm: rpm ? Number(rpm) : null,
         defaultModel: defaultModel.trim() || null,
         allowedModels: parsedAllowed,
+        expiresAt: expiresAt || null,
       });
       setCreated({ key: res.key, name: res.name, application: res.application, userId: res.userId });
-      setName(""); setApplication(""); setUserId(""); setDepartment(""); setRpm(""); setDefaultModel(""); setAllowedModels("");
+      setName(""); setApplication(""); setUserId(""); setDepartment(""); setRpm(""); setDefaultModel(""); setAllowedModels(""); setExpiresAt("");
       await load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
+  };
+
+  const rotate = async (k) => {
+    const res = await api.rotateKey(k._id);
+    setCreated({ key: res.key, name: res.name, application: res.application });
+    await load();
   };
 
   const copyKey = async () => {
@@ -207,6 +233,10 @@ function ApiKeys({ onChange }) {
           <div className="label mb-1">Allowed models (optional, comma-separated)</div>
           <input className="input w-72" placeholder="leave blank = unrestricted" value={allowedModels} onChange={(e) => setAllowedModels(e.target.value)} />
         </div>
+        <div>
+          <div className="label mb-1">Expires at (optional)</div>
+          <input className="input w-40" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        </div>
         <button className="btn-secondary" disabled={busy} onClick={create}>Create key</button>
         {err && <div className="w-full text-xs text-red-600">{err}</div>}
       </div>
@@ -222,6 +252,7 @@ function ApiKeys({ onChange }) {
               <th className="py-1 font-medium">Application</th>
               <th className="py-1 font-medium">Rate limit</th>
               <th className="py-1 font-medium">Models</th>
+              <th className="py-1 font-medium">Expires</th>
               <th className="py-1 font-medium">Last used</th>
               <th className="py-1 font-medium">On</th>
               <th className="py-1" />
@@ -230,7 +261,8 @@ function ApiKeys({ onChange }) {
           <tbody>
             {keys.map((k) => (
               <KeyRow key={k._id} k={k} onToggle={() => toggleKey(k)} onRevoke={() => revoke(k._id)}
-                onSave={(patch) => api.updateKey(k._id, patch).then(() => load())} />
+                onSave={(patch) => api.updateKey(k._id, patch).then(() => load())}
+                onRotate={() => rotate(k)} />
             ))}
           </tbody>
         </table>
