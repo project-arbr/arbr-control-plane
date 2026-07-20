@@ -91,6 +91,11 @@ const settingsSchema = new mongoose.Schema(
       }],
       default: [],
     },
+    // Semantic response cache: embed incoming messages and return a cached response
+    // when cosine similarity exceeds the threshold. Requires OPENAI_API_KEY.
+    semanticCacheEnabled:      { type: Boolean, default: false },
+    semanticCacheThreshold:    { type: Number,  default: 0.92 },  // 0–1 cosine similarity
+    semanticCacheTtlMinutes:   { type: Number,  default: 60 },    // cache TTL in minutes
   },
   { collection: "settings" }
 );
