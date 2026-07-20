@@ -21,6 +21,7 @@ const { supportsTools } = require("./gateway/capabilities");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
 const adminRateLimit = require("./api/adminRateLimit");
+const csrf = require("./api/csrf");
 const apiRoutes = require("./api/routes");
 const authRoutes = require("./api/routes/auth");
 const connections = require("./providers/connections");
@@ -61,6 +62,9 @@ async function start() {
   }));
   app.use(express.json({ limit: "2mb" }));
   app.use(cookieParser());
+  // Mounted globally so every route is structurally CSRF-protected; only
+  // requests carrying a session cookie are actually validated (see csrf.js).
+  app.use(csrf.protection);
 
   // Liveness. `demoMode` reflects the EFFECTIVE provider state (env creds +
   // dashboard-connected creds), matching the console and gateway routing — not
@@ -155,11 +159,14 @@ async function start() {
     });
   }
 
-  // Error handler.
+  // Error handler. Respects a thrown error's own status (e.g. csrf-csrf's
+  // ForbiddenError is a real 403, not a server fault) instead of flattening
+  // everything to 500.
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
-    console.error("[api] error:", err);
-    res.status(500).json({ error: "internal_error", message: String(err.message || err) });
+    const status = err.status || err.statusCode || 500;
+    if (status >= 500) console.error("[api] error:", err);
+    res.status(status).json({ error: err.code || "internal_error", message: String(err.message || err) });
   });
 
   // Daily purge of request records older than the configured retention window.

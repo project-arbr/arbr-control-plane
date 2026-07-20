@@ -11,6 +11,12 @@ router.get("/mode", (_req, res) => {
   res.json({ mode: config.authMode });
 });
 
+// req.csrfToken() is attached by the global csrf.protection middleware
+// (server/src/index.js) on every request, GET included.
+router.get("/csrf", (req, res) => {
+  res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
+});
+
 router.get("/me", async (req, res, next) => {
   try {
     const user = await identity.resolveUser(req);

@@ -232,11 +232,16 @@ function assertProductionReady() {
   }
 }
 
+// MONGO_URI may embed credentials (mongodb://user:pass@host/db) — never log it verbatim.
+function maskMongoUri(uri) {
+  return String(uri).replace(/:\/\/([^:@/]+):([^@/]+)@/, "://$1:****@");
+}
+
 function describe() {
   const lines = [];
   lines.push(`Arbr Control Plane`);
   lines.push(`  port:        ${config.port}`);
-  lines.push(`  mongo:       ${config.mongoUri}`);
+  lines.push(`  mongo:       ${maskMongoUri(config.mongoUri)}`);
   lines.push(`  env:         ${config.isProduction ? "production" : "development"}`);
   if (config.adminKey) {
     lines.push(`  admin auth:  ON — dashboard + admin API require ARBR_ADMIN_KEY`);
@@ -274,4 +279,5 @@ module.exports = {
   primaryField,
   envCredentialFor,
   envCredentials,
+  maskMongoUri,
 };

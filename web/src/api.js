@@ -18,10 +18,29 @@ export function clearAdminToken() {
   try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
 }
 
+// CSRF token for cookie-authenticated (oidc) sessions — a no-op in adminkey
+// mode, where there's no session cookie for the server to validate against.
+// Cached after first fetch; reset on logout since it's bound to the session.
+let csrfToken = null;
+export function resetCsrfToken() { csrfToken = null; }
+async function ensureCsrfToken() {
+  if (csrfToken) return csrfToken;
+  try {
+    const res = await fetch("/api/auth/csrf", { credentials: "include" });
+    if (res.ok) csrfToken = (await res.json()).csrfToken || null;
+  } catch { /* no session — server will skip CSRF validation anyway */ }
+  return csrfToken;
+}
+
 async function req(path, options = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = getAdminToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const csrf = await ensureCsrfToken();
+    if (csrf) headers["x-csrf-token"] = csrf;
+  }
   const res = await fetch(`/api${path}`, {
     headers,
     credentials: "include",
