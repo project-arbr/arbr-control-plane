@@ -4,6 +4,7 @@ const Rule = require("../../models/Rule");
 const { logAction } = require("../auditLogger");
 const ruleEngine = require("../../routing/ruleEngine");
 const responseCache = require("../../routing/responseCache");
+const semanticCache = require("../../routing/semanticCache");
 
 const router = express.Router();
 
@@ -61,6 +62,17 @@ router.delete("/rules/:id", async (req, res, next) => {
 router.post("/cache/clear", (_req, res) => {
   responseCache.clear();
   res.json({ cleared: true });
+});
+
+// Clear the semantic (embedding-based) cache independently.
+router.post("/cache/semantic/clear", (_req, res) => {
+  semanticCache.clear();
+  res.json({ cleared: true, size: 0 });
+});
+
+// Current semantic cache entry count (for the UI status display).
+router.get("/cache/semantic/stats", (_req, res) => {
+  res.json({ size: semanticCache.size() });
 });
 
 // Auto-mode routing engine: "off" | "guardrail" | "ai".
