@@ -15,6 +15,7 @@ function fmtCtx(n) {
 // a human-readable name in the sidebar. Anything not listed falls back to a
 // simple title-case transform of the provider ID.
 const PROVIDER_LABELS = {
+  "litellm":      "LiteLLM Proxy",
   "openai":       "OpenAI",
   "anthropic":    "Anthropic",
   "gemini":       "Google Gemini",
@@ -825,6 +826,7 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
 // url: pre-filled value (empty = account-specific, user must supply)
 // hint: shown below the Base URL field to guide the user
 const PROVIDER_ENDPOINT_INFO = {
+  "litellm":     { url: "", hint: "e.g. http://localhost:4000 — your self-hosted LiteLLM proxy's base URL; API key is the proxy's master key" },
   "nvidia-nim":  { url: "https://integrate.api.nvidia.com/v1", hint: "Free nvapi- key from build.nvidia.com" },
   "mistral":     { url: "https://api.mistral.ai/v1" },
   "cohere":      { url: "https://api.cohere.ai/v1" },
@@ -893,7 +895,9 @@ function CatalogProviderDetail({ provider, models, onRefresh }) {
             <Badge tone="gray">not connected</Badge>
           </div>
           <p className="mt-1 text-sm text-gray-500">
-            {modelCount} models in catalog · add credentials to route traffic through Arbr.
+            {provider.provider === "litellm"
+              ? "Self-hosted — connect to discover your configured models."
+              : `${modelCount} models in catalog · add credentials to route traffic through Arbr.`}
           </p>
         </div>
         {!connecting && (
@@ -1101,6 +1105,15 @@ function buildProviderList(models, builtinData, customData) {
     if (!known.find((p) => p.provider === c.id)) {
       known.push({ provider: c.id, label: c.label, type: "custom", connected: c.enabled ?? false, ...c });
     }
+  }
+
+  // LiteLLM never earns a catalog card the normal way — unlike Databricks/Snowflake
+  // etc., it never appears as a `litellm_provider` value in its own public pricing
+  // catalog (server/src/litellm/sync.js), since it's the proxy, not a backend. Pin it
+  // so the connection type is discoverable on a fresh install. Self-removes once
+  // connected: customMap["litellm"] becomes truthy and the loop above takes over.
+  if (!customMap["litellm"] && !known.find((p) => p.provider === "litellm")) {
+    known.push({ provider: "litellm", label: providerLabel("litellm"), type: "catalog", connected: false });
   }
 
   return known.sort((a, b) => {

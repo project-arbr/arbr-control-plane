@@ -1,8 +1,12 @@
-# OpenAI / LiteLLM proxy
+# OpenAI
 
 Provider ID: `openai`
 
 Connects to OpenAI's chat API — or any OpenAI-compatible endpoint (LiteLLM, vLLM, Ollama, etc.) via `OPENAI_BASE_URL`.
+
+Connecting a LiteLLM proxy specifically? See [LiteLLM Proxy](/providers/litellm) for the
+dashboard-based setup — recommended whenever cost tracking matters, since it imports exact
+model IDs and pricing rather than passing through unregistered model strings.
 
 ## Connect
 

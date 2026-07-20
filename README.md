@@ -59,7 +59,8 @@ be the right answer. Arbr is for the next question:
 > and did the rollout deliver the expected result?
 
 - **With LiteLLM:** keep LiteLLM's provider breadth and place Arbr above it for workload
-  analysis, recommendations, evaluation gates, approvals, and measured optimisation.
+  analysis, recommendations, evaluation gates, approvals, and measured optimisation
+  (see [LiteLLM Proxy](docs/providers/litellm.md) to connect one).
 - **Standalone:** use Arbr's native and OpenAI-compatible endpoints when one self-hosted
   deployment for gateway, governance, evaluation, and routing is the simpler architecture.
 - **Human-governed by design:** recommendations remain advisory until accepted; pinned

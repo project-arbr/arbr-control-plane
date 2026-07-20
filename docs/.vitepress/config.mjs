@@ -45,7 +45,8 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'Overview', link: '/providers/overview' },
-          { text: 'OpenAI / LiteLLM proxy', link: '/providers/openai' },
+          { text: 'OpenAI', link: '/providers/openai' },
+          { text: 'LiteLLM Proxy', link: '/providers/litellm' },
           { text: 'Anthropic', link: '/providers/anthropic' },
           { text: 'Google Gemini', link: '/providers/gemini' },
           { text: 'Amazon Bedrock', link: '/providers/bedrock' },
