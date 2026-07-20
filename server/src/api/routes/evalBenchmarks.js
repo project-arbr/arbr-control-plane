@@ -138,7 +138,15 @@ router.post("/eval-benchmarks/:id/items", async (req, res, next) => {
     if (await EvalItem.findOne({ datasetId: bench._id, requestId })) return res.status(409).json({ error: "already_in_benchmark", message: "That request is already a case in this benchmark." });
 
     const settings = await Settings.get().catch(() => ({}));
-    const { messages, productionResponse } = evalDatasetBuilder.projectText(rec, bench.piiMode, !!settings.piiMaskingEnabled, settings.customPiiPatterns || []);
+    if (settings.captureRequestPayloads === false) {
+      return res.status(409).json({
+        error: "payload_capture_disabled",
+        message: "Enable payload capture before copying request content into an evaluation benchmark.",
+      });
+    }
+    const { messages, productionResponse } = evalDatasetBuilder.projectText(
+      rec, bench.piiMode, !!settings.piiMaskingEnabled, settings.customPiiPatterns || [], true
+    );
     const sev = ["trivial", "normal", "critical"].includes(severity) ? severity : "normal";
     const item = await EvalItem.create({
       datasetId: bench._id, requestId: rec.requestId, application: rec.application || null,

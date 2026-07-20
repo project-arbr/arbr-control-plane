@@ -96,8 +96,8 @@ function inferValidators(responses) {
 }
 
 // Store the item text according to piiMode + global masking. Returns { messages, productionResponse }.
-function projectText(record, piiMode, maskEnabled, customPatterns) {
-  if (piiMode === "metadata_only") return { messages: null, productionResponse: null };
+function projectText(record, piiMode, maskEnabled, customPatterns, captureEnabled = true) {
+  if (!captureEnabled || piiMode === "metadata_only") return { messages: null, productionResponse: null };
   const raw = piiMode === "raw_allowed" && !maskEnabled;
   const msgs = Array.isArray(record.messages)
     ? record.messages
@@ -114,9 +114,12 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
   const target = targetCount || targetCountForRisk(risk);
   const settings = await Settings.get().catch(() => ({}));
   const maskEnabled = !!settings.piiMaskingEnabled;
+  const captureEnabled = settings.captureRequestPayloads !== false;
   const customPatterns = settings.customPiiPatterns || [];
   // Global masking wins: never store raw when masking is on.
-  const effectivePiiMode = piiMode === "raw_allowed" && maskEnabled ? "masked" : piiMode;
+  const effectivePiiMode = !captureEnabled
+    ? "metadata_only"
+    : (piiMode === "raw_allowed" && maskEnabled ? "masked" : piiMode);
 
   const since = new Date(Date.now() - windowDays * 86400000);
   const dataset = await EvalDataset.create({
@@ -137,6 +140,13 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
     status: "creating",
     createdBy,
   });
+
+  if (!captureEnabled) {
+    dataset.status = "failed";
+    dataset.error = "Payload capture is disabled. Enable it explicitly before creating replay datasets from traffic.";
+    await dataset.save();
+    return dataset;
+  }
 
   try {
     const raw = await RequestRecord.find(buildScopeQuery(rec, since))
@@ -164,7 +174,7 @@ async function createFromTraffic({ rec, targetCount, piiMode = "masked", windowD
     // Attach validators inferred from the baseline outputs, so formatPassRate is a real gate.
     const validators = inferValidators(sampled.map((r) => r.responseText));
     const items = sampled.map((r) => {
-      const { messages, productionResponse } = projectText(r, effectivePiiMode, maskEnabled, customPatterns);
+      const { messages, productionResponse } = projectText(r, effectivePiiMode, maskEnabled, customPatterns, captureEnabled);
       return {
         datasetId: dataset._id, requestId: r.requestId, application: r.application || null,
         workflow: r.workflow || null, taskType: r.taskType || null, currentModel: r.model || null,

@@ -4,6 +4,14 @@
 const mongoose = require("mongoose");
 const { config } = require("../config");
 
+function privacyDefaults(isProduction = config.isProduction) {
+  return isProduction
+    ? { retentionDays: 30, piiMaskingEnabled: true, captureRequestPayloads: false }
+    : { retentionDays: 90, piiMaskingEnabled: false, captureRequestPayloads: true };
+}
+
+const PRIVACY_DEFAULTS = privacyDefaults();
+
 const settingsSchema = new mongoose.Schema(
   {
     key: { type: String, default: "global", unique: true },
@@ -54,16 +62,16 @@ const settingsSchema = new mongoose.Schema(
     // Webhook URL for real-time alerts (cap breach, provider errors, new unknown applications).
     webhookUrl: { type: String, default: null },
     // Request record retention in days. Records older than this are auto-purged daily.
-    retentionDays: { type: Number, default: 90 },
+    retentionDays: { type: Number, default: PRIVACY_DEFAULTS.retentionDays },
     // PII masking: when enabled, PII patterns are redacted from prompts before logging.
-    piiMaskingEnabled: { type: Boolean, default: false },
+    piiMaskingEnabled: { type: Boolean, default: PRIVACY_DEFAULTS.piiMaskingEnabled },
     // Custom PII patterns (admin-defined regex strings applied in addition to built-ins).
     customPiiPatterns: { type: [{ name: String, pattern: String }], default: [] },
     // Global gateway rate limit. When set, all requests across all API keys share this RPM ceiling.
     globalRpmGuardrail: { type: Number, default: null },
     // When false, messages and responseText are NOT stored in RequestRecord. Costs, latency, and
     // routing metadata are always logged regardless.
-    captureRequestPayloads: { type: Boolean, default: true },
+    captureRequestPayloads: { type: Boolean, default: PRIVACY_DEFAULTS.captureRequestPayloads },
     // Error-rate alerting: fires the webhook when the rolling 1-hour error rate exceeds threshold.
     alertErrorRateEnabled:   { type: Boolean, default: false },
     alertErrorRateThreshold: { type: Number,  default: 5 },  // percent, 0–100
@@ -118,3 +126,4 @@ settingsSchema.statics.invalidateCache = function invalidateCache() {
 };
 
 module.exports = mongoose.model("Settings", settingsSchema);
+module.exports.privacyDefaults = privacyDefaults;
