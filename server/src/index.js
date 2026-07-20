@@ -11,7 +11,7 @@ const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const { handleEmbeddings } = require("./gateway/embeddings");
-const { handleUpgrade } = require("./gateway/wsAuth");
+const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
 const { purgeOldRecords } = require("./maintenance/purge");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
 const canaryMonitor = require("./routing/canaryMonitor");
@@ -137,7 +137,7 @@ async function start() {
   // Daily purge of request records older than the configured retention window.
   // Runs immediately on startup (catches any overdue records), then every 24h.
   purgeOldRecords();
-  setInterval(purgeOldRecords, 24 * 60 * 60 * 1000);
+  const purgeTimer = setInterval(purgeOldRecords, 24 * 60 * 60 * 1000);
 
   // Error-rate alerting: checks rolling 1-hour error rate every 5 min and fires
   // the governance webhook when the threshold is exceeded.
@@ -161,6 +161,63 @@ async function start() {
     else console.log(`  dashboard:   run "npm run dev" (Vite on :${process.env.WEB_PORT || 5173})`);
     console.log("");
   });
+
+  installShutdownHandlers({ server, purgeTimer });
+}
+
+// Graceful shutdown.
+//
+// Ordering matters. Every RequestRecord is written from a detached setImmediate
+// scheduled AFTER the response is sent (see logging/logger.js), so stopping the
+// process the moment the socket closes loses the log line for the last requests
+// served. Draining briefly after server.close() is what makes those writes land.
+const SHUTDOWN_DRAIN_MS = 250;
+const SHUTDOWN_FORCE_MS = 15_000; // under Kubernetes' 30s default grace period
+
+function installShutdownHandlers({ server, purgeTimer }) {
+  let shuttingDown = false;
+
+  async function shutdown(signal) {
+    if (shuttingDown) return; // a second Ctrl-C shouldn't re-enter
+    shuttingDown = true;
+    console.log(`\n[shutdown] ${signal} received — draining…`);
+
+    const force = setTimeout(() => {
+      console.error(`[shutdown] still busy after ${SHUTDOWN_FORCE_MS}ms — forcing exit`);
+      process.exit(1);
+    }, SHUTDOWN_FORCE_MS);
+    if (force.unref) force.unref();
+
+    try {
+      // 1 · Stop accepting connections; let in-flight responses finish.
+      await new Promise((resolve) => server.close(resolve));
+
+      // 2 · server.close() leaves established WebSockets open — end them explicitly.
+      const closed = closeRealtimeSessions();
+      if (closed > 0) console.log(`[shutdown] closed ${closed} realtime session(s)`);
+
+      // 3 · Let the detached logger.write callbacks for those responses run.
+      await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
+
+      // 4 · Stop background work before tearing down its dependencies.
+      clearInterval(purgeTimer);
+      errorAlertMonitor.stop();
+      canaryMonitor.stop();
+      evalWorker.stop();
+
+      // 5 · Mongo last — the drained writes above need it alive.
+      await mongoose.disconnect();
+      console.log("[shutdown] clean");
+    } catch (err) {
+      console.error("[shutdown] error while draining:", err.message);
+    }
+
+    clearTimeout(force);
+    process.exit(0);
+  }
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 start().catch((err) => {
