@@ -72,6 +72,18 @@ const requestRecordSchema = new mongoose.Schema(
     // Deliberately NOT a top-level indexed dimension, so no group-by can surface it.
     internalContext: { type: mongoose.Schema.Types.Mixed, default: null },
 
+    // Non-null = reported via POST /v1/ingest (F-01: observe-only) rather than a live
+    // call through Arbr's own gateway. Unlike internalKind, this is NOT excluded from
+    // customer views by default — it's real partner spend, just via a different intake
+    // path — only made *filterable* (see analytics buildMatch / GET /api/requests).
+    // null = today's implicit truth for every native record; no backfill needed, since
+    // this concept didn't exist before this field was added.
+    source: { type: String, enum: ["ingested", null], default: null, index: true },
+    // The caller's own id from an ingested event, kept only for display/reference.
+    // The enforced-unique `requestId` above is namespaced per-key for ingested rows
+    // (see server/src/api/routes/ingest.js) so two integrations can't collide.
+    externalRequestId: { type: String, default: null },
+
     // performance + outcome
     latencyMs: { type: Number, default: 0 },
     // Time-to-first-token in ms (streaming proxy path only; null for non-streaming or LangChain path).
@@ -85,7 +97,7 @@ const requestRecordSchema = new mongoose.Schema(
     // routing transparency
     routingDecision: {
       type: String,
-      enum: ["passthrough", "explicit", "rule", "auto", "ai", "budget", "cache", "fallback", "canary"],
+      enum: ["passthrough", "explicit", "rule", "auto", "ai", "budget", "cache", "fallback", "canary", "external"],
       default: "passthrough",
       index: true,
     },
@@ -136,5 +148,10 @@ const RequestRecord = mongoose.model("RequestRecord", requestRecordSchema);
 RequestRecord.CUSTOMER_ONLY = { internalKind: null };
 RequestRecord.INTERNAL_ONLY = { internalKind: { $ne: null } };
 RequestRecord.INTERNAL_KINDS = INTERNAL_KINDS;
+
+// Predicates for the gateway/ingested split (F-01) — same shape, opposite default
+// visibility: unlike internalKind, callers do NOT exclude INGESTED_ONLY by default.
+RequestRecord.GATEWAY_ONLY = { source: null };
+RequestRecord.INGESTED_ONLY = { source: "ingested" };
 
 module.exports = RequestRecord;

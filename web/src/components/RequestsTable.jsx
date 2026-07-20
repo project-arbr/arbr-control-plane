@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { api, fmt } from "../api.js";
 import { Card, Table, Badge, Drawer, Stat, CodeBlock } from "./ui.jsx";
 
-const ROUTING_TONE = { passthrough: "gray", explicit: "teal", rule: "green", auto: "indigo", ai: "violet", budget: "red", cache: "charcoal", fallback: "amber" };
+const ROUTING_TONE = { passthrough: "gray", explicit: "teal", rule: "green", auto: "indigo", ai: "violet", budget: "red", cache: "charcoal", fallback: "amber", external: "teal" };
 
 const CLASSIFY = {
   provided: { tone: "gray", label: "provided" },
@@ -131,7 +131,7 @@ function RequestFlow({ r }) {
   );
 }
 
-const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", taskType: "", status: "", requestId: "" };
+const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", taskType: "", status: "", requestId: "", source: "" };
 
 const PERIODS = [
   { label: "Today",    days: 0 },
@@ -307,6 +307,18 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
             <option value="success">Success</option>
             <option value="failure">Failure</option>
             <option value="blocked">Blocked</option>
+          </select>
+        </div>
+        <div className="shrink-0">
+          <select
+            className="input"
+            value={filter.source}
+            onChange={(e) => { setPage(1); setFilter((f) => ({ ...f, source: e.target.value })); }}
+            title="Routed = went through Arbr's gateway. Observed = reported via POST /v1/ingest."
+          >
+            <option value="">Routed + observed</option>
+            <option value="gateway">Routed only</option>
+            <option value="ingested">Observed only</option>
           </select>
         </div>
       </div>

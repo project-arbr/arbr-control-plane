@@ -30,6 +30,7 @@ export default defineConfig({
           { text: 'Native endpoint', link: '/gateway/native' },
           { text: 'OpenAI-compatible endpoint', link: '/gateway/openai-compat' },
           { text: 'Streaming', link: '/gateway/streaming' },
+          { text: 'Observe-only ingestion', link: '/gateway/observe-only-ingestion' },
         ]
       },
       {

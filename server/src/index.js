@@ -12,6 +12,7 @@ const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const { handleEmbeddings } = require("./gateway/embeddings");
+const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
 const { purgeOldRecords } = require("./maintenance/purge");
 const { backfillInternalKind } = require("./maintenance/backfillInternalKind");
@@ -95,6 +96,12 @@ async function start() {
   // OpenAI-compatible embeddings endpoint — routes to the appropriate provider
   // (Gemini or OpenAI-compat) based on the model ID, with full observability.
   app.post("/v1/embeddings", auth.middleware, handleEmbeddings);
+
+  // Observe-only ingestion (F-01) — report request metadata for calls that
+  // already happened elsewhere (a partner's own gateway, LiteLLM, ...) with no
+  // live provider call. requireApiKey's "anonymous OK" default doesn't apply
+  // here (see handleIngest) — ingestion always needs a real key.
+  app.post("/v1/ingest", auth.middleware, handleIngest);
 
   // OpenAI-compatible model discovery — returns only models whose provider is
   // currently connected (live), with a toolCallSupported flag so clients know

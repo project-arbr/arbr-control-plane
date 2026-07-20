@@ -29,6 +29,12 @@ function buildMatch(filter = {}) {
   if (scope === "customer") m.internalKind = null;
   else if (scope === "internal") m.internalKind = { $ne: null };
   // "all" — no constraint
+
+  // source (F-01): unlike internalScope, this is NOT default-deny — ingested
+  // traffic is real partner spend, not overhead, so it's visible by default
+  // alongside gateway traffic. Only narrows when a caller explicitly filters.
+  if (filter.source === "ingested") m.source = "ingested";
+  else if (filter.source === "gateway") m.source = null;
   return m;
 }
 

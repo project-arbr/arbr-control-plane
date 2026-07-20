@@ -27,61 +27,75 @@ function payloadFields(record, settings) {
 //   latencyMs, status, retryCount, routingDecision, cacheHit,
 //   knownPricing?  — false for pass-through unlisted models; costs logged as $0
 //   messages?      — raw messages array; stored masked when piiMaskingEnabled
+//   source?, externalRequestId? — set by POST /v1/ingest (F-01); pass through
+//     unmodified via the spread below, same as internalKind already does. Cost
+//     derivation, masking, and capEngine.recordSpend() below apply identically
+//     regardless of source — ingested spend is real spend, counted the same way.
 // }
+// Same as write(), but propagates errors instead of swallowing them — used by
+// POST /v1/ingest (F-01), which needs to distinguish a duplicate requestId
+// (expected, reported back as such) from a real write failure per-event.
+// Every other caller should keep using write() below, not this directly.
+async function writeOrThrow(record) {
+  const promptTokens = record.promptTokens || 0;
+  const completionTokens = record.completionTokens || 0;
+  const totalTokens = record.totalTokens || promptTokens + completionTokens;
+  const cachedReadTokens = record.cachedReadTokens || 0;
+  const cacheWriteTokens = record.cacheWriteTokens || 0;
+  const { inputCost, outputCost, totalCost } = record.knownPricing === false
+    ? { inputCost: 0, outputCost: 0, totalCost: 0 }
+    : costFor(record.model, promptTokens, completionTokens, { cachedReadTokens, cacheWriteTokens });
+  // Estimated $ saved by cached reads vs paying full input rate for them.
+  let cacheSavingUsd = 0;
+  if (record.knownPricing !== false && cachedReadTokens > 0) {
+    const full = costFor(record.model, promptTokens, completionTokens);
+    cacheSavingUsd = Math.max(0, full.totalCost - totalCost);
+  }
+
+  // Captured context (prompt + response): respect captureRequestPayloads toggle, then
+  // PII-mask when enabled, then size-cap. Only the logged copy is masked — the model
+  // already received the original text. Settings are read lazily (singleton pattern).
+  const s = await Settings.get().catch(() => null);
+  const { messages, responseText } = payloadFields(record, s);
+
+  const doc = await RequestRecord.create({
+    ...record,
+    knownPricing: record.knownPricing !== false, // normalize to a stored boolean
+    messages,
+    responseText,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cachedReadTokens,
+    cacheWriteTokens,
+    cacheSavingUsd,
+    inputCost,
+    outputCost,
+    totalCost,
+  });
+
+  // Hard budget counters: only count successful, priced spend (not blocked/failed).
+  if (record.status === "success" && totalCost > 0 && record.knownPricing !== false) {
+    setImmediate(() =>
+      capEngine.recordSpend(totalCost, {
+        application: record.application,
+        provider: record.provider,
+        // Arbr's own overhead counts against a global cap but not a scoped one.
+        internalKind: record.internalKind || null,
+      }).catch(() => {})
+    );
+  }
+
+  return doc;
+}
+
 async function write(record) {
   try {
-    const promptTokens = record.promptTokens || 0;
-    const completionTokens = record.completionTokens || 0;
-    const totalTokens = record.totalTokens || promptTokens + completionTokens;
-    const cachedReadTokens = record.cachedReadTokens || 0;
-    const cacheWriteTokens = record.cacheWriteTokens || 0;
-    const { inputCost, outputCost, totalCost } = record.knownPricing === false
-      ? { inputCost: 0, outputCost: 0, totalCost: 0 }
-      : costFor(record.model, promptTokens, completionTokens, { cachedReadTokens, cacheWriteTokens });
-    // Estimated $ saved by cached reads vs paying full input rate for them.
-    let cacheSavingUsd = 0;
-    if (record.knownPricing !== false && cachedReadTokens > 0) {
-      const full = costFor(record.model, promptTokens, completionTokens);
-      cacheSavingUsd = Math.max(0, full.totalCost - totalCost);
-    }
-
-    // Captured context (prompt + response): respect captureRequestPayloads toggle, then
-    // PII-mask when enabled, then size-cap. Only the logged copy is masked — the model
-    // already received the original text. Settings are read lazily (singleton pattern).
-    const s = await Settings.get().catch(() => null);
-    const { messages, responseText } = payloadFields(record, s);
-
-    await RequestRecord.create({
-      ...record,
-      knownPricing: record.knownPricing !== false, // normalize to a stored boolean
-      messages,
-      responseText,
-      promptTokens,
-      completionTokens,
-      totalTokens,
-      cachedReadTokens,
-      cacheWriteTokens,
-      cacheSavingUsd,
-      inputCost,
-      outputCost,
-      totalCost,
-    });
-
-    // Hard budget counters: only count successful, priced spend (not blocked/failed).
-    if (record.status === "success" && totalCost > 0 && record.knownPricing !== false) {
-      setImmediate(() =>
-        capEngine.recordSpend(totalCost, {
-          application: record.application,
-          provider: record.provider,
-          // Arbr's own overhead counts against a global cap but not a scoped one.
-          internalKind: record.internalKind || null,
-        }).catch(() => {})
-      );
-    }
+    await writeOrThrow(record);
   } catch (err) {
     // Logging failures must not affect the user-facing call.
     console.error("[logger] failed to write request record:", err.message);
   }
 }
 
-module.exports = { write, payloadFields };
+module.exports = { write, writeOrThrow, payloadFields };
