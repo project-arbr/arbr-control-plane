@@ -18,9 +18,9 @@ Every request is evaluated top-to-bottom; the first match wins:
 
 ### 1. Budget enforcement
 
-If a budget **Block** cap is breached for the request's scope (application, provider, department), the request is rejected with HTTP 429.
+If a budget **Block** cap is breached for the request's scope (application or provider — the only dimensions that enforce today, see [Budgets](/budgets)), the request is rejected with HTTP 429. `routingDecision: "budget"`
 
-If a **Downgrade** cap is breached, the request is forced to the provider's light-tier model, overriding everything below — including developer pins.
+If a **Downgrade** cap is breached, the request is forced to the provider's light-tier model, overriding everything below — including developer pins. `routingDecision: "budget"`
 
 See [Budgets](/budgets).
 
@@ -37,7 +37,9 @@ This works even for models not in the registry — Arbr routes to the provider w
 
 When no explicit model is pinned, the router evaluates in order:
 
-**a. Cache** — identical `(served_model, messages)` → returns the stored response. `routingDecision: "cache"`
+**a. Exact-match cache** — identical `(served_model, messages)` → returns the stored response. `routingDecision: "cache"`
+
+**a2. Semantic cache** (opt-in, off by default) — on an exact-match miss, an embedding-similarity lookup against recently cached responses; a similarity above the configured threshold returns the cached response instead of calling the provider. `routingDecision: "semantic_cache"`. See [Semantic response cache](#semantic-response-cache) below.
 
 **b. Human routing rules** — the first enabled rule whose condition matches the request wins. Rules are editable in **Settings → Routing rules**. `routingDecision: "rule"`
 
@@ -47,6 +49,8 @@ When no explicit model is pinned, the router evaluates in order:
 
 **d. Default** — the configured default provider + model. `routingDecision: "passthrough"`
 
+**e. Canary rollout** — once a model is resolved by rules, automated routing, or the default, an active eval-approved experiment may divert a deterministic fraction of the traffic to a candidate model. `routingDecision: "canary"`. See [Canary rollouts](#canary-rollouts) below.
+
 ### 4. Fallback
 
 If the routed provider fails, Arbr tries other live providers in order. `routingDecision: "fallback"`
@@ -55,11 +59,34 @@ If the routed provider fails, Arbr tries other live providers in order. `routing
 
 Human-approved rules are applied before any automation. Each rule has:
 
-- **Condition** — match on `taskType`, `application`, `workflow`, `department`, or `userId`
+- **Condition** — match on `taskType`, `application`, or `workflow`
 - **Action** — route to a specific `provider` + `model`
 - **Enabled toggle** — off by default when created from a Recommendation
 
 Create rules in **Settings → Routing rules** or accept them from **Recommendations**.
+
+## Canary rollouts
+
+A `RoutingExperiment` diverts a deterministic percentage of **auto-routed** traffic from a baseline model to a candidate model — pinned (`explicit`) requests are never touched. It runs after rules/automated routing/the default resolve a served model, and before the per-app allowed-model and opt-out checks.
+
+- **Scope** — optionally restricted to an `application`, `workflow`, and/or `taskType`; an unset field matches any request.
+- **Bucketing** — deterministic by hashing `(application, workflow, userId, experimentId)`, so a given user consistently lands in or out of the rollout fraction (`rolloutPct`, 0–100).
+- **Eval-gated** — an experiment is only created from a passed `EvalRun`; canaried requests are logged with `qualityGate: "passed"`.
+- **Auto-rollback guardrails** — `maxErrorRateIncrease`, `maxLatencyRegressionPct`, `maxWorseRate`, and `minCostSavingPct` are monitored over a rolling window; a breach rolls the experiment back automatically.
+- **Fail-open** — any error while selecting a canary leaves normal routing intact.
+
+An admin can promote a successful canary to an enabled Rule. `routingDecision: "canary"`.
+
+## Semantic response cache
+
+Off by default — enable in **Governance → Semantic Cache**. It catches near-duplicate prompts that the exact-match cache misses.
+
+- Checked only on an exact-match cache **miss**, so it never adds latency to an exact-match hit.
+- Embeds the request with OpenAI's `text-embedding-3-small` and compares by cosine similarity against recently cached responses; a hit at or above the configured threshold (default `0.92`) is returned instead of calling the provider.
+- Requires `OPENAI_API_KEY` — silently disabled without one.
+- Stored in-process, per-instance (see [Deployment](/deployment) for what is/isn't shared across replicas).
+
+`routingDecision: "semantic_cache"`.
 
 ## Task classification
 
@@ -68,8 +95,8 @@ When `taskType` is not sent by the caller, Arbr classifies it against the **late
 | Method | When | `classifiedBy` |
 |---|---|---|
 | Provided | Caller set `taskType` | `"provided"` |
-| Keyword | Rule-based keyword match on the message | `"keyword"` |
-| AI | AI routing mode + no keyword match | `"ai"` |
+| AI | **AI routing mode is on** — the AI classifier is primary: a cheap, cached LLM call classifies the request | `"ai"` |
+| Keyword | AI routing mode is off, or the AI call fails/is unavailable — deterministic keyword match is the fallback | `"keyword"` |
 
 Known cheap task types: `classification`, `extraction`, `summarisation`, `translation`, `faq`, `support response`.
 

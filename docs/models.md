@@ -13,7 +13,17 @@ The model registry maps model IDs to pricing (USD / 1M tokens) and tier. It's ba
 
 You can route to **any model on any live provider** without a registry entry. Entries are only needed for accurate cost tracking and tier-aware recommendations.
 
-## Built-in models (29, seeded automatically)
+## Model catalog (LiteLLM sync)
+
+There's no static seed list — LiteLLM's public model catalog is the single source of truth for what's in the registry:
+
+- **Fresh install (empty registry):** on boot, Arbr automatically runs a LiteLLM sync so the registry isn't empty on first start.
+- **Existing install:** legacy `builtIn: true` entries are converted to `builtIn: false` at boot, so sync can manage (refresh pricing on, and eventually clean up) models that used to be hardcoded.
+- **Ongoing:** sync discovers new chat models from LiteLLM's catalog, refreshes pricing/context-window/capability flags on every existing model, and removes models that have fallen out of the upstream catalog (only for entries not marked `builtIn`). Sync never touches `tier`, `label`, `builtIn`, or `enabled` — once you set those, Arbr won't overwrite them.
+
+See [Refreshing the catalog](#refreshing-the-catalog) below for how to trigger a sync manually.
+
+The tables below are a snapshot of a freshly-synced catalog — exact models and prices drift as LiteLLM's upstream catalog changes. Check **Models** in the dashboard for what's actually registered.
 
 ### Anthropic
 
@@ -91,14 +101,14 @@ You can route to **any model on any live provider** without a registry entry. En
 
 ## Adding a model
 
-### Dashboard (Settings → Models)
+### Dashboard (Models page)
 
-Click **+ Add model** and fill in:
+Open a provider's card on the **Models** page and click **+ Add model**. The form has exactly three fields:
 - **Model ID** — the exact string you'll send in `"model":` requests
-- **Provider** — must match a live provider in Settings → Connections
-- **Label** — human-readable display name (optional)
+- **Display name** (required) — human-readable label
 - **Tier** — `light` / `mid` / `premium`
-- **Input $/1M** and **Output $/1M** — from the provider's pricing page
+
+There's no separate Provider field — the form lives inside that provider's card, so the provider is implicit. There's also no manual pricing field: if the Model ID matches an entry already in the registry (e.g. discovered by a LiteLLM sync), pricing and metadata auto-fill; otherwise pricing defaults to **$0** and must be corrected afterward via `PATCH /api/models/:id`.
 
 ### Admin API
 
@@ -124,20 +134,19 @@ curl -X PATCH http://localhost:4100/api/models/my-model-v2 \
 curl -X DELETE http://localhost:4100/api/models/my-model-v2
 ```
 
-### Seed script
+### Refreshing the catalog
 
-To add models as part of setup, extend `SEED` in `server/src/seed/seedModels.js` and run:
+To pull the latest models and pricing from LiteLLM:
 
-```sh
-npm run seed:models
-```
+- **Dashboard** — Models page → **Sync Models** button (calls `POST /api/benchmarks/sync`, which also refreshes recommendation benchmarks)
+- **Admin API** — `POST /api/litellm/sync` to refresh just the model catalog
 
-## Upsert strategy
+## How sync manages the registry
 
-| Entry state | On seed run |
+| Step | What happens |
 |---|---|
-| Not in DB | Created with `builtIn: true` |
-| In DB, `builtIn: true` | Pricing and label updated |
-| In DB, `builtIn: false` (user-created) | Skipped — never overwritten |
+| Discover | Any chat model in LiteLLM's catalog not already in the registry is inserted with `builtIn: false` |
+| Refresh | Pricing, context window, and capability flags are updated on **every** existing model, built-in or not. `tier`, `label`, `builtIn`, and `enabled` are never touched by sync |
+| Cleanup | Models no longer present in the LiteLLM catalog are deleted — but only entries with `builtIn: false` |
 
-Built-in models can be **disabled** (toggle in Settings → Models) but not deleted. Custom models can be deleted.
+Built-in models can be **disabled** (toggle in Settings → Models) but not deleted. Custom/synced models can be deleted.

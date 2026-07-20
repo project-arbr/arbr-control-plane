@@ -39,6 +39,11 @@ Fields:
 | `period` | `day` \| `month` | Rolling window |
 | `limit` | number (USD) | Spend threshold |
 | `action` | `alert` \| `downgrade` \| `block` | What to do when breached |
+| `warningThreshold` | number, 0–1 (default `0.8`) | Fraction of `limit` at which a `cap_warning` webhook fires, ahead of the hard action. Only meaningful for `downgrade`/`block` caps. |
+
+::: warning Only `application` and `provider` caps enforce today
+`downgrade`/`block` only actually change routing when `dimension` is `application` or `provider`. `department`, `workflow`, and `model` dimension caps are tracked and can still alert (breaches show in the dashboard and `/api/status`), but the gateway does not yet downgrade or block traffic on them.
+:::
 
 ## Examples
 
