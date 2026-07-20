@@ -40,4 +40,15 @@ async function handleUpgrade(req, socket, head) {
   });
 }
 
-module.exports = { handleUpgrade };
+// server.close() does not touch established WebSockets, so shutdown has to close
+// realtime sessions itself or they hold the process open until the force-exit timer.
+// 1001 = "going away", which tells clients this is a server-side teardown, not an error.
+function closeAll() {
+  const sessions = [...wss.clients]; // snapshot: closing mutates the set
+  for (const ws of sessions) {
+    try { ws.close(1001, "server shutting down"); } catch { /* already gone */ }
+  }
+  return sessions.length;
+}
+
+module.exports = { handleUpgrade, closeAll };
