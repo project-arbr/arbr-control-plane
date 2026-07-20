@@ -174,6 +174,13 @@ const config = {
     clientId: process.env.ARBR_OIDC_CLIENT_ID || null,
     clientSecret: process.env.ARBR_OIDC_CLIENT_SECRET || null,
     redirectUri: process.env.ARBR_OIDC_REDIRECT_URI || null,
+    // Optional allowlist for shared OAuth clients that accept any account (e.g.
+    // one registered for a public app too) — comma-separated. Empty = no
+    // restriction beyond whatever the identity provider itself enforces.
+    allowedDomains: (process.env.ARBR_OIDC_ALLOWED_DOMAINS || "")
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean),
   },
   trustedHeader: {
     // "iap" verifies a signed Google IAP JWT; "proxy" trusts a forwarded-identity

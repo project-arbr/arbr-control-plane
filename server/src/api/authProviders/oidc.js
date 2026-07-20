@@ -17,6 +17,15 @@ const pendingSecret = crypto.randomBytes(32);
 
 const router = express.Router();
 
+// For OAuth clients shared with other apps (e.g. one already registered for a
+// public-signup product) that accept any account — restrict who can actually
+// reach arbr regardless. Empty allowlist = no restriction.
+function isAllowedEmailDomain(email, allowedDomains) {
+  if (!allowedDomains.length) return true;
+  const domain = String(email).toLowerCase().split("@")[1] || "";
+  return allowedDomains.includes(domain);
+}
+
 let clientPromise = null;
 function getClient() {
   if (!clientPromise) {
@@ -88,6 +97,11 @@ router.get("/callback", requireOidcMode, async (req, res, next) => {
       return res.status(400).send("Your identity provider did not return an email claim.");
     }
     const email = String(claims.email).toLowerCase();
+    if (!isAllowedEmailDomain(email, config.oidc.allowedDomains)) {
+      return res.status(403).send(
+        `Sign-in is restricted to ${config.oidc.allowedDomains.join(", ")}. Contact an administrator if this is unexpected.`
+      );
+    }
 
     let user = await User.findOne({ email });
     if (!user) {
@@ -122,3 +136,4 @@ router.post("/logout", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.isAllowedEmailDomain = isAllowedEmailDomain;

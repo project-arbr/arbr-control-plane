@@ -54,6 +54,14 @@ existing administrator must promote them before they can mutate anything. Sessio
 server-side (not stateless JWTs): disabling a user in the Users page deletes their sessions
 immediately, without touching anyone else's.
 
+**Reusing an OAuth client registered for another app?** Nothing stops it technically — each app
+still does its own independent token exchange, so there's no session sharing or leakage between
+them. But if that client's consent screen accepts *any* account (common when it's shared with a
+public-signup product, since the consent-screen restriction is project-wide, not per-client), set
+`ARBR_OIDC_ALLOWED_DOMAINS` (comma-separated) so arbr rejects anyone outside your organization
+before they're ever provisioned — even as a `viewer`. Leave it unset only if the client itself is
+already restricted to your organization and used by no other, more permissive app.
+
 ## GCP IAP setup
 
 If arbr runs behind [Identity-Aware Proxy](https://cloud.google.com/iap) (Cloud Run, GCE, or a
