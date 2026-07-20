@@ -10,6 +10,20 @@ const { maskMessages, maskPii, clampText } = require("../logging/piiFilter");
 const { judge } = require("./judge");
 const { isSingleShot, shouldSample, withinWindow, campaignMatches } = require("./logic");
 
+function shadowPayload({ messages, prodText, candidateText }, settings) {
+  if (settings?.captureRequestPayloads === false) {
+    return { messages: null, prodResponse: null, candidateResponse: null };
+  }
+  const mask = !!settings?.piiMaskingEnabled;
+  const patterns = settings?.customPiiPatterns || [];
+  const msgArr = Array.isArray(messages) ? messages : [{ role: "user", content: String(messages ?? "") }];
+  return {
+    messages: mask ? maskMessages(msgArr, patterns) : msgArr,
+    prodResponse: clampText(mask ? maskPii(prodText || "", patterns) : (prodText || "")),
+    candidateResponse: clampText(mask ? maskPii(candidateText || "", patterns) : (candidateText || "")),
+  };
+}
+
 // Short-lived active-campaign cache per application (mirrors getAppConfig in handler.js).
 const _campaignCache = new Map(); // application -> { campaign, expiresAt }
 async function getActiveCampaign(application) {
@@ -98,27 +112,31 @@ async function maybeShadowEval({ application, workflow, taskType, messages, hasT
     if (!candidate) { await recordCandidateError(campaign); return; }
 
     const s = await Settings.get().catch(() => null);
-    const mask = !!s?.piiMaskingEnabled;
-    const msgArr = Array.isArray(messages) ? messages : [{ role: "user", content: String(messages ?? "") }];
+    const stored = shadowPayload({ messages, prodText: prod.text, candidateText: candidate.text }, s);
     const pair = new EvalPair({
       campaignId: campaign._id, requestId, application, taskType, timestamp: new Date(),
       prodModel: prod.model, prodProvider: prod.provider, prodCost: costOf(prod.model, prod.usage),
-      prodLatencyMs: prod.latencyMs, prodResponse: clampText(mask ? maskPii(prod.text || "") : (prod.text || "")),
+      prodLatencyMs: prod.latencyMs, prodResponse: stored.prodResponse,
       candidateModel: campaign.candidateModel, candidateProvider: cm.provider,
       candidateCost: costOf(campaign.candidateModel, candidate.usage), candidateLatencyMs: candidate.latencyMs,
-      candidateResponse: clampText(mask ? maskPii(candidate.text || "") : (candidate.text || "")),
+      candidateResponse: stored.candidateResponse,
       judgeModel: campaign.judgeModel || null,
-      messages: mask ? maskMessages(msgArr) : msgArr,
+      messages: stored.messages,
     });
 
     const v = await judge({
       router, eff, judgeModel: campaign.judgeModel, messages, prodText: prod.text, candidateText: candidate.text,
     });
-    if (v) { pair.verdict = v.verdict; pair.rationale = v.rationale; }
+    if (v) {
+      pair.verdict = v.verdict;
+      pair.rationale = s?.captureRequestPayloads === false
+        ? null
+        : clampText(s?.piiMaskingEnabled ? maskPii(v.rationale || "", s.customPiiPatterns || []) : v.rationale);
+    }
     await pair.save();
 
     if (pair.verdict) await checkThresholdAndNotify(campaign);
   } catch { /* never affect the served request */ }
 }
 
-module.exports = { maybeShadowEval, getActiveCampaign, invalidateCampaignCache, isSingleShot };
+module.exports = { maybeShadowEval, getActiveCampaign, invalidateCampaignCache, isSingleShot, shadowPayload };
