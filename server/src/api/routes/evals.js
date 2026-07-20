@@ -104,18 +104,4 @@ router.patch("/evals/results/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Clamp/normalize canary guardrail inputs to sane numbers (falls back to defaults).
-function sanitizeGuardrails(g) {
-  const d = { maxErrorRateIncrease: 0.02, maxLatencyRegressionPct: 0.25, maxWorseRate: 0.10, minCostSavingPct: 0.10 };
-  if (!g || typeof g !== "object") return d;
-  const num = (v, def) => (v != null && !isNaN(Number(v)) ? Number(v) : def);
-  return {
-    maxErrorRateIncrease: num(g.maxErrorRateIncrease, d.maxErrorRateIncrease),
-    maxLatencyRegressionPct: num(g.maxLatencyRegressionPct, d.maxLatencyRegressionPct),
-    maxWorseRate: num(g.maxWorseRate, d.maxWorseRate),
-    minCostSavingPct: num(g.minCostSavingPct, d.minCostSavingPct),
-  };
-}
-
-
 module.exports = router;
