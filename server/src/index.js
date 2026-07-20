@@ -137,7 +137,7 @@ async function start() {
   // Daily purge of request records older than the configured retention window.
   // Runs immediately on startup (catches any overdue records), then every 24h.
   purgeOldRecords();
-  const purgeTimer = setInterval(purgeOldRecords, 24 * 60 * 60 * 1000);
+  setInterval(purgeOldRecords, 24 * 60 * 60 * 1000);
 
   // Error-rate alerting: checks rolling 1-hour error rate every 5 min and fires
   // the governance webhook when the threshold is exceeded.
@@ -162,7 +162,7 @@ async function start() {
     console.log("");
   });
 
-  installShutdownHandlers({ server, purgeTimer });
+  installShutdownHandlers({ server });
 }
 
 // Graceful shutdown.
@@ -174,7 +174,9 @@ async function start() {
 const SHUTDOWN_DRAIN_MS = 250;
 const SHUTDOWN_FORCE_MS = 15_000; // under Kubernetes' 30s default grace period
 
-function installShutdownHandlers({ server, purgeTimer }) {
+// The daily purge interval is deliberately not cleared: this always ends in
+// process.exit(0), and a 24h timer cannot fire inside the drain window.
+function installShutdownHandlers({ server }) {
   let shuttingDown = false;
 
   async function shutdown(signal) {
@@ -200,7 +202,6 @@ function installShutdownHandlers({ server, purgeTimer }) {
       await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
 
       // 4 · Stop background work before tearing down its dependencies.
-      clearInterval(purgeTimer);
       errorAlertMonitor.stop();
       canaryMonitor.stop();
       evalWorker.stop();
