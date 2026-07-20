@@ -13,7 +13,7 @@ GROQ_API_KEY=...
 ```
 
 ```
-Dashboard: Settings → Connections → Groq → API Key
+Dashboard: Models → Groq → API Key
 ```
 
 :::

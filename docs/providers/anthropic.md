@@ -11,7 +11,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ```
-Dashboard: Settings → Connections → Anthropic → API Key
+Dashboard: Models → Anthropic → API Key
 ```
 
 :::
