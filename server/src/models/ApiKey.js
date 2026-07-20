@@ -21,6 +21,8 @@ const apiKeySchema = new mongoose.Schema(
     // Trusted (unlike self-reported body fields) because it's set at key-creation time.
     userId:     { type: String, default: null },
     department: { type: String, default: null },
+    // Optional expiry date. Gateway rejects keys whose expiresAt is in the past.
+    expiresAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now },
     lastUsedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },

@@ -153,6 +153,10 @@ const config = {
   // Unset = open admin (local dev / demo) with a loud boot warning.
   // Required in production (see assertProductionReady).
   adminKey: process.env.ARBR_ADMIN_KEY || null,
+  // Admin API (/api/*) shares one credential, so per-key limiting can't distinguish
+  // callers — this caps requests per source IP instead. Generous default; it exists
+  // to blunt DB-hammering (accidental loops, a leaked key), not to throttle normal use.
+  adminRpmGuardrail: Number(process.env.ARBR_ADMIN_RPM_GUARDRAIL) || 600,
   isProduction,
   // Provider-error fallback policy (see invokeWithFallback).
   fallbackScope,
