@@ -44,7 +44,8 @@ The default provider is the one used when `model: "auto"` finds no matching rule
 
 Each provider has its own page with the exact env var, dashboard field names, seeded models, and working examples:
 
-- [OpenAI / LiteLLM proxy](/providers/openai)
+- [OpenAI](/providers/openai)
+- [LiteLLM Proxy](/providers/litellm)
 - [Anthropic](/providers/anthropic)
 - [Google Gemini](/providers/gemini)
 - [Amazon Bedrock](/providers/bedrock)

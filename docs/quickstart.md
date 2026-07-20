@@ -46,6 +46,9 @@ OPENAI_API_KEY=sk-...
 
 Environment variables take precedence over dashboard-stored keys. See [Providers](/providers/overview) for all supported providers.
 
+Already running LiteLLM? See [LiteLLM Proxy](/providers/litellm) — it's an upstream Arbr
+connects to, not a replacement.
+
 ## Make your first call
 
 Once a provider is live, hit the gateway:
