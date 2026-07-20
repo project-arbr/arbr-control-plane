@@ -15,7 +15,9 @@ async function purgeOldRecords() {
     if (!days || days <= 0) return; // 0 / null = keep forever
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const { deletedCount } = await RequestRecord.deleteMany({ timestamp: { $lt: cutoff } });
+    // Intentionally not filtered by internalKind: Arbr's own internal records age out on
+  // the same retention window as customer traffic. Don't "fix" this.
+  const { deletedCount } = await RequestRecord.deleteMany({ timestamp: { $lt: cutoff } });
     if (deletedCount > 0) {
       console.log(`[purge] deleted ${deletedCount} request records older than ${days} days`);
     }

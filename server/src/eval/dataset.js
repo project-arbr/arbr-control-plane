@@ -17,7 +17,9 @@ const FETCH_MULTIPLIER = 5; // over-fetch before dedupe/stratify so we can still
 // Mongo query for a recommendation's scope. Only successful, single-shot, non-cache records
 // with a stored response are eligible (tools/multi-turn are excluded downstream via isSingleShot).
 function buildScopeQuery(rec, since) {
-  const q = { status: "success", cacheHit: { $ne: true } };
+  // Customer traffic only — Arbr's own internal prompts must never become items in a
+  // customer's evaluation dataset.
+  const q = { status: "success", cacheHit: { $ne: true }, ...RequestRecord.CUSTOMER_ONLY };
   if (rec.taskType) q.taskType = rec.taskType;
   if (rec.currentModel) q.model = rec.currentModel;
   if (rec.application) q.application = rec.application;

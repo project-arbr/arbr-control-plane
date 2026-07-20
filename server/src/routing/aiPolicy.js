@@ -121,7 +121,8 @@ const DOMAIN_KEYWORDS = {
 
 // Task types apps have actually sent (lowercased), from the request log.
 async function observedTaskTypes() {
-  const seen = await RequestRecord.distinct("taskType");
+  // Customer traffic only — Arbr's own task types must not become routable policy entries.
+  const seen = await RequestRecord.distinct("taskType", RequestRecord.CUSTOMER_ONLY);
   return seen.filter(Boolean).map((t) => String(t).toLowerCase());
 }
 
@@ -386,7 +387,9 @@ async function regenerate({ router, eff, goal }) {
 // logged tokens; `capabilityIndex` is a heuristic PROXY (capability scores, not measured quality).
 async function simulate({ assignments = {}, application = null, windowDays = 14 } = {}) {
   const since = new Date(Date.now() - windowDays * 86400000);
-  const match = { status: "success", timestamp: { $gte: since } };
+  // Customer traffic only — simulating a policy against Arbr's own overhead would
+  // re-price internal tokens as if a routing rule could have changed them.
+  const match = { status: "success", timestamp: { $gte: since }, ...RequestRecord.CUSTOMER_ONLY };
   if (application) match.application = application;
   const agg = await RequestRecord.aggregate([
     { $match: match },

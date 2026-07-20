@@ -119,6 +119,27 @@ nobody mistakes a demo-grade mechanism for a hardened one. Several of these are 
 single-instance tradeoffs; they matter most if you run multiple replicas or high burst
 traffic.
 
+- **Arbr's own AI spend is counted but never attributed to a customer.** Arbr makes LLM
+  calls for itself (task classification on the routing path, AI policy generation, eval
+  judging, connection/model tests). Those are real money on the customer's provider key,
+  so they are stamped with `RequestRecord.internalKind` and **included in headline
+  `totalCost`** — a cost dashboard that hid them would understate the actual provider bill.
+  They are **excluded** from every per-application/workflow/user dimension view, from
+  facets, recommendations, eval datasets, canary baselines, policy simulation, observed
+  task types, provider health, and error-rate alerting, because they belong to no customer
+  application. `analytics/aggregate.js` `buildMatch` is **default-deny**: a view that does
+  not pass `internalScope` gets customer traffic only. Two consequences worth knowing:
+  (a) a **global** cost cap counts this overhead and can therefore breach on spend the
+  customer did not directly cause, while **scoped** (application/provider) caps never see
+  it — `capEngine._matches`, `analytics.spend({ includeInternal })` and the Budgets page
+  must stay in agreement or the displayed number diverges from the enforced one;
+  (b) records written before `internalKind` existed have no such field, which query
+  predicates treat as customer traffic — but **aggregation expressions do not**, so the
+  internal/customer split uses `$ifNull` rather than a bare `$eq` against null.
+  `RequestRecord` remains the single money ledger: eval collections (`EvalPair.prodCost`,
+  `EvalRun.actualCostUsd`) intentionally re-state costs for domain reporting and are never
+  summed into analytics totals.
+
 - **Budgets use hard CapSpend counters (multi-replica safe).** `routing/capEngine.js` keeps
   per-cap atomic spend counters (`CapSpend`, Mongo `$inc`) keyed by calendar window. The
   gateway reads those counters on every request for `block`/`downgrade` caps; successful

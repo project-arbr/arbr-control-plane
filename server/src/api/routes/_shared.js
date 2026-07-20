@@ -19,6 +19,10 @@ async function capStatus(cap) {
       dimension: cap.dimension,
       value: cap.value,
       from: capWindowStart(cap.period),
+      // Must mirror capEngine._matches, or the Budgets page shows a different
+      // number than the one being enforced: global caps see Arbr's own overhead,
+      // scoped caps do not.
+      includeInternal: !cap.dimension,
     });
   }
   const pct = cap.limit > 0 ? spent / cap.limit : 0;

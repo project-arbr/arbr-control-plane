@@ -18,7 +18,9 @@ async function check() {
 
     const since = new Date(Date.now() - WINDOW_MS);
     const [row] = await RequestRecord.aggregate([
-      { $match: { timestamp: { $gte: since } } },
+      // Customer traffic only — Arbr's own internal calls failing is an operator
+      // concern, not a reason to alert someone about *their* error rate.
+      { $match: { timestamp: { $gte: since }, ...RequestRecord.CUSTOMER_ONLY } },
       { $group: {
           _id: null,
           total:    { $sum: 1 },

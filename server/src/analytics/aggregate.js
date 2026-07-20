@@ -5,6 +5,14 @@ const ApiKey = require("../models/ApiKey");
 const { computeRealisedSavings } = require("./savings");
 
 // Build a $match stage from filter query params.
+//
+// internalScope decides whether Arbr's own internal calls (classification, policy
+// generation, eval judging, …) are in scope. It defaults to "customer" — DEFAULT DENY —
+// so a view that knows nothing about internal spend cannot accidentally attribute
+// Arbr's overhead to a customer application. Callers opt in explicitly:
+//   "customer" (default) — customer traffic only
+//   "internal"           — Arbr's own calls only (the overhead detail view)
+//   "all"                — everything (headline totals, which include real overhead)
 function buildMatch(filter = {}) {
   const m = {};
   if (filter.from || filter.to) {
@@ -16,41 +24,86 @@ function buildMatch(filter = {}) {
     if (filter[f]) m[f] = filter[f];
   }
   if (filter.requestId) m.requestId = filter.requestId;
+
+  const scope = filter.internalScope || "customer";
+  if (scope === "customer") m.internalKind = null;
+  else if (scope === "internal") m.internalKind = { $ne: null };
+  // "all" — no constraint
   return m;
 }
 
+// True when the filter narrows to a customer dimension (not just a time range).
+// Internal records carry no application/workflow/user, so any such view is
+// customer-scoped by definition and must report zero overhead.
+function isDimensionScoped(filter = {}) {
+  return ["application", "workflow", "department", "taskType", "userId"].some((f) => filter[f]);
+}
+
+// Headline view. `totalCost` deliberately INCLUDES Arbr's own internal spend, because
+// that is real money on the customer's provider key and a cost dashboard that hides it
+// would understate their actual bill. It is also reported separately as `internalCost`
+// so it can be shown as its own line rather than smeared across customer applications.
+//
+// Every OTHER metric here is customer-only: internal calls have their own latency and
+// never hit the response cache, so counting them would distort avgLatency and the cache
+// hit rate. A dimension-scoped view reports zero overhead by definition.
 async function overview(filter) {
-  const match = buildMatch(filter);
+  const scoped = isDimensionScoped(filter);
+  const match = buildMatch({ ...filter, internalScope: scoped ? "customer" : "all" });
+  // $ifNull is load-bearing: a *query* predicate like { internalKind: null } matches
+  // documents where the field is absent, but an aggregation expression does not —
+  // $eq: ["$internalKind", null] is false for a missing field. Records written before
+  // this field existed have no internalKind, so without this they'd count as neither
+  // customer nor internal and silently vanish from the split.
+  const isCustomer = { $eq: [{ $ifNull: ["$internalKind", null] }, null] };
+  const customerSum = (expr) => ({ $sum: { $cond: [isCustomer, expr, 0] } });
+
   const [row] = await RequestRecord.aggregate([
     { $match: match },
     {
       $group: {
         _id: null,
-        totalRequests: { $sum: 1 },
+        // Headline: everything in scope, overhead included.
         totalCost: { $sum: "$totalCost" },
-        avgLatency: { $avg: "$latencyMs" },
-        totalTokens: { $sum: "$totalTokens" },
-        failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
-        cacheHits: { $sum: { $cond: ["$cacheHit", 1, 0] } },
-        cachedReadTokens: { $sum: "$cachedReadTokens" },
-        cacheSavingUsd: { $sum: "$cacheSavingUsd" },
+        // The overhead split.
+        internalCost: { $sum: { $cond: [isCustomer, 0, "$totalCost"] } },
+        internalRequests: { $sum: { $cond: [isCustomer, 0, 1] } },
+        // Customer-only from here down.
+        totalRequests: customerSum(1),
+        totalTokens: customerSum("$totalTokens"),
+        failures: { $sum: { $cond: [{ $and: [isCustomer, { $eq: ["$status", "failure"] }] }, 1, 0] } },
+        cacheHits: { $sum: { $cond: [{ $and: [isCustomer, "$cacheHit"] }, 1, 0] } },
+        cachedReadTokens: customerSum("$cachedReadTokens"),
+        cacheSavingUsd: customerSum("$cacheSavingUsd"),
         // Pass-through models with no pricing entry log $0; surface them so cost isn't read as complete.
-        unknownPricingRequests: { $sum: { $cond: [{ $eq: ["$knownPricing", false] }, 1, 0] } },
+        unknownPricingRequests: {
+          $sum: { $cond: [{ $and: [isCustomer, { $eq: ["$knownPricing", false] }] }, 1, 0] },
+        },
+        customerCost: customerSum("$totalCost"),
+        customerLatencySum: customerSum("$latencyMs"),
       },
     },
   ]);
   const totalRequests = row?.totalRequests || 0;
   const totalCost = row?.totalCost || 0;
+  const customerCost = row?.customerCost || 0;
+  const internalCost = row?.internalCost || 0;
   const cacheHits = row?.cacheHits || 0;
   const unknownPricingRequests = row?.unknownPricingRequests || 0;
   const pricedRequests = totalRequests - unknownPricingRequests;
   return {
     totalRequests,
     totalCost,
-    // Average over priced requests only — $0 unknown-pricing records would otherwise deflate it.
-    avgCostPerRequest: pricedRequests ? totalCost / pricedRequests : 0,
+    // The overhead split. internalShare is of the headline total, so the two read together.
+    customerCost,
+    internalCost,
+    internalRequests: row?.internalRequests || 0,
+    internalShare: totalCost ? internalCost / totalCost : 0,
+    // Average over priced CUSTOMER requests only — $0 unknown-pricing records would
+    // otherwise deflate it, and overhead isn't attributable to a customer request.
+    avgCostPerRequest: pricedRequests ? customerCost / pricedRequests : 0,
     unknownPricingRequests,
-    avgLatency: row?.avgLatency || 0,
+    avgLatency: totalRequests ? (row?.customerLatencySum || 0) / totalRequests : 0,
     totalTokens: row?.totalTokens || 0,
     failures: row?.failures || 0,
     // Caching observability: response-cache hit rate + provider prompt-cache reuse and savings.
@@ -151,11 +204,16 @@ async function realisedSavings(filter) {
 
 // Total cost for a scope over a window — powers cost caps. dimension/value are
 // optional (omit both for global spend); from/to bound the window.
-async function spend({ dimension, value, from, to } = {}) {
+//
+// includeInternal defaults to false so any caller that hasn't thought about Arbr's
+// own overhead gets the customer-only number. Only a GLOBAL cap should pass true:
+// a scoped cap is a control over scoped traffic, and overhead belongs to no scope.
+async function spend({ dimension, value, from, to, includeInternal = false } = {}) {
   const filter = {};
   if (from) filter.from = from;
   if (to) filter.to = to;
   if (dimension && value) filter[dimension] = value;
+  if (includeInternal) filter.internalScope = "all";
   const match = buildMatch(filter);
   const [row] = await RequestRecord.aggregate([
     { $match: match },
@@ -165,15 +223,18 @@ async function spend({ dimension, value, from, to } = {}) {
 }
 
 // Distinct values for filter dropdowns.
+// Customer-only: Arbr's own internal calls must never become a selectable dimension
+// value, or the console offers "filter by Arbr's overhead" as if it were an application.
 async function facets() {
+  const customer = RequestRecord.CUSTOMER_ONLY;
   const [applications, workflows, departments, models, providers, taskTypes, users, keyApps] = await Promise.all([
-    RequestRecord.distinct("application"),
-    RequestRecord.distinct("workflow"),
-    RequestRecord.distinct("department"),
-    RequestRecord.distinct("model"),
-    RequestRecord.distinct("provider"),
-    RequestRecord.distinct("taskType"),
-    RequestRecord.distinct("userId"),
+    RequestRecord.distinct("application", customer),
+    RequestRecord.distinct("workflow", customer),
+    RequestRecord.distinct("department", customer),
+    RequestRecord.distinct("model", customer),
+    RequestRecord.distinct("provider", customer),
+    RequestRecord.distinct("taskType", customer),
+    RequestRecord.distinct("userId", customer),
     ApiKey.distinct("application", { enabled: true, revokedAt: null }),
   ]);
   // Apps that have a key but have never made a request — shown as "newly added".
@@ -184,10 +245,13 @@ async function facets() {
 
 // Per-provider health over the last 24h: error rate and average latency.
 // Surfaces in the Connections page so operators can spot degraded providers.
+// Customer-only: internal call volume is small and bursty (a run of connection tests
+// would swing the numbers), and this panel answers "how are my providers serving my
+// traffic". Arbr's own calls do exercise the provider, so this is a deliberate choice.
 async function providerHealth() {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const rows = await RequestRecord.aggregate([
-    { $match: { timestamp: { $gte: since } } },
+    { $match: { timestamp: { $gte: since }, ...RequestRecord.CUSTOMER_ONLY } },
     {
       $group: {
         _id: "$provider",
@@ -262,9 +326,41 @@ async function latencyPercentiles(filter) {
   return row || { p50: null, p95: null, p99: null, ttftP50: null, ttftP95: null, overheadP50: null, overheadP95: null, overheadP99: null };
 }
 
+// Arbr's own overhead, broken down by what it was spent on. This is the one view that
+// deliberately looks at internal records — everything else excludes them.
+async function internalSpend(filter = {}) {
+  const scoped = { ...filter, internalScope: "internal" };
+  const [byKind, byModel, [totals]] = await Promise.all([
+    groupBy("internalKind", scoped),
+    groupBy("model", scoped),
+    RequestRecord.aggregate([
+      { $match: buildMatch(scoped) },
+      {
+        $group: {
+          _id: null,
+          totalCost: { $sum: "$totalCost" },
+          totalRequests: { $sum: 1 },
+          totalTokens: { $sum: "$totalTokens" },
+          failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
+        },
+      },
+    ]),
+  ]);
+  return {
+    totalCost: totals?.totalCost || 0,
+    totalRequests: totals?.totalRequests || 0,
+    totalTokens: totals?.totalTokens || 0,
+    failures: totals?.failures || 0,
+    byKind,
+    byModel,
+  };
+}
+
 module.exports = {
   buildMatch,
+  isDimensionScoped,
   overview,
+  internalSpend,
   spend,
   timeseries,
   byApplication,
