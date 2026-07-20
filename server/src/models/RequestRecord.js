@@ -66,6 +66,15 @@ const requestRecordSchema = new mongoose.Schema(
     confidence: { type: Number, default: null },
     cacheHit: { type: Boolean, default: false },
 
+    // Quality trust of the route that served this request (from the matching rule, if any).
+    // null = not rule-routed / legacy. Used to split realised savings by quality gate.
+    qualityGate: {
+      type: String,
+      enum: ["passed", "overridden", "ungated"],
+      default: null,
+      index: true,
+    },
+
     // WHY this model was served — the non-derivable reasoning captured at decision time
     // (which rule matched, the AI-policy source/base, a breached budget cap, a fallback
     // origin). The UI narrates from this plus the flat fields above. Null on older records.

@@ -49,6 +49,12 @@ const recommendationSchema = new mongoose.Schema(
     shadowCampaignId: { type: mongoose.Schema.Types.ObjectId, ref: "EvalCampaign", default: null }, // Phase 2
     experimentId: { type: mongoose.Schema.Types.ObjectId, ref: "RoutingExperiment", default: null }, // Phase 3 canary
     qualitySummary: { type: mongoose.Schema.Types.Mixed, default: null }, // last run's summary
+    // How accept was authorized: "passed" | "overridden" | null if not yet accepted.
+    acceptedVia: {
+      type: String,
+      enum: ["passed", "overridden"],
+      default: null,
+    },
     override: {
       reason: { type: String, default: null },
       approver: { type: String, default: null },

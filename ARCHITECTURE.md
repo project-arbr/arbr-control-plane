@@ -61,9 +61,10 @@ server/src/
   index.js          boot: mongo → registry.init() → mount routes → listen
   config.js         env-driven config + demo-mode detection
   gateway/          /v1 request handling
-    handler.js        native /v1/chat: resolveRoute + invokeWithFallback
+    core.js           shared resolveRoute / fallback / headers (both entry points)
+    handler.js        native /v1/chat + resolveRoute implementation
     openaiCompat.js   OpenAI-compatible /v1/chat/completions (raw proxy + native paths)
-    auth.js           data-plane API-key auth, attribution, rate limits
+    auth.js           data-plane API-key auth, attribution, shared rate limits
     capabilities.js   per-provider/model tool-call support
   routing/          ruleEngine · autoRouter · aiPolicy (scoring engine) · capEngine · cache
   classify/         task-type classification (provided / keyword / AI)
@@ -74,7 +75,8 @@ server/src/
   litellm/ lmsys/ livebench/   catalog + benchmark-score sync jobs (manual / on-demand)
   security/secrets.js   AES-256-GCM encryption of provider keys at rest
   maintenance/purge.js  retention purge of old request records
-  api/routes.js     dashboard / admin REST API (master-key gated)
+  api/routes.js     thin re-export of api/routes/* domain modules (master-key gated)
+  api/routes/       status, caps, keys, recommendations, evals, analytics, …
   models/           Mongoose schemas (see below)
 web/src/            React + Vite + Tailwind dashboard (api.js → /api)
 clients/            JS and Python SDKs (published separately)
@@ -91,6 +93,7 @@ docs/               VitePress documentation site
 | `Settings` | Singleton config + sync version markers |
 | `ApiKey` | Data-plane keys, with attribution and allowed-model scoping |
 | `Cap` | Budget caps (block / downgrade enforcement) |
+| `CapSpend` | Atomic per-cap spend counters for hard budget enforcement |
 | `Rule` | Human-approved routing rules |
 | `Recommendation` | Costed optimization suggestions |
 | `ApplicationConfig` | Per-application routing policy |
@@ -116,12 +119,18 @@ nobody mistakes a demo-grade mechanism for a hardened one. Several of these are 
 single-instance tradeoffs; they matter most if you run multiple replicas or high burst
 traffic.
 
-- **Budgets are a soft cap, not a hard real-time limit.** `routing/capEngine.js` recomputes
-  breach status at most every ~30s (`TTL_MS = 30_000`) via a Mongo aggregation, then serves
-  the hot path from an in-memory cache. Under a burst within that window, or across multiple
-  processes (the cache is per-process, uncoordinated), spend can overshoot the cap before a
-  block/downgrade takes effect. Only the `global`, `application`, and `provider` dimensions
-  are enforced at the gateway; other dimensions surface in the UI but are not enforced.
+- **Budgets use hard CapSpend counters (multi-replica safe).** `routing/capEngine.js` keeps
+  per-cap atomic spend counters (`CapSpend`, Mongo `$inc`) keyed by calendar window. The
+  gateway reads those counters on every request for `block`/`downgrade` caps; successful
+  priced calls call `recordSpend` after logging. Soft overshoot of at most one in-flight
+  request is still possible (cost is known only after the provider responds). Cap *document*
+  lists are cached ~5s; spend is not. `POST /api/caps/reconcile` realigns counters from
+  analytics aggregations if they drift. Only the `global`, `application`, and `provider`
+  dimensions are enforced at the gateway; other dimensions surface in the UI but are not
+  enforced.
+- **RPM limits are multi-replica safe.** `routing/rateLimit.js` uses fixed 60s Mongo
+  windows (`RateBucket` + atomic `$inc`). Falls back to in-process counters only if Mongo
+  is unavailable.
 - **Response cache is exact-match and ephemeral.** `routing/responseCache.js` keys on
   `sha256(model + serialized messages)`, holds at most 5,000 entries in-memory with a
   10-minute TTL, and evicts oldest-first. It does not persist across restarts, is not shared
@@ -137,13 +146,15 @@ traffic.
   `responseText` when the `RequestRecord` is written, so it protects what is *stored*. It
   does not prevent prompts or responses from reaching the provider; it is log redaction, not
   data-loss prevention.
-- **Fallback can cross provider boundaries.** On a provider error,
-  `gateway/handler.js` (`invokeWithFallback`) retries the remaining live providers using
-  their default models. This preserves availability but can silently change the vendor,
-  region/data-residency, safety profile, and output format of a response. Scoping fallback
-  to the same provider or an explicit allowlist is tracked in
-  [#77](https://github.com/project-arbr/arbr-control-plane/issues/77).
-- **Recommendations price substitution, not quality.** `recommend/engine.js` re-prices the
-  same tokens on a cheaper model; it does not measure whether the cheaper model answers as
-  well. Eval-backed savings (quality held at X% before a downgrade is recommended) is tracked
-  in [#76](https://github.com/project-arbr/arbr-control-plane/issues/76).
+- **Fallback is scoped by `ARBR_FALLBACK_SCOPE`.** Default `same-provider`: on error, retry
+  the same provider's default model only (no residency surprise). Set `cross-provider` for
+  the legacy walk of remaining live providers, or `none` to fail closed. See
+  `gateway/handler.js` (`buildFallbackOrder` / `invokeWithFallback`).
+- **Recommendations price substitution; accept is quality-gated.** `recommend/engine.js`
+  still re-prices tokens for suggestions, but `POST /api/recommendations/:id/accept` requires
+  a passed offline eval (or an audited override). Accepted recs store `acceptedVia`; rules
+  store `qualityGate` (`passed` | `overridden` | `ungated`). Dashboard
+  `GET /api/analytics/savings-trust` splits projected savings by trust.
+- **Production fails closed.** With `NODE_ENV=production`, boot requires `ARBR_ADMIN_KEY` and
+  `ARBR_ENCRYPTION_KEY`, and forces `Settings.requireApiKey = true` so the data plane is not
+  anonymous.

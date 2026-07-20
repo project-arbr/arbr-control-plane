@@ -37,13 +37,19 @@ function matches(rule, ctx) {
   return true;
 }
 
-// Returns the target {provider, model} of the first matching enabled rule, or null.
+// Returns the target {provider, model, qualityGate, ...} of the first matching enabled rule, or null.
 async function findRoute(ctx) {
   const rules = await getEnabledRules();
   for (const rule of rules) {
     if (matches(rule, ctx)) {
-      return { provider: rule.target.provider, model: rule.target.model, ruleId: rule._id,
-               condition: rule.condition, note: rule.note };
+      return {
+        provider: rule.target.provider,
+        model: rule.target.model,
+        ruleId: rule._id,
+        condition: rule.condition,
+        note: rule.note,
+        qualityGate: rule.qualityGate || "ungated",
+      };
     }
   }
   return null;

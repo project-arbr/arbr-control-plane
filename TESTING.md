@@ -28,6 +28,10 @@ npm --prefix clients/js test
 cd clients/python && python -m pytest -q
 ```
 
+> **macOS 13 or older:** `mongodb-memory-server` downloads mongod 8.x by default, which is
+> built for macOS 14+ and dies with SIGABRT, failing every integration test at the
+> `before` hook. Pin a compatible binary: `MONGOMS_VERSION=7.0.14 npm run test:server`.
+
 ## Test Locations
 
 | File | What it tests |

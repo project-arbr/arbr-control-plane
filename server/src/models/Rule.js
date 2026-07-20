@@ -19,6 +19,14 @@ const ruleSchema = new mongoose.Schema(
     createdBy: { type: String, default: "console" },
     // Link back to the recommendation that produced it, if any.
     sourceRecommendation: { type: mongoose.Schema.Types.ObjectId, ref: "Recommendation", default: null },
+    // Quality trust on the rule: "passed" (eval-gated), "overridden" (human override),
+    // "ungated" (manual rule with no eval). Surfaced on savings dashboards.
+    qualityGate: {
+      type: String,
+      enum: ["passed", "overridden", "ungated"],
+      default: "ungated",
+      index: true,
+    },
     note: { type: String, default: "" },
   },
   { collection: "rules", timestamps: true }

@@ -131,6 +131,16 @@ function envCredentials() {
 const envLive = envCredentials();
 const envLiveIds = Object.keys(envLive);
 
+// Fallback scope when a provider call fails:
+//   same-provider — retry the provider's default model only (default; no residency surprise)
+//   cross-provider — legacy: walk remaining live providers (availability over locality)
+//   none — fail the request; no automatic fallback
+const FALLBACK_SCOPES = new Set(["same-provider", "cross-provider", "none"]);
+const rawFallback = (process.env.ARBR_FALLBACK_SCOPE || "same-provider").trim().toLowerCase();
+const fallbackScope = FALLBACK_SCOPES.has(rawFallback) ? rawFallback : "same-provider";
+
+const isProduction = process.env.NODE_ENV === "production";
+
 const config = {
   port: Number(process.env.PORT) || 4100,
   host: process.env.HOST || "0.0.0.0",
@@ -141,7 +151,11 @@ const config = {
   mongoUri: process.env.MONGO_URI || "mongodb://localhost:27017/arbr-control-plane",
   // Master admin key for the dashboard / admin API (LiteLLM master-key style).
   // Unset = open admin (local dev / demo) with a loud boot warning.
+  // Required in production (see assertProductionReady).
   adminKey: process.env.ARBR_ADMIN_KEY || null,
+  isProduction,
+  // Provider-error fallback policy (see invokeWithFallback).
+  fallbackScope,
 
   // Env snapshot at boot. The RUNTIME source of truth for which providers are
   // live is connections.effective() (env creds + dashboard-stored creds merged).
@@ -153,17 +167,37 @@ const config = {
   defaultModels: DEFAULT_MODELS,
 };
 
+// Fail closed in production: no open admin API, no public encryption fallback.
+// Call from index.js before listen. Throws with a multi-line message.
+function assertProductionReady() {
+  if (!config.isProduction) return;
+  const missing = [];
+  if (!config.adminKey) missing.push("ARBR_ADMIN_KEY (admin/dashboard API must not be open)");
+  if (!process.env.ARBR_ENCRYPTION_KEY || !String(process.env.ARBR_ENCRYPTION_KEY).trim()) {
+    missing.push("ARBR_ENCRYPTION_KEY (required to encrypt provider keys at rest)");
+  }
+  if (missing.length) {
+    throw new Error(
+      "[config] Refusing to start in production without:\n  - " +
+        missing.join("\n  - ") +
+        "\nSet these env vars and restart. For local demo, leave NODE_ENV unset."
+    );
+  }
+}
+
 function describe() {
   const lines = [];
   lines.push(`Arbr Control Plane`);
   lines.push(`  port:        ${config.port}`);
   lines.push(`  mongo:       ${config.mongoUri}`);
+  lines.push(`  env:         ${config.isProduction ? "production" : "development"}`);
   if (config.adminKey) {
     lines.push(`  admin auth:  ON — dashboard + admin API require ARBR_ADMIN_KEY`);
   } else {
     lines.push(`  admin auth:  OFF (dev) — dashboard/admin API are OPEN. Set ARBR_ADMIN_KEY`);
     lines.push(`               before exposing this instance beyond localhost.`);
   }
+  lines.push(`  fallback:    ${config.fallbackScope}`);
   if (config.demoMode) {
     lines.push(`  mode:        DEMO at boot — no provider keys in env.`);
     lines.push(`               Add keys in the dashboard (Settings → Connections) or to`);
@@ -178,6 +212,7 @@ function describe() {
 module.exports = {
   config,
   describe,
+  assertProductionReady,
   PROVIDERS,
   KNOWN_PROVIDERS,
   DEFAULT_MODELS,

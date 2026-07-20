@@ -17,11 +17,21 @@ function Summary() {
   const [byProvider, setByProvider] = useState([]);
   const [byTask, setByTask] = useState([]);
   const [savings, setSavings] = useState(null);
+  const [savingsTrust, setSavingsTrust] = useState(null);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.overview(), api.latencyPercentiles(), api.by("provider"), api.by("taskType"), api.realisedSavings()])
-      .then(([o, l, p, t, s]) => { setData(o); setLatency(l); setByProvider(p); setByTask(t); setSavings(s); })
+    Promise.all([
+      api.overview(),
+      api.latencyPercentiles(),
+      api.by("provider"),
+      api.by("taskType"),
+      api.realisedSavings(),
+      api.savingsTrust().catch(() => null),
+    ])
+      .then(([o, l, p, t, s, st]) => {
+        setData(o); setLatency(l); setByProvider(p); setByTask(t); setSavings(s); setSavingsTrust(st);
+      })
       .catch((e) => setErr(e.message));
   }, []);
 
@@ -46,6 +56,26 @@ function Summary() {
         <Stat label="Avg cost / request" value={fmt.usd(data.avgCostPerRequest)} />
         <Stat label="Realised savings" value={fmt.usd(savings?.totalSaved)} />
       </div>
+
+      {savingsTrust && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Stat
+            label="Quality-gated projected $"
+            value={fmt.usd(savingsTrust.gatedProjectedSavings)}
+            sub="Accepted after eval passed"
+          />
+          <Stat
+            label="Ungated projected $"
+            value={fmt.usd(savingsTrust.ungatedProjectedSavings)}
+            sub="Override or no eval"
+          />
+          <Stat
+            label="Gated share"
+            value={savingsTrust.gatedShare != null ? `${(savingsTrust.gatedShare * 100).toFixed(0)}%` : "—"}
+            sub={`${savingsTrust.recommendations?.passed?.count || 0} passed · ${savingsTrust.recommendations?.overridden?.count || 0} overridden`}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />

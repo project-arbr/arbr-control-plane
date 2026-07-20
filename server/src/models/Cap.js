@@ -1,7 +1,7 @@
 // A cost cap (budget). Dimension-agnostic: a cap targets a scope — an application,
 // a provider, a department, a model, or the whole org (dimension = null) — over a
-// rolling window. `action` is "alert" for now (observe, don't enforce); the same
-// shape extends to "downgrade"/"block" later without a data migration.
+// period. `action`: alert (UI only), downgrade, or block. Enforcing caps use hard
+// CapSpend counters (see routing/capEngine.js); dashboards use analytics.spend.
 const mongoose = require("mongoose");
 
 const capSchema = new mongoose.Schema(

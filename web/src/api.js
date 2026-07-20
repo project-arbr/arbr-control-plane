@@ -50,6 +50,7 @@ export const api = {
   providerHealth: () => req("/analytics/provider-health"),
   by: (dimension, filter) => req(`/analytics/by/${dimension}${qs(filter)}`),
   realisedSavings: (filter) => req(`/analytics/realised-savings${qs(filter)}`),
+  savingsTrust: () => req("/analytics/savings-trust"),
   facets: () => req("/analytics/facets"),
 
   requests: (filter) => req(`/requests${qs(filter)}`),
