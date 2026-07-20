@@ -31,6 +31,18 @@ changelogs under `clients/`.
 - Engineering: server unit + integration test suite and testing strategy (#58), routing
   benchmark harness across LiveBench, Arena-Hard, and SWE-bench (#63), and a gated,
   image-based, rollback-safe deploy pipeline (#61, #74).
+- Security & hardening: CI gates for secret scanning, npm audit, CodeQL, and Trivy image
+  scans (#151); graceful shutdown on SIGTERM/SIGINT (#152); a production profile that
+  fails closed instead of booting without required secrets (#159); metadata-only logging
+  as the production default (#160, #162).
+- Guardrails & caching: built-in and custom per-app prompt injection detection (#154), and
+  a semantic response cache with a configurable similarity threshold (#155).
+- API keys: expiry dates and one-click rotation (#156).
+- Access control: OIDC/RBAC accountable admin access with a per-user audit trail (#163),
+  an allowed-domains setting for OIDC clients shared with other apps (#165), and SSO/RBAC
+  documentation (#170).
+- Providers: LiteLLM connection type is now discoverable from the UI (#171).
+- Ingestion: an observe-only ingestion API (#172).
 
 ### Changed
 - Console reoriented around the five stages (Connect, See, Recommend, Route, Govern)
@@ -46,6 +58,12 @@ changelogs under `clients/`.
   (#39).
 - `/api/about` 500 that broke the deploy seed-version check (#89); `/health` demoMode
   now reflects effective provider state (#147).
+- Audit page blanked on the new object-shaped `AuditLog.actor` (#164).
+- Docker Compose wasn't passing the accountable-admin-access auth env vars through
+  (#166).
+- Arbr's own AI spend was polluting customer analytics views (#167).
+- Sign-out showed the admin-key form even in OIDC/trusted-header mode (#168).
+- Sidebar tagline pushed Users out of view without scrolling (#169).
 
 ## [0.2.0] - 2026-06-29
 

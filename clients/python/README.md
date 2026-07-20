@@ -18,7 +18,6 @@ rules and cost policies, and logs every call with full cost attribution — visi
 ```sh
 pip install arbr-client                # core (zero deps)
 pip install "arbr-client[langchain]"   # + the LangChain BaseChatModel adapter
-# (pre-release: pip install /path/to/arbr_client-0.1.0-py3-none-any.whl)
 ```
 
 ## 60-second quickstart
@@ -212,8 +211,8 @@ llm = as_langchain_model(client, workflow="answer-drafting")
 msg = llm.invoke(messages)        # .invoke()/.ainvoke(); AIMessage-shaped result
 ```
 
-Out of gateway scope either way: tool calling / `with_structured_output`, embeddings, and
-token-level streaming — keep those on direct provider SDKs.
+Out of gateway scope either way: tool calling / `with_structured_output` and token-level
+streaming — keep those on direct provider SDKs.
 
 ## Gradual rollout pattern
 

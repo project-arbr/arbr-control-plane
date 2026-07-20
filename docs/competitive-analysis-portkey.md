@@ -111,7 +111,7 @@
 | 6 | Conditional routing | ✅ | ✅ Rule-based + AI policy routing | Covered |
 | 7 | Request timeouts | ✅ | ✅ | Covered |
 | 8 | Exact-match caching | ✅ | ✅ | Covered |
-| 9 | Semantic caching | ✅ | ❌ | **Missing** |
+| 9 | Semantic caching | ✅ | ✅ Embedding-similarity cache, configurable threshold | Covered |
 | 10 | Cache TTL configuration | ✅ | ❌ | Missing |
 | 11 | Batching API | ✅ | ❌ | Missing |
 | 12 | Multimodal (vision, audio) | ✅ | ❌ Text/chat only | Missing |
@@ -124,11 +124,11 @@
 | # | Feature | Portkey | Arbr | Gap |
 |---|---------|---------|------|-----|
 | 16 | Input guardrails (pre-model) | ✅ Full suite | ✅ PII masking, max tokens, RPM | Partial |
-| 17 | Output guardrails (post-model) | ✅ | ❌ No post-response validation | **Missing** |
+| 17 | Output guardrails (post-model) | ✅ | ✅ Keyword/regex deny-list checked before returning to caller | Covered |
 | 18 | PII detection and masking | ✅ | ✅ 5 built-in + custom regex patterns | Covered |
 | 19 | JSON schema validation | ✅ | ❌ | **Missing** |
 | 20 | RegEx content filtering | ✅ | ✅ Custom PII patterns cover this partially | Partial |
-| 21 | Prompt injection detection | ✅ | ❌ | **Missing** |
+| 21 | Prompt injection detection | ✅ | ✅ Built-in patterns + custom per-app rules | Covered |
 | 22 | Monitoring-only guardrail mode | ✅ | ❌ | Missing |
 | 23 | Route on guardrail verdict | ✅ Deny / retry / switch | ✅ Fallback routing exists; not guardrail-triggered | Partial |
 | 24 | Custom sync guardrail webhooks | ✅ | ❌ Webhooks are async alerts only | Missing |
@@ -172,8 +172,8 @@
 | 47 | Virtual keys / aliases | ✅ | ✅ API keys with `ab_` prefix display | Covered |
 | 48 | Per-key rate limiting | ✅ | ✅ Per-key RPM sliding windows | Covered |
 | 49 | Per-key cost budgets | ✅ | ✅ Budget caps by dimension | Covered |
-| 50 | Key rotation policy | ✅ | ❌ Keys are permanent until revoked | **Missing** |
-| 51 | Key expiry dates | ✅ | ❌ No `expiresAt` on ApiKey model | **Missing** |
+| 50 | Key rotation policy | ✅ | ✅ One-click rotation (`POST /api/keys/:id/rotate`) | Covered |
+| 51 | Key expiry dates | ✅ | ✅ `expiresAt` on ApiKey, enforced at the gateway | Covered |
 | 52 | Per-key usage analytics | ✅ | ✅ Filter analytics by key/app | Covered |
 
 ### Enterprise / Governance
@@ -213,14 +213,21 @@ These are Arbr's differentiators — the moat that justifies choosing Arbr over 
 
 Prioritized by **Impact** (closes the Portkey gap / competitive) × **Usefulness** (Arbr users actually benefit) × **Effort**.
 
+### Recently Shipped
+
+The four items formerly listed as Priority 1 have since shipped:
+
+| Feature | What landed |
+|---------|-------------|
+| **Output guardrails** | Keyword/regex deny-list checked against response text before it returns to the caller, scoped per app. |
+| **Semantic caching** | Embedding-similarity match against the recent-request cache, with a configurable threshold. |
+| **API key expiry + rotation** | `expiresAt` on the ApiKey model, enforced at the gateway; one-click rotation via the admin API. |
+| **Prompt injection detection** | Built-in pattern library plus custom per-app rules, alongside PII masking. |
+
 ### Priority 1 — Build Next
 
-| Feature | Why | Effort |
-|---------|-----|--------|
-| **Output guardrails** | Validate model responses in-flight before returning to caller. JSON schema, regex deny-list, max length, format checks. Portkey's biggest differentiator in the guardrails space. Arbr currently only masks PII at log time — nothing intercepts bad outputs before they reach the caller. | Medium (2 days) |
-| **Semantic caching** | Embed incoming requests; cosine-similarity match against recent cache (configurable threshold). 10–30% cost reduction for repetitive workloads. Direct cost-saving value prop missing entirely from Arbr. | Medium (2–3 days) |
-| **API key expiry + rotation** | Add `expiresAt` date to ApiKey model; gateway rejects expired keys; admin sees "expires in N days" warning. Table-stakes security compliance feature. Low effort, high credibility. | Small (0.5 day) |
-| **Prompt injection detection** | Heuristic/pattern-based detection of common injection strings in input messages. No external service needed; can be a built-in input guardrail alongside PII masking. | Small (1 day) |
+Nothing carried over from the prior Priority 1 list — see Priority 2 below for the next
+candidates.
 
 ### Priority 2 — Next Quarter
 
@@ -271,7 +278,10 @@ Portkey wins on breadth — 1600+ providers, 12+ guardrail partners, full prompt
 Arbr's moat is **routing intelligence** — AI-generated policies, cost-aware downgrade, per-app overrides, shadow eval campaigns, realised savings tracking, and benchmark-integrated decision-making. Portkey has none of this. Portkey routes but doesn't optimize; Arbr routes and learns.
 
 **The gap that matters most:**
-Output guardrails and semantic caching are the two features where Portkey is most clearly ahead and where Arbr users would see immediate, measurable value. These should be the first additions post-governance overhaul.
+Output guardrails and semantic caching have since shipped, closing Arbr's two most visible gaps
+against Portkey. The next-clearest gaps are traffic splitting / canary rollouts and prompt
+versioning + templates (see Priority 2) — those are where Arbr users would see the next
+measurable value.
 
 **The positioning play:**
 Arbr shouldn't try to match Portkey's provider breadth (1600 vs. 15 is a losing race). The winning angle is: *intelligent, cost-optimizing, self-hosted gateway for teams that want their AI spend to be data-driven, not just routed.*
