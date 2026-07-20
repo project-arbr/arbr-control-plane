@@ -39,8 +39,16 @@ async function start() {
   }));
   app.use(express.json({ limit: "2mb" }));
 
-  // Liveness.
-  app.get("/health", (_req, res) => res.json({ ok: true, demoMode: config.demoMode }));
+  // Liveness. `demoMode` reflects the EFFECTIVE provider state (env creds +
+  // dashboard-connected creds), matching the console and gateway routing — not
+  // just the boot-time env snapshot. Falls back to the boot flag if the
+  // connection store is momentarily unavailable: liveness must never depend on
+  // the DB being reachable.
+  app.get("/health", async (_req, res) => {
+    let demoMode = config.demoMode;
+    try { demoMode = (await connections.effective()).demoMode; } catch { /* keep boot-time fallback */ }
+    res.json({ ok: true, demoMode });
+  });
 
   // The unified AI gateway — one endpoint for all AI requests.
   // API-key auth (data plane only): validates presented keys, binds attribution,
