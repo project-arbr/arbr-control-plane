@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "ARBR"
-  text: "AI Control Plane"
-  tagline: One gateway. Full visibility. Human-approved routing.
+  text: "Prove the better model route"
+  tagline: Discover optimisation opportunities, evaluate them against real workloads, roll them out with human approval, and verify realised savings.
   actions:
     - theme: brand
       text: Get started →
@@ -13,21 +13,24 @@ hero:
       text: View on GitHub
       link: https://github.com/project-arbr/arbr-control-plane
 
-# The five stages a request takes through Arbr: Connect → See → Recommend → Route → Govern.
+# The evidence-backed optimisation lifecycle.
 features:
-  - icon: 🔌
-    title: Connect
-    details: One drop-in, OpenAI-compatible gateway (POST /v1/chat/completions) every app calls without code changes — real SSE streaming included. Connect Anthropic, OpenAI, Gemini, Bedrock, DeepSeek, Moonshot, xAI (Grok) and Groq, or any LiteLLM proxy for hundreds more. Provider keys stay encrypted server-side, never in your app.
   - icon: 🔍
-    title: See
-    details: Every call logged with model, cost, latency, and routing decision. Spend legible by application, team, workflow, model, and task type — in a live dashboard.
+    title: Observe workloads
+    details: Attribute model usage, cost, latency, and routing outcomes by application, workflow, team, task type, and user. Run Arbr standalone or in front of LiteLLM.
   - icon: 💡
-    title: Recommend
-    details: Costed recommendations surface premium-model overuse on cheap tasks, with the dollar saving — measured from your own traffic, advisory until a human accepts.
+    title: Discover opportunities
+    details: Find expensive models handling work that may fit a cheaper candidate, with projected savings calculated from your own traffic rather than a generic benchmark.
+  - icon: 🧪
+    title: Build evidence
+    details: Create representative evaluation datasets with masking and retention controls, then compare candidate quality, cost, latency, format adherence, and critical failures.
+  - icon: ✅
+    title: Approve the change
+    details: Recommendations stay advisory until a human accepts them. Explicitly pinned models remain untouched, and every approved policy is visible and auditable.
   - icon: 🎯
-    title: Route
-    details: Developers pin the model they want; it's honored as-is. On "auto", the gateway applies human-approved rules and policies — and you can prove a cheaper model is no worse before it routes. All reversible in seconds.
-  - icon: 🛡️
-    title: Govern
-    details: Budgets block or downgrade spend that breaches its cap, per application, team, or provider. Guardrails, PII masking, and an audit log keep it safe and accountable.
+    title: Roll out safely
+    details: Use deterministic rules, shadow evaluation, or a guarded canary. Changes are reversible, budgets remain enforced, and rollback is available when evidence degrades.
+  - icon: 📈
+    title: Verify realised savings
+    details: Record requested and served models on every call, measure the post-rollout outcome against the baseline, and distinguish savings delivered from savings merely projected.
 ---

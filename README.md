@@ -15,57 +15,57 @@
   <a href="assets/brand/BRAND.md"><img alt="Brand guidelines" src="https://img.shields.io/badge/brand-guidelines-2f37ff"></a>
 </p>
 
-> See it, recommend it, then route it — cost & usage visibility, optimisation
-> recommendations, and controlled model routing on **explicit human approval**.
+> Find safer, cheaper model routes. Prove them against your workload. Roll them out with
+> human approval, then measure the savings actually realised.
 
-Arbr Control Plane is the foundation of an enterprise AI control plane. Applications
-send every AI request through **one gateway**. By default it passes the request straight
-to the requested provider. In parallel it logs full metadata for every call, makes spend
-legible by team / app / model / task, surfaces costed optimisation recommendations, and —
-once a human approves — applies them as **deterministic, reversible routing rules**.
+Arbr is a self-hosted **model optimisation and governance control plane** for teams with
+AI traffic in production. It turns request-level cost and performance data into concrete
+model-switching opportunities, evaluates candidate models against representative traffic,
+and makes every routing change explicit, reversible, and measurable.
 
-**The principle that sets the boundary:** a developer's explicitly pinned model is honored
-as-is; when an app defers (`model: "auto"`), routing follows human-approved rules, then the
-automated policy a human enabled (cost guardrail or AI-generated task→model map). Everything
-is reversible from the dashboard within seconds — and enforced budgets can block or downgrade
-spend that breaches its cap.
+Arbr can run as a standalone OpenAI-compatible gateway or in front of infrastructure you
+already use, including LiteLLM. Provider connectivity is the foundation; the product is the
+evidence-backed loop from opportunity to verified outcome.
 
-**The five stages a request takes through Arbr** — the vocabulary the console and these docs are organised around:
+## The optimisation lifecycle
 
-- **Connect** — one drop-in, OpenAI-compatible gateway; providers connected once, their keys held encrypted server-side.
-- **See** — every call logged and costed; spend legible by application, team, model, and task type.
-- **Recommend** — costed suggestions where a premium model is handling a cheap task, measured from your own traffic.
-- **Route** — a pinned model is honored; `auto` follows human-approved rules and policies, and a cheaper model can be proven no worse before it routes.
-- **Govern** — budgets, guardrails, PII masking, and an audit log keep spend and data under control.
+1. **Observe real workloads** — attribute cost, latency, model choice, and outcomes by
+   application, workflow, team, task type, and user.
+2. **Discover opportunities** — surface expensive models handling work that may be served
+   by a cheaper candidate, with projected savings based on actual traffic.
+3. **Build evidence** — turn representative requests into a controlled evaluation dataset,
+   with PII masking and retention controls.
+4. **Evaluate candidates** — compare quality, cost, latency, format adherence, and critical
+   failures before production routing changes.
+5. **Approve and roll out** — a human accepts the recommendation, then uses reversible rules,
+   shadow evaluation, or a guarded canary rather than an opaque automatic switch.
+6. **Verify the outcome** — record requested and served models on every call so realised
+   savings and regressions are measured after rollout, with rollback always available.
+
+**The operating boundary:** a developer's explicitly pinned model is honored as-is. When an
+application defers with `model: "auto"`, Arbr follows only the rules and policies a human has
+enabled. Budgets can separately alert, downgrade, or block spend at a configured cap.
 
 ![Arbr Control Plane — cost and usage overview](docs/media/dashboard.png)
 
 ---
 
-## Why Arbr, and not just another AI gateway?
+## Where Arbr fits
 
-Routing, observability, and guardrails are table stakes now. What sets Arbr apart is **who
-decides a route, and whether you can undo it**:
+If you only need a reliable multi-provider proxy, LiteLLM or a managed gateway may already
+be the right answer. Arbr is for the next question:
 
-- **Deterministic, human-approved routing.** A developer's pinned model is always honored.
-  `model: "auto"` follows only the rules a human enabled. Arbr never silently reroutes
-  traffic through an opaque scorer.
-- **Observe first, then optimise.** Every call is logged and costed; recommendations are
-  costed and advisory until a human accepts them, and every change is reversible from the
-  dashboard in seconds.
-- **Realised savings, not promised savings.** Each record stores both the model requested
-  and the model served, so savings are measured after the fact, not estimated up front.
+> Which workloads can safely move to a different model, what evidence supports the change,
+> and did the rollout deliver the expected result?
 
-| Capability | LiteLLM | Helicone / Portkey | **Arbr** |
-|---|:---:|:---:|:---:|
-| Broadest provider access | ✅ | ➖ | routes through them |
-| Observability & spend tracking | ✅ | ✅ | ✅ |
-| Human-approved, reversible routing | ➖ | ➖ | ✅ |
-| Measured (realised) savings | ➖ | ➖ | ✅ |
-
-Use LiteLLM for breadth of providers; Arbr sits happily in front of it (see below). Reach
-for Arbr when a human must approve every routing change and see the savings on both sides
-of it.
+- **With LiteLLM:** keep LiteLLM's provider breadth and place Arbr above it for workload
+  analysis, recommendations, evaluation gates, approvals, and measured optimisation.
+- **Standalone:** use Arbr's native and OpenAI-compatible endpoints when one self-hosted
+  deployment for gateway, governance, evaluation, and routing is the simpler architecture.
+- **Human-governed by design:** recommendations remain advisory until accepted; pinned
+  models remain pinned; routing rules and experiments are auditable and reversible.
+- **Realised, not promised, savings:** Arbr records both requested and served models, so the
+  post-rollout result can be compared with the original baseline.
 
 ---
 
@@ -83,7 +83,13 @@ cp .env.example .env          # ready to run; no keys needed for the demo
 docker compose up             # Mongo + seeded app, dashboard at http://localhost:4100
 ```
 
-Open **http://localhost:4100** and go to **Recommendations → Recompute**.
+Open **http://localhost:4100** and follow the demo lifecycle:
+
+1. Inspect workload cost and model usage on **Overview**.
+2. Open **Recommendations → Recompute** to discover an optimisation opportunity.
+3. Inspect its projected savings and evidence requirements.
+4. Add a provider under **Settings → Connections** when you are ready to run a live
+   candidate evaluation and guarded rollout.
 
 ### Option B — Local (Node + your own MongoDB)
 
