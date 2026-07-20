@@ -1,0 +1,14 @@
+# Gitleaks config — extends the default ruleset with a repo-specific allowlist.
+# Add entries here only for confirmed false positives, and keep them as narrow
+# as possible (exact match strings, not path or rule exclusions).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Confirmed false positives"
+regexTarget = "match"
+regexes = [
+  # React table column props in the dashboard; entropy-flagged by generic-api-key
+  '''key: "p50LatencyMs"''',
+]
