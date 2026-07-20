@@ -2,21 +2,23 @@
 const express = require("express");
 const { logAction } = require("../auditLogger");
 const Settings = require("../../models/Settings");
+const { config } = require("../../config");
 
 const router = express.Router();
 
 // ── Governance settings (maintenance mode, max-tokens, webhook, retention, PII) ──
 function governanceView(s) {
+  const defaults = Settings.privacyDefaults(config.isProduction);
   return {
     maintenanceMode:         s.maintenanceMode || { enabled: false, message: "" },
     maxTokensGuardrail:      s.maxTokensGuardrail || null,
     globalRpmGuardrail:      s.globalRpmGuardrail || null,
-    captureRequestPayloads:  s.captureRequestPayloads !== false,  // default true
-    piiMaskingEnabled:       s.piiMaskingEnabled ?? false,
+    captureRequestPayloads:  s.captureRequestPayloads ?? defaults.captureRequestPayloads,
+    piiMaskingEnabled:       s.piiMaskingEnabled ?? defaults.piiMaskingEnabled,
     customPiiPatterns:       s.customPiiPatterns || [],
     requireApiKey:           s.requireApiKey ?? false,
     webhookUrl:              s.webhookUrl || null,
-    retentionDays:           s.retentionDays ?? 90,
+    retentionDays:           s.retentionDays ?? defaults.retentionDays,
     alertErrorRateEnabled:   s.alertErrorRateEnabled ?? false,
     alertErrorRateThreshold: s.alertErrorRateThreshold ?? 5,
     outputGuardrailsEnabled: s.outputGuardrailsEnabled ?? false,

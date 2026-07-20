@@ -6,6 +6,20 @@ const { maskMessages, maskPii, clampText } = require("./piiFilter");
 const Settings = require("../models/Settings");
 const capEngine = require("../routing/capEngine");
 
+function payloadFields(record, settings) {
+  if (settings?.captureRequestPayloads === false) {
+    return { messages: undefined, responseText: null };
+  }
+  let messages = record.messages;
+  let responseText = typeof record.responseText === "string" ? record.responseText : null;
+  if ((messages || responseText) && settings?.piiMaskingEnabled) {
+    if (messages) messages = maskMessages(messages, settings.customPiiPatterns);
+    if (responseText) responseText = maskPii(responseText, settings.customPiiPatterns);
+  }
+  if (responseText) responseText = clampText(responseText);
+  return { messages, responseText };
+}
+
 // record: {
 //   requestId, timestamp, application, workflow, userId, department,
 //   provider, model, modelRequested, taskType,
@@ -35,18 +49,7 @@ async function write(record) {
     // PII-mask when enabled, then size-cap. Only the logged copy is masked — the model
     // already received the original text. Settings are read lazily (singleton pattern).
     const s = await Settings.get().catch(() => null);
-    let messages = record.messages;
-    let responseText = typeof record.responseText === "string" ? record.responseText : null;
-    if (s?.captureRequestPayloads === false) {
-      messages = undefined;
-      responseText = null;
-    } else if (messages || responseText) {
-      if (s?.piiMaskingEnabled) {
-        if (messages) messages = maskMessages(messages, s.customPiiPatterns);
-        if (responseText) responseText = maskPii(responseText, s.customPiiPatterns);
-      }
-    }
-    if (responseText) responseText = clampText(responseText);
+    const { messages, responseText } = payloadFields(record, s);
 
     await RequestRecord.create({
       ...record,
@@ -79,4 +82,4 @@ async function write(record) {
   }
 }
 
-module.exports = { write };
+module.exports = { write, payloadFields };

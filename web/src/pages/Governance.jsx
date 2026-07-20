@@ -518,13 +518,22 @@ function GuardrailsTab({ gov, setGov, save, saving, ok, err }) {
             >
               <Toggle
                 checked={gov.captureRequestPayloads !== false}
-                onChange={(v) => setGov({ ...gov, captureRequestPayloads: v })}
+                onChange={(v) => {
+                  if (v && !window.confirm(
+                    "Enable payload capture? Full prompts and model responses will be stored in MongoDB and may contain confidential or personal data. Confirm that your data policy permits this."
+                  )) return;
+                  setGov({ ...gov, captureRequestPayloads: v });
+                }}
                 label="capture payloads"
               />
             </SettingRow>
-            {gov.captureRequestPayloads === false && (
+            {gov.captureRequestPayloads !== false ? (
+              <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                Sensitive-data warning: full prompts and responses will be retained in MongoDB. Enable PII masking, choose the shortest practical retention period, and confirm partner consent before saving.
+              </div>
+            ) : (
               <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                Request and response text will not be saved. You cannot view prompt/response content in the Requests drilldown.
+                Metadata-only mode is active. Request and response text will not be saved in request logs or evaluation artifacts.
               </div>
             )}
           </div>
@@ -699,12 +708,12 @@ function ObservabilityTab({ gov, setGov, save, saving, ok, err }) {
             className="input w-32"
             type="number"
             min="0"
-            placeholder="90"
+            placeholder="30"
             value={gov.retentionDays ?? ""}
             onChange={(e) => setGov({ ...gov, retentionDays: e.target.value !== "" ? Number(e.target.value) : null })}
           />
           <div className="mt-1 text-xs text-gray-400">
-            Set to 0 for indefinite retention. Purge runs nightly.
+            Production defaults to 30 days. Set to 0 for indefinite retention. Purge runs at startup and every 24 hours.
           </div>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); save("retention")({ retentionDays: gov.retentionDays }); }}>

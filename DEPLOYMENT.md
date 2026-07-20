@@ -125,6 +125,8 @@ need the public hostname.
   (`mongodump` cron or a managed Mongo/Atlas)
 - [ ] Provider keys via environment/secret manager (env takes precedence over dashboard-stored)
 - [ ] Budgets configured with **Block/Downgrade** actions for cost protection
+- [ ] Payload capture remains off unless partner consent and retention requirements are documented
+- [ ] MongoDB volume/disk and backups are encrypted; backup retention matches the agreed policy
 
 ## Operational notes & limits
 

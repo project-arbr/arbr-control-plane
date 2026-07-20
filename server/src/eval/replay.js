@@ -150,6 +150,7 @@ async function executeRun(runId) {
 
   const settings = await require("../models/Settings").get().catch(() => ({}));
   const maskEnabled = !!settings.piiMaskingEnabled;
+  const captureEnabled = settings.captureRequestPayloads !== false;
   const customPatterns = settings.customPiiPatterns || [];
   const cm = pricing.getModel(run.candidateModel);
   if (!cm || !eff.liveIds.includes(cm.provider)) {
@@ -201,7 +202,15 @@ async function executeRun(runId) {
         if (dp.overturned) { finalVerdict = "equal"; disproved = true; disproveReason = dp.reason; }
       }
 
-      const storedResp = clampText(maskEnabled ? maskPii(candidate.text || "", customPatterns) : (candidate.text || ""));
+      const storedResp = captureEnabled
+        ? clampText(maskEnabled ? maskPii(candidate.text || "", customPatterns) : (candidate.text || ""))
+        : null;
+      const rawRationale = disproved
+        ? `[disprove pass overturned "worse"] ${disproveReason || ""}`.trim()
+        : (scored ? scored.judgeRationale : judgeError);
+      const storedRationale = captureEnabled && rawRationale
+        ? clampText(maskEnabled ? maskPii(rawRationale, customPatterns) : rawRationale)
+        : null;
       await EvalResult.create({
         evalRunId: run._id, evalItemId: item._id, requestId: item.requestId,
         baselineModel: dataset.baselineModel, candidateModel: run.candidateModel,
@@ -213,7 +222,7 @@ async function executeRun(runId) {
         criticalFailure: scored ? !!scored.criticalFailure : false,
         validatorResults: results, formatPass,
         abFlipped: scored ? !!scored.abFlipped : false,
-        judgeRationale: disproved ? `[disprove pass overturned "worse"] ${disproveReason || ""}`.trim() : (scored ? scored.judgeRationale : judgeError),
+        judgeRationale: storedRationale,
       });
       entries.push({
         verdict: finalVerdict,
