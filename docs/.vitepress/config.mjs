@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Arbr',
-  description: 'AI control plane — route, observe, and govern every LLM call.',
+  description: 'Self-hosted model optimisation and governance — discover, evaluate, approve, and verify better LLM routes.',
 
   ignoreDeadLinks: [/localhost/],
 
