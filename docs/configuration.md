@@ -17,8 +17,9 @@ Copy `.env.example` to `.env` and set what you need.
 
 | Variable | Default | Description |
 |---|---|---|
-| `ARBR_ADMIN_KEY` | — (open) | **Required in production.** Master key for the dashboard and admin API (`/api/*`). Unset = open (local dev; boot log warns). |
+| `ARBR_ADMIN_KEY` | — (open) | **Required in production.** Master key for the dashboard and admin API (`/api/*`). Unset = open (local dev; boot log warns). Stays valid as a break-glass credential in every `ARBR_AUTH_MODE` below. |
 | `ARBR_ENCRYPTION_KEY` | dev fallback | **Required in production.** Encrypts dashboard-stored provider keys at rest. Unset = dev fallback key (boot log warns). |
+| `ARBR_AUTH_MODE` | `adminkey` | `adminkey` (shared secret, above) \| `oidc` \| `trusted-header` — adds real per-user identity (roles, a Users page, per-user audit attribution). See [Accountable admin access](/auth) for the full OIDC/IAP/reverse-proxy env vars and setup. |
 
 Generate strong keys:
 

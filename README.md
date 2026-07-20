@@ -466,6 +466,14 @@ Two credentials, two planes (full details in [DEPLOYMENT.md](DEPLOYMENT.md)):
 - **Admin key** (`ARBR_ADMIN_KEY`) gates the dashboard and the entire admin API. Unset
   (local dev) the dashboard is open and the boot log warns.
 
+For more than one operator, `ARBR_ADMIN_KEY` alone doesn't give individual revocation or
+per-user audit attribution. Set `ARBR_AUTH_MODE=oidc` (any OIDC provider — Okta, Auth0, Google
+Workspace, Keycloak, ...) or `trusted-header` (GCP IAP or a reverse proxy) to add real
+per-user identity: viewer/operator/administrator roles, a **Users** page to manage individual
+access, and an audit log that names the actual person behind every change. The admin key keeps
+working alongside either mode as a break-glass credential for automation. See
+[Accountable admin access](docs/auth.md) for setup.
+
 ---
 
 ## Production deployment
