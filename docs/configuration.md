@@ -71,3 +71,6 @@ These are **not** environment variables — they're managed in the dashboard and
 - Gateway API keys
 - Routing rules
 - AI routing policy
+
+Production instances start with payload capture disabled, PII masking enabled, and 30-day
+retention. See [Data privacy and retention](./privacy.md) before enabling prompt/response capture.

@@ -82,4 +82,8 @@ test("projectText honors metadata_only (no text) and masked modes", () => {
   const masked = projectText(rec, "masked", false, []);
   assert.ok(masked.messages); // present
   assert.ok(!JSON.stringify(masked.messages).includes("a@b.com")); // email masked
+
+  const globallyDisabled = projectText(rec, "raw_allowed", false, [], false);
+  assert.equal(globallyDisabled.messages, null);
+  assert.equal(globallyDisabled.productionResponse, null);
 });
