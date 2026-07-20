@@ -32,6 +32,9 @@ jobs:
       - name: Build dashboard
         run: npm run web:build
 
+      - name: Validate production Compose profile
+        run: npm run test:compose:prod
+
       - name: JS SDK unit tests
         run: npm --prefix clients/js test
 

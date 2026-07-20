@@ -27,7 +27,7 @@ gcloud compute ssh YOUR_INSTANCE_NAME --zone YOUR_ZONE
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 newgrp docker
-docker compose version   # should show v2.x
+docker compose version   # must be v2.24.4 or newer
 ```
 
 ## Step 4 — Install nginx + certbot
@@ -45,7 +45,7 @@ cp .env.example .env
 nano .env
 ```
 
-Set these four values — everything else has safe defaults:
+Set these values before starting the production profile:
 
 ```sh
 # Generate each key by running this command twice (use a different value for each):
@@ -71,6 +71,8 @@ curl http://localhost:4100/health   # → {"ok":true,"demoMode":false}
 ```
 
 `docker-compose.prod.yml` binds port 4100 to loopback (`127.0.0.1`) so it is never directly internet-reachable.
+It also sets `NODE_ENV=production`, which makes ARBR refuse to start without the admin and
+encryption keys and forces gateway API-key authentication on.
 
 ## Step 7 — Configure nginx
 
@@ -181,6 +183,7 @@ intact) → posts a success/rollback note to the governance webhook.
 - [ ] Port 4100 not in any public GCP firewall rule
 - [ ] TLS certificate issued by certbot
 - [ ] At least one provider key configured
-- [ ] Gateway API keys created per app; **Require API Keys** toggled ON
+- [ ] Started with `docker-compose.prod.yml` (fail-closed mode; gateway keys forced on)
+- [ ] Gateway API keys created per app
 - [ ] MongoDB volume is on a persistent disk (default in Docker Compose)
 - [ ] `docker compose logs` checked for any boot errors

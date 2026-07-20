@@ -42,6 +42,7 @@
     "test:server:unit": "node --test server/test/unit/*.test.js",
     "test:server:integration": "node --test server/test/integration/*.test.js",
     "test:server": "node --test server/test/unit/*.test.js server/test/integration/*.test.js",
+    "test:compose:prod": "node server/scripts/production-compose-smoke.js",
     "bench:latency": "node server/scripts/latency-bench.js",
     "bench:latency:stream": "node server/scripts/latency-bench.js --stream"
   },

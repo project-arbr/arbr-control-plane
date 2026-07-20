@@ -3,6 +3,9 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Changes from the base:
+#   - NODE_ENV forced to production, activating fail-closed startup checks and
+#     requiring gateway API keys. The app refuses to start without both
+#     ARBR_ADMIN_KEY and ARBR_ENCRYPTION_KEY.
 #   - Port bound to loopback (127.0.0.1) so 4100 is only reachable from a
 #     same-host reverse proxy (nginx/Caddy). Never directly internet-reachable.
 #   - SEED_ON_BOOT forced to false (seeding WIPES request records).
@@ -12,7 +15,10 @@
 #   ARBR_ENCRYPTION_KEY=<random 32-byte hex> — encrypts stored provider keys
 services:
   app:
-    ports:
+    # Compose normally appends ports from override files. !override is required
+    # to remove the base profile's public 0.0.0.0:4100 binding.
+    ports: !override
       - "127.0.0.1:4100:4100"
     environment:
+      NODE_ENV: production
       SEED_ON_BOOT: "false"

@@ -41,7 +41,7 @@ node -e "console.log('admin:', require('crypto').randomBytes(32).toString('hex')
 
 ## Single-VM deployment (recommended)
 
-One small VM (EC2 t3.small class), Docker Compose, nginx or an ALB in front.
+One small VM (EC2 t3.small class), Docker Compose 2.24.4 or newer, nginx or an ALB in front.
 
 ```sh
 git clone <repo> && cd control-plane
@@ -51,12 +51,14 @@ cp .env.example .env
 #   ARBR_ENCRYPTION_KEY=...     (required — encrypts dashboard-stored provider keys)
 #   SEED_ON_BOOT=false           (REQUIRED — seeding wipes request records; demo only)
 #   provider keys as needed
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 curl -s localhost:4100/health    # → {"ok":true,...}
 ```
 
-After boot: sign in with the admin key → Settings → API keys → create a key per application →
-flip **Require API keys** on. From then on the data plane rejects anonymous calls.
+The production profile sets `NODE_ENV=production`, disables demo seeding, binds port 4100
+to loopback, and refuses to start unless both required keys are set. It also forces gateway
+API-key authentication on. After boot: sign in with the admin key → Settings → API keys →
+create a key per application.
 
 ### Option A — nginx on the same VM (TLS via certbot)
 
@@ -116,7 +118,8 @@ need the public hostname.
 - [ ] `ARBR_ADMIN_KEY` set (dashboard/admin API locked)
 - [ ] `ARBR_ENCRYPTION_KEY` set (dashboard-stored provider keys encrypted with your secret)
 - [ ] `SEED_ON_BOOT=false` (seeding **wipes request records** — demo only)
-- [ ] Gateway API keys issued per application; **Require API keys** flipped ON (Settings → API keys)
+- [ ] Started with `docker-compose.prod.yml` (fail-closed mode; gateway keys forced on)
+- [ ] Gateway API keys issued per application
 - [ ] TLS at the proxy (Option A/B); 4100 not directly internet-reachable
 - [ ] MongoDB not publicly bound (compose default is fine — no host port); backups scheduled
   (`mongodump` cron or a managed Mongo/Atlas)
