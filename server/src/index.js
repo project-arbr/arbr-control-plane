@@ -19,6 +19,7 @@ const evalWorker = require("./eval/worker");
 const { supportsTools } = require("./gateway/capabilities");
 const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
+const adminRateLimit = require("./api/adminRateLimit");
 const apiRoutes = require("./api/routes");
 const connections = require("./providers/connections");
 
@@ -130,8 +131,9 @@ async function start() {
     }
   });
 
-  // Dashboard / admin API — master-key gated when ARBR_ADMIN_KEY is set.
-  app.use("/api", adminAuth.middleware, apiRoutes);
+  // Dashboard / admin API — master-key gated when ARBR_ADMIN_KEY is set,
+  // rate-limited per source IP (see adminRateLimit.js).
+  app.use("/api", adminRateLimit.middleware, adminAuth.middleware, apiRoutes);
 
   // Serve the built dashboard if it exists (single-port mode).
   const hasWeb = fs.existsSync(path.join(WEB_DIST, "index.html"));
