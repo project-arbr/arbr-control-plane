@@ -61,6 +61,11 @@ async function start() {
     exposedHeaders: ["X-Arbr-Request-ID", "X-Arbr-Model", "X-Arbr-Provider", "X-Arbr-Routing", "X-Arbr-Task-Type"],
   }));
   app.use(express.json({ limit: "2mb" }));
+  // CSRF protection IS applied — see csrf.protection two lines below
+  // (double-submit cookie via csrf-csrf, tested in
+  // server/test/integration/csrf.test.js). CodeQL's model doesn't recognize
+  // this library the way it recognizes csurf, so it still flags this line.
+  // codeql[js/missing-token-validation]
   app.use(cookieParser());
   // Mounted globally so every route is structurally CSRF-protected; only
   // requests carrying a session cookie are actually validated (see csrf.js).
@@ -162,7 +167,6 @@ async function start() {
   // Error handler. Respects a thrown error's own status (e.g. csrf-csrf's
   // ForbiddenError is a real 403, not a server fault) instead of flattening
   // everything to 500.
-  // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error("[api] error:", err);
@@ -188,6 +192,11 @@ async function start() {
   const server = http.createServer(app);
   server.on("upgrade", handleUpgrade);
   server.listen(config.port, config.host, () => {
+    // describe() masks the one credential-bearing value it prints
+    // (MONGO_URI, via maskMongoUri in config.js); everything else in the
+    // boot summary is non-secret operational config (ports, auth mode,
+    // issuer URL) meant to be visible in server logs.
+    // codeql[js/clear-text-logging]
     console.log("\n" + describe() + "\n");
     console.log(`  ready:       http://localhost:${config.port}`);
     console.log(`  gateway:     POST http://localhost:${config.port}/v1/chat`);
