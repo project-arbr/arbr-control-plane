@@ -71,7 +71,7 @@ async function resolveKey(authHeader) {
     err.statusCode = 401;
     throw err;
   }
-  if (overRpmLimit(doc.keyHash, doc.rpm)) {
+  if (await overRpmLimit(`key:${doc.keyHash}`, doc.rpm)) {
     const err = new Error(`API key "${doc.name}" is over its ${doc.rpm} requests/minute limit.`);
     err.statusCode = 429;
     throw err;
