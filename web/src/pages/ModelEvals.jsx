@@ -157,7 +157,7 @@ function CampaignDetail({ id, onClose }) {
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
           App <b>{detail.application}</b> · candidate <b>{detail.candidateModel}</b> · judge {detail.judgeModel || "none"} ·
           sample {pct(detail.sampleRate)} · notify at {detail.thresholds?.minPairs} pairs, loss ≤ {pct(detail.thresholds?.maxLossRate)}
-          {detail.notifiedAt && <span className="ml-1 text-arbr-green-700">· healthy-notification sent</span>}
+          {detail.notifiedAt && <span className="ml-1 text-arbr-accent-700">· healthy-notification sent</span>}
         </div>
         <div>
           <div className="label mb-1">Recent pairs</div>
@@ -260,7 +260,7 @@ function RunDetail({ id, onClose }) {
         <div className="flex justify-end"><RefreshButton onClick={load} /></div>
         {(() => {
           const o = runOutcome(run);
-          const bg = o.tone === "green" ? "bg-green-50 text-arbr-green-700"
+          const bg = o.tone === "green" ? "bg-green-50 text-green-700"
             : o.tone === "red" ? "bg-red-50 text-red-700"
             : o.tone === "amber" ? "bg-amber-50 text-amber-800"
             : "bg-gray-50 text-gray-600";
@@ -298,7 +298,7 @@ function RunDetail({ id, onClose }) {
               <button className="btn-secondary text-sm" disabled={busy} onClick={startShadow}>Start shadow →</button>
               <button className="btn-secondary text-sm" disabled={busy} onClick={startCanary}>Start canary →</button>
             </div>
-            {notice && <div className={`mt-2 text-sm ${notice.startsWith("Error") ? "text-red-600" : "text-arbr-green-700"}`}>{notice}</div>}
+            {notice && <div className={`mt-2 text-sm ${notice.startsWith("Error") ? "text-red-600" : "text-arbr-accent-700"}`}>{notice}</div>}
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -310,7 +310,7 @@ function RunDetail({ id, onClose }) {
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
           {run.baselineModel} → {run.candidateModel} · judge {run.judgeModel || "none"} · {run.riskTier} risk · est. cost {fmt.usd(run.estimatedCostUsd)} · actual {fmt.usd(run.actualCostUsd)}
           {run.fidelity === "masked" && <span className="ml-1 text-amber-600">· masked dataset (lower-fidelity: candidate saw redacted prompts vs the original baseline)</span>}
-          {s.disprovedWorse > 0 && <span className="ml-1 text-arbr-green-700">· disprove pass overturned {fmt.num(s.disprovedWorse)} false “worse” verdict{s.disprovedWorse === 1 ? "" : "s"}</span>}
+          {s.disprovedWorse > 0 && <span className="ml-1 text-arbr-accent-700">· disprove pass overturned {fmt.num(s.disprovedWorse)} false “worse” verdict{s.disprovedWorse === 1 ? "" : "s"}</span>}
         </div>
         <div className="flex items-center justify-between">
           <div className="label">Worst candidate examples</div>
@@ -439,7 +439,7 @@ function NewEval({ models, apps, onCreated }) {
       )}
       <SameFamilyWarning candidate={form.candidateModel} judge={form.judgeModel} />
       {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
-      {notice && <div className="mt-3 text-sm text-arbr-green-700">{notice}</div>}
+      {notice && <div className="mt-3 text-sm text-arbr-accent-700">{notice}</div>}
       <div className="mt-3">
         <button className="btn-secondary text-sm" disabled={busy || !valid} onClick={submit}>
           {busy ? "Starting…" : "Run eval"}
@@ -661,7 +661,7 @@ function BenchmarkDetail({ id, models, onClose }) {
           </div>
           <SameFamilyWarning candidate={cand} judge={judge} />
           {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
-          {notice && <div className="mt-2 text-sm text-arbr-green-700">{notice}</div>}
+          {notice && <div className="mt-2 text-sm text-arbr-accent-700">{notice}</div>}
           {bench.suggestedCandidates?.length > 0 && (
             <div className="mt-3 border-t border-gray-100 pt-3">
               <div className="text-xs text-gray-500">Suggested — connected models cheaper than the baseline, not scored yet. Click to load one, then Run:</div>
@@ -825,7 +825,7 @@ function StageHeading({ n, title, desc }) {
   return (
     <div className="border-b border-gray-100 pb-1 pt-2">
       <div className="flex items-baseline gap-2">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-arbr-green-600">Stage {n}</span>
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-arbr-accent-600">Stage {n}</span>
         <span className="text-base font-semibold text-arbr-charcoal">{title}</span>
       </div>
       <p className="mt-0.5 text-xs text-gray-500">{desc}</p>

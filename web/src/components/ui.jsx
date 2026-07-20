@@ -11,7 +11,7 @@ export function Tabs({ tabs, active, onChange }) {
           onClick={() => onChange(k)}
           className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             active === k
-              ? "border-arbr-green-600 text-arbr-charcoal"
+              ? "border-arbr-accent-600 text-arbr-charcoal"
               : "border-transparent text-gray-500 hover:text-arbr-charcoal"
           }`}
         >
@@ -64,12 +64,9 @@ export function Stat({ label, value, sub }) {
 }
 
 const BADGE_TONES = {
-  green:    "bg-arbr-green-50 text-arbr-green-700 border-arbr-green-200",
+  green:    "bg-green-50 text-green-700 border-green-200",   // semantic: live / healthy / good-vs-bad verdicts
   charcoal: "bg-gray-100 text-arbr-charcoal border-gray-200",
   amber:    "bg-amber-50 text-amber-700 border-amber-200",
-  indigo:   "bg-indigo-50 text-indigo-700 border-indigo-200",
-  violet:   "bg-violet-50 text-violet-700 border-violet-200",
-  teal:     "bg-teal-50 text-teal-700 border-teal-200",
   red:      "bg-red-50 text-red-700 border-red-200",
   gray:     "bg-gray-50 text-gray-500 border-gray-200",
 };
@@ -122,7 +119,7 @@ export function Toggle({ checked, onChange, label }) {
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${checked ? "bg-arbr-green-600" : "bg-gray-300"}`}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${checked ? "bg-arbr-accent-600" : "bg-gray-300"}`}
       aria-pressed={checked}
       aria-label={label}
     >
@@ -184,7 +181,7 @@ export function CodeBlock({ code, lang }) {
       {lang && <span className="absolute left-3 top-2 font-mono text-[10px] uppercase tracking-wide text-gray-400">{lang}</span>}
       <button
         onClick={copy}
-        className="absolute right-2 top-2 rounded border border-gray-200 bg-white px-2 py-0.5 font-mono text-xs text-gray-500 hover:border-arbr-green-600 hover:text-arbr-charcoal"
+        className="absolute right-2 top-2 rounded border border-gray-200 bg-white px-2 py-0.5 font-mono text-xs text-gray-500 hover:border-arbr-accent-600 hover:text-arbr-charcoal"
       >
         {copied ? "Copied" : "Copy"}
       </button>

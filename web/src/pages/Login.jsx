@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { api, setAdminToken, clearAdminToken } from "../api.js";
+import { Logo } from "../components/Logo.jsx";
 
 // Shown when the instance has admin auth enabled (ARBR_ADMIN_KEY) and the
 // browser has no valid key stored. Sessionless: the key IS the credential.
@@ -25,12 +26,9 @@ export default function Login({ onAuthed }) {
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-full items-center justify-center bg-arbr-paper px-4">
       <form onSubmit={submit} className="card w-full max-w-sm p-8">
-        <div className="flex items-baseline gap-0.5">
-          <span className="text-xl font-bold tracking-tight text-arbr-charcoal">ARBR</span>
-          <span className="text-xl font-bold text-arbr-green-600">.</span>
-        </div>
+        <Logo className="h-6 w-auto text-arbr-charcoal" />
         <p className="mt-1 text-sm text-gray-500">This instance requires the admin key.</p>
 
         <div className="mt-6">

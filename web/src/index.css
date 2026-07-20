@@ -6,7 +6,7 @@
     height: 100%;
   }
   body {
-    @apply bg-gray-50 text-arbr-charcoal font-sans antialiased;
+    @apply bg-arbr-paper text-arbr-charcoal font-sans antialiased;
   }
 }
 
@@ -34,7 +34,7 @@
     @apply text-xs font-medium uppercase tracking-wide text-gray-500;
   }
   .input {
-    @apply rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-arbr-green-600 focus:outline-none focus:ring-2 focus:ring-arbr-green-600/15;
+    @apply rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-arbr-accent-600 focus:outline-none focus:ring-2 focus:ring-arbr-accent-600/15;
   }
   .mono {
     @apply font-mono text-[13px] tracking-tight;

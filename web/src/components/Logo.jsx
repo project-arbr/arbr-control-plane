@@ -1,0 +1,23 @@
+import React from "react";
+
+// ARBR wordmark — the geometric, crossbar-less-"A" brand lockup
+// (source: assets/brand/arbr-wordmark.svg). Inlined so it inherits color via
+// `currentColor` (set a text-* class on this element or a parent) and needs no
+// external asset, keeping it CSP-safe. `className` controls size/color.
+export function Logo({ className = "h-5 w-auto text-arbr-charcoal" }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 554.65 131.4"
+      fill="currentColor"
+      role="img"
+      aria-label="ARBR"
+    >
+      <title>ARBR</title>
+      <polygon points="24.71 104.9 38.4 104.9 74.29 36.71 109.93 104.67 122.43 104.67 80.33 23.57 68.34 23.57 24.71 104.9" />
+      <path d="M177.89,104.94h11.37V33.67h36.36c8.97,0,16.25,7.27,16.25,16.25h0c0,8.97-7.27,16.25-16.25,16.25h-21.26l38.48,38.48h15.23l-28.26-29.23c13.38-2.58,23.7-11.71,23.42-27.24-.85-14.54-9.33-25.2-23.25-25.96h-51.84s-.25,82.73-.25,82.73Z" />
+      <path d="M380.49,61.21c12.4-9.94,10.89-26.07,2.88-33.09,0,0-4.07-5.09-13.91-5.85l-54.22-.21v82.69h54.22s23.59-.85,23.42-22.66c.37-10.31-3.91-17.15-12.39-20.88ZM326.42,33.79h39.53c6.38,0,11.54,5.17,11.54,11.54,0,3.19-1.29,6.07-3.38,8.16-2.09,2.09-4.98,3.38-8.16,3.38h-39.53v-23.08ZM378.35,89.62c-2.3,2.31-5.48,3.73-8.99,3.73h-42.93v-25.46h42.93c7.03,0,12.72,5.7,12.72,12.73,0,3.51-1.42,6.7-3.73,8.99Z" />
+      <path d="M449.76,104.94h11.37V33.67h36.36c8.97,0,16.25,7.27,16.25,16.25h0c0,8.97-7.27,16.25-16.25,16.25h-21.26l38.48,38.48h15.23l-28.26-29.23c13.38-2.58,23.7-11.71,23.42-27.24-.85-14.54-9.33-25.2-23.25-25.96h-51.84s-.25,82.73-.25,82.73Z" />
+    </svg>
+  );
+}

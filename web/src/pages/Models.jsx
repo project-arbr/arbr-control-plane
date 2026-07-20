@@ -68,7 +68,7 @@ const isChatLikely = (id) => !NON_CHAT_MODEL_RE.test(String(id || ""));
 
 function StatusDot({ live }) {
   return (
-    <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${live ? "bg-arbr-green-600" : "bg-gray-300"}`} />
+    <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${live ? "bg-green-600" : "bg-gray-300"}`} />
   );
 }
 
@@ -81,7 +81,7 @@ function Field({ label, children }) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-arbr-green-600 focus:outline-none focus:ring-1 focus:ring-arbr-green-600";
+const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-arbr-accent-600 focus:outline-none focus:ring-1 focus:ring-arbr-accent-600";
 const BTN   = "rounded-md px-3 py-1.5 text-sm font-medium transition-colors";
 const BTN_PRIMARY = `${BTN} bg-arbr-charcoal text-white hover:bg-arbr-ink`;
 const BTN_GHOST   = `${BTN} border border-gray-300 text-gray-700 hover:bg-gray-50`;
@@ -98,7 +98,7 @@ function BenchmarkBar({ dim, value }) {
       <span className="w-16 text-right text-gray-500 capitalize flex-shrink-0">{dim}</span>
       <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
         {pct != null && (
-          <div className="h-1.5 rounded-full bg-arbr-green-600 transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-1.5 rounded-full bg-arbr-accent-600 transition-all" style={{ width: `${pct}%` }} />
         )}
       </div>
       <span className="w-8 font-mono text-gray-600 flex-shrink-0">{pct != null ? pct : "—"}</span>
@@ -175,7 +175,7 @@ function ModelMetaPanel({ model }) {
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Capabilities</span>
           {chips.map((c) => (
-            <span key={c} className="rounded-full bg-arbr-green-50 border border-arbr-green-200 px-2 py-0.5 text-xs font-medium text-arbr-green-700">{c}</span>
+            <span key={c} className="rounded-full bg-arbr-accent-50 border border-arbr-accent-200 px-2 py-0.5 text-xs font-medium text-arbr-accent-700">{c}</span>
           ))}
         </div>
       )}
@@ -361,7 +361,7 @@ function ModelRow({ model, onRefresh }) {
           <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setShowTest((v) => !v); setDeleting(false); }}
-              className={`${BTN} text-xs ${showTest ? "bg-arbr-green-50 text-arbr-green-700 border border-arbr-green-200" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`${BTN} text-xs ${showTest ? "bg-arbr-accent-50 text-arbr-accent-700 border border-arbr-accent-200" : "text-gray-600 hover:bg-gray-100"}`}
             >
               Test
             </button>
@@ -462,7 +462,7 @@ function AddModelForm({ providerId, models, onSave, onClose }) {
               required
             />
             {autoFilled && (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-arbr-green-600 font-medium">
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-arbr-accent-600 font-medium">
                 auto-filled
               </span>
             )}
@@ -541,7 +541,7 @@ function ModelList({ providerId, models, onRefresh }) {
       {summary && (
         summary.error
           ? <p className="text-sm text-red-600">{summary.error}</p>
-          : <p className="text-sm text-arbr-green-700">Imported: {summary.created} new, {summary.adopted} adopted, {summary.skipped} already present{summary.conflicts?.length ? `, ${summary.conflicts.length} skipped (owned by another provider)` : ""}.</p>
+          : <p className="text-sm text-arbr-accent-700">Imported: {summary.created} new, {summary.adopted} adopted, {summary.skipped} already present{summary.conflicts?.length ? `, ${summary.conflicts.length} skipped (owned by another provider)` : ""}.</p>
       )}
 
       {disc && disc.error && <p className="text-sm text-red-600">Discovery failed: {disc.error}</p>}
@@ -560,7 +560,7 @@ function ModelList({ providerId, models, onRefresh }) {
                 <input type="checkbox" checked={!!sel[m.id]} disabled={m.registered}
                   onChange={(e) => setSel((s) => ({ ...s, [m.id]: e.target.checked }))} />
                 <span className="font-mono text-gray-700">{m.id}</span>
-                {m.registered ? <Badge tone="green">registered</Badge> : m.known && <Badge tone="gray">known pricing</Badge>}
+                {m.registered ? <Badge tone="charcoal">registered</Badge> : m.known && <Badge tone="gray">known pricing</Badge>}
                 {m.chatLikely === false && <Badge tone="amber">non-chat</Badge>}
               </label>
             ))}
@@ -695,7 +695,7 @@ function BuiltinProviderDetail({ provider, models, onRefresh }) {
       </div>
 
       {testResult && (
-        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-green-50 text-arbr-green-800 border border-arbr-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-accent-50 text-arbr-accent-800 border border-arbr-accent-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {testResult.ok ? `✓ Connected · model: ${testResult.model}${testResult.sample ? ` · "${testResult.sample}"` : ""}` : `✗ ${testResult.message}`}
         </div>
       )}
@@ -788,7 +788,7 @@ function CustomProviderDetail({ provider, models, onRefresh, onDeleted }) {
       </div>
 
       {testResult && (
-        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-green-50 text-arbr-green-800 border border-arbr-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+        <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-accent-50 text-arbr-accent-800 border border-arbr-accent-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {testResult.ok
             ? `✓ Connected · model: ${testResult.model}${testResult.sample ? ` · "${testResult.sample}"` : ""}`
             : `✗ ${testResult.message}`}
@@ -915,7 +915,7 @@ function CatalogProviderDetail({ provider, models, onRefresh }) {
           <div className="flex flex-col gap-1 text-sm">
             <label className="font-medium text-gray-700">
               Base URL
-              {info.url && <span className="ml-2 text-xs font-normal text-arbr-green-700">· pre-filled with official endpoint</span>}
+              {info.url && <span className="ml-2 text-xs font-normal text-arbr-accent-700">· pre-filled with official endpoint</span>}
               {!info.url && <span className="ml-2 text-xs font-normal text-amber-600">· account-specific, see hint below</span>}
             </label>
             <input
@@ -1006,7 +1006,7 @@ function AddProviderForm({ onSaved, onClose }) {
         </select>
         <span className="text-[11px] text-gray-400">Pick to prefill the base URL, or leave as Custom and enter it manually.</span>
       </Field>
-      {pickedInfo?.hint && <p className="text-[11px] text-arbr-green-700">{pickedInfo.hint}</p>}
+      {pickedInfo?.hint && <p className="text-[11px] text-arbr-accent-700">{pickedInfo.hint}</p>}
       <Field label="Provider ID (slug)">
         <input className={INPUT} placeholder="my-provider" value={form.id} onChange={s("id")} required />
         <span className="text-[11px] text-gray-400">Lowercase, no spaces. Used internally to match models.</span>
@@ -1057,7 +1057,7 @@ function ProviderSidebar({ allProviders, selected, onSelect, onRefresh }) {
             onClick={() => onSelect(p)}
             className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors ${
               selected?.provider === p.provider && selected?.type === p.type
-                ? "bg-arbr-green-50 text-arbr-charcoal font-medium"
+                ? "bg-arbr-accent-50 text-arbr-charcoal font-medium"
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >

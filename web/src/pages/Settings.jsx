@@ -136,7 +136,7 @@ function ApiKeys({ onChange }) {
       </p>
 
       {created && (
-        <div className="rounded-lg border border-arbr-green-200 bg-arbr-green-50 p-4">
+        <div className="rounded-lg border border-arbr-accent-200 bg-arbr-accent-50 p-4">
           <div className="text-sm font-medium text-arbr-charcoal">Key created: {created.name}</div>
           <div className="mt-1 text-xs text-gray-600">
             Copy it now — <strong>this is the only time it will be shown.</strong>
@@ -146,7 +146,7 @@ function ApiKeys({ onChange }) {
             <button className="btn-secondary" onClick={copyKey}>{copied ? "Copied" : "Copy"}</button>
             <button className="btn-ghost" onClick={() => setCreated(null)}>Dismiss</button>
           </div>
-          <div className="mt-4 border-t border-arbr-green-200 pt-4">
+          <div className="mt-4 border-t border-arbr-accent-200 pt-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Share with your developer</div>
             <pre className="rounded bg-white p-3 text-xs leading-relaxed text-gray-700 overflow-x-auto whitespace-pre">{[
               `# .env`,
@@ -302,7 +302,7 @@ export default function Settings({ onChange }) {
             <p className="mb-4 text-sm text-gray-600">
               Used when a request sends <code className="rounded bg-gray-100 px-1">model: "auto"</code> or
               names no model. Configure providers and models in the{" "}
-              <a href="/models" className="text-arbr-green-600 hover:underline">Models</a> page.
+              <a href="/models" className="text-arbr-accent-600 hover:underline">Models</a> page.
             </p>
             <div className="flex flex-wrap items-end gap-4">
               <div>

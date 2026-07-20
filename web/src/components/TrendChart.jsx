@@ -55,7 +55,7 @@ export default function TrendChart({ appName }) {
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={rows} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5df" />
             <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(d) => d.slice(5)} />
             <YAxis yAxisId="cost" orientation="left" tick={{ fontSize: 11 }}
               tickFormatter={(v) => `$${v.toFixed(2)}`} width={58} />
@@ -65,9 +65,9 @@ export default function TrendChart({ appName }) {
               labelFormatter={(d) => `Date: ${d}`}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="cost" dataKey="cost" name="cost" fill="#4ade80" opacity={0.8} radius={[2, 2, 0, 0]} />
+            <Bar yAxisId="cost" dataKey="cost" name="cost" fill="#171817" opacity={0.85} radius={[2, 2, 0, 0]} />
             <Line yAxisId="reqs" dataKey="requests" name="requests" type="monotone"
-              stroke="#6366f1" strokeWidth={2} dot={false} />
+              stroke="#9ca3af" strokeWidth={2} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       )}

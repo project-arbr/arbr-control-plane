@@ -19,7 +19,7 @@ function actionLabel(action) {
 // Inline progress bar: green → amber (>80%) → red (breached).
 function SpendBar({ cap }) {
   const pct = Math.min(cap.pct ?? 0, 100);
-  const color = cap.breached ? "bg-red-500" : pct > 80 ? "bg-amber-400" : "bg-arbr-green-600";
+  const color = cap.breached ? "bg-red-500" : pct > 80 ? "bg-amber-400" : "bg-green-600";
   return (
     <div className="flex items-center gap-2">
       <div className="relative h-1.5 w-20 overflow-hidden rounded-full bg-gray-200">
@@ -65,7 +65,7 @@ function CapRow({ cap, onRefresh }) {
 
   return (
     <>
-      <tr className={`border-b border-gray-100 ${cap.breached && cap.enabled ? "bg-red-50/40" : "hover:bg-arbr-green-50"}`}>
+      <tr className={`border-b border-gray-100 ${cap.breached && cap.enabled ? "bg-red-50/40" : "hover:bg-arbr-accent-50"}`}>
         <td className="px-3 py-2.5">
           <Toggle checked={cap.enabled} onChange={toggle} label="enabled" />
         </td>
