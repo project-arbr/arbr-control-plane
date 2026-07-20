@@ -141,6 +141,15 @@ const fallbackScope = FALLBACK_SCOPES.has(rawFallback) ? rawFallback : "same-pro
 
 const isProduction = process.env.NODE_ENV === "production";
 
+// Admin identity mode. "adminkey" (default) is today's single-shared-secret
+// behavior — unchanged, so local dev/tests never need to configure OIDC.
+// "oidc" and "trusted-header" add real per-user identity (see api/rbac.js,
+// api/authProviders/); the admin key still works alongside either as a
+// break-glass credential (api/adminAuth.js).
+const AUTH_MODES = new Set(["adminkey", "oidc", "trusted-header"]);
+const rawAuthMode = (process.env.ARBR_AUTH_MODE || "adminkey").trim().toLowerCase();
+const authMode = AUTH_MODES.has(rawAuthMode) ? rawAuthMode : "adminkey";
+
 const config = {
   port: Number(process.env.PORT) || 4100,
   host: process.env.HOST || "0.0.0.0",
@@ -157,6 +166,26 @@ const config = {
   // callers — this caps requests per source IP instead. Generous default; it exists
   // to blunt DB-hammering (accidental loops, a leaked key), not to throttle normal use.
   adminRpmGuardrail: Number(process.env.ARBR_ADMIN_RPM_GUARDRAIL) || 600,
+
+  // Per-user identity (F-04). See AUTH_MODES above.
+  authMode,
+  oidc: {
+    issuer: process.env.ARBR_OIDC_ISSUER || null,
+    clientId: process.env.ARBR_OIDC_CLIENT_ID || null,
+    clientSecret: process.env.ARBR_OIDC_CLIENT_SECRET || null,
+    redirectUri: process.env.ARBR_OIDC_REDIRECT_URI || null,
+  },
+  trustedHeader: {
+    // "iap" verifies a signed Google IAP JWT; "proxy" trusts a forwarded-identity
+    // header gated by a shared secret. Only meaningful when authMode is "trusted-header".
+    strategy: (process.env.ARBR_TRUSTED_HEADER_STRATEGY || "proxy").trim().toLowerCase(),
+    iapAudience: process.env.ARBR_IAP_AUDIENCE || null,
+    proxyHeader: process.env.ARBR_PROXY_AUTH_HEADER || "x-forwarded-email",
+    proxySecretHeader: process.env.ARBR_PROXY_SECRET_HEADER || "x-arbr-proxy-secret",
+    proxySecret: process.env.ARBR_PROXY_AUTH_SECRET || null,
+  },
+  sessionTtlHours: Number(process.env.ARBR_SESSION_TTL_HOURS) || 12,
+
   isProduction,
   // Provider-error fallback policy (see invokeWithFallback).
   fallbackScope,
@@ -180,6 +209,20 @@ function assertProductionReady() {
   if (!process.env.ARBR_ENCRYPTION_KEY || !String(process.env.ARBR_ENCRYPTION_KEY).trim()) {
     missing.push("ARBR_ENCRYPTION_KEY (required to encrypt provider keys at rest)");
   }
+  if (config.authMode === "oidc") {
+    if (!config.oidc.issuer) missing.push("ARBR_OIDC_ISSUER (required when ARBR_AUTH_MODE=oidc)");
+    if (!config.oidc.clientId) missing.push("ARBR_OIDC_CLIENT_ID (required when ARBR_AUTH_MODE=oidc)");
+    if (!config.oidc.clientSecret) missing.push("ARBR_OIDC_CLIENT_SECRET (required when ARBR_AUTH_MODE=oidc)");
+    if (!config.oidc.redirectUri) missing.push("ARBR_OIDC_REDIRECT_URI (required when ARBR_AUTH_MODE=oidc)");
+  }
+  if (config.authMode === "trusted-header") {
+    if (config.trustedHeader.strategy === "iap" && !config.trustedHeader.iapAudience) {
+      missing.push("ARBR_IAP_AUDIENCE (required when ARBR_TRUSTED_HEADER_STRATEGY=iap)");
+    }
+    if (config.trustedHeader.strategy === "proxy" && !config.trustedHeader.proxySecret) {
+      missing.push("ARBR_PROXY_AUTH_SECRET (required when ARBR_TRUSTED_HEADER_STRATEGY=proxy)");
+    }
+  }
   if (missing.length) {
     throw new Error(
       "[config] Refusing to start in production without:\n  - " +
@@ -200,6 +243,14 @@ function describe() {
   } else {
     lines.push(`  admin auth:  OFF (dev) — dashboard/admin API are OPEN. Set ARBR_ADMIN_KEY`);
     lines.push(`               before exposing this instance beyond localhost.`);
+  }
+  if (config.authMode === "oidc") {
+    lines.push(`  identity:    OIDC — issuer ${config.oidc.issuer || "(unset)"}`);
+  } else if (config.authMode === "trusted-header") {
+    lines.push(`  identity:    trusted-header (${config.trustedHeader.strategy})`);
+  } else {
+    lines.push(`  identity:    admin-key only — no per-user identity (set ARBR_AUTH_MODE=oidc`);
+    lines.push(`               or trusted-header for individual accountable access)`);
   }
   lines.push(`  fallback:    ${config.fallbackScope}`);
   if (config.demoMode) {

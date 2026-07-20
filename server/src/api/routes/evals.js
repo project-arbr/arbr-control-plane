@@ -2,6 +2,7 @@
 const express = require("express");
 const Recommendation = require("../../models/Recommendation");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const EvalDataset = require("../../models/EvalDataset");
 const EvalItem = require("../../models/EvalItem");
 const EvalRun = require("../../models/EvalRun");
@@ -38,21 +39,21 @@ router.get("/evals/runs/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 // Cancel a queued/running run; the worker stops it at the next checkpoint (queued stops immediately).
-router.post("/evals/runs/:id/cancel", async (req, res, next) => {
+router.post("/evals/runs/:id/cancel", requireRole("operator"), async (req, res, next) => {
   try {
     const run = await EvalRun.findOneAndUpdate(
       { _id: req.params.id, status: { $in: ["queued", "running"] } },
       { $set: { status: "cancelled" } }, { new: true }
     ).lean().catch(() => null);
     if (!run) return res.status(409).json({ error: "not_cancellable", message: "run is not queued or running" });
-    setImmediate(() => logAction("eval.run.cancel", "evalRun", req.params.id, null));
+    setImmediate(() => logAction("eval.run.cancel", "evalRun", req.params.id, null, req.user));
     res.json(run);
   } catch (e) { next(e); }
 });
 // Delete an eval run and its results. Also drops the dataset + its items when no other run
 // references them (a manual eval owns its dataset), and clears a linked recommendation's pointer
 // so its recorded verdict isn't left dangling.
-router.delete("/evals/runs/:id", async (req, res, next) => {
+router.delete("/evals/runs/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const run = await EvalRun.findById(req.params.id).lean().catch(() => null);
     if (!run) return res.status(404).json({ error: "not found" });
@@ -72,7 +73,7 @@ router.delete("/evals/runs/:id", async (req, res, next) => {
           ...(datasetDeleted ? { evalDatasetId: null } : {}) } }
       ).catch(() => {});
     }
-    setImmediate(() => logAction("eval.run.delete", "evalRun", String(run._id), { candidateModel: run.candidateModel }));
+    setImmediate(() => logAction("eval.run.delete", "evalRun", String(run._id), { candidateModel: run.candidateModel }, req.user));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -90,7 +91,7 @@ router.get("/evals/runs/:id/results", async (req, res, next) => {
 });
 
 // Human-curated verdict: override (or clear) the judge on one result, then re-score the run.
-router.patch("/evals/results/:id", async (req, res, next) => {
+router.patch("/evals/results/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const { verdict } = req.body || {};
     if (verdict != null && !["better", "equal", "worse"].includes(verdict)) {
@@ -99,7 +100,7 @@ router.patch("/evals/results/:id", async (req, res, next) => {
     const result = await EvalResult.findByIdAndUpdate(req.params.id, { $set: { humanVerdict: verdict ?? null } }, { new: true }).lean().catch(() => null);
     if (!result) return res.status(404).json({ error: "not found" });
     const run = await evalReplay.recomputeRun(result.evalRunId); // re-score with the override
-    setImmediate(() => logAction("eval.verdict.override", "evalResult", String(result._id), { verdict: verdict ?? null }));
+    setImmediate(() => logAction("eval.verdict.override", "evalResult", String(result._id), { verdict: verdict ?? null }, req.user));
     res.json({ result, run });
   } catch (e) { next(e); }
 });

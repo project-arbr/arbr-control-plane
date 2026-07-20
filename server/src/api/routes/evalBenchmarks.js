@@ -2,6 +2,7 @@
 const express = require("express");
 const RequestRecord = require("../../models/RequestRecord");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 const pricing = require("../../pricing/registry");
 const Settings = require("../../models/Settings");
@@ -25,7 +26,7 @@ const router = express.Router();
 // DoorDash's DashBench proved: generic leaderboards don't predict your traffic.
 
 // Build a benchmark from an application's replayable traffic (candidate-agnostic).
-router.post("/eval-benchmarks", async (req, res, next) => {
+router.post("/eval-benchmarks", requireRole("operator"), async (req, res, next) => {
   try {
     const { name, application, taskType, baselineModel, targetCount, windowDays } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: "name is required" });
@@ -38,7 +39,7 @@ router.post("/eval-benchmarks", async (req, res, next) => {
       const body = dataset.toObject ? dataset.toObject() : dataset;
       return res.status(422).json({ ...body, error: "no_replayable_traffic", message: dataset.error });
     }
-    setImmediate(() => logAction("benchmark.create", "evalDataset", String(dataset._id), { name: name.trim(), application, baselineModel, itemCount: dataset.itemCount }));
+    setImmediate(() => logAction("benchmark.create", "evalDataset", String(dataset._id), { name: name.trim(), application, baselineModel, itemCount: dataset.itemCount }, req.user));
     res.status(201).json(dataset);
   } catch (e) { next(e); }
 });
@@ -90,7 +91,7 @@ router.get("/eval-benchmarks/:id", async (req, res, next) => {
 });
 
 // Score a candidate model against the benchmark (a new EvalRun over the same frozen items).
-router.post("/eval-benchmarks/:id/run", async (req, res, next) => {
+router.post("/eval-benchmarks/:id/run", requireRole("operator"), async (req, res, next) => {
   try {
     const bench = await EvalDataset.findById(req.params.id).catch(() => null);
     if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
@@ -105,13 +106,13 @@ router.post("/eval-benchmarks/:id/run", async (req, res, next) => {
     const thresholds = evalThresholds.defaultThresholds(evalThresholds.riskForTier(tierForTask(bench.scope?.taskType)));
     thresholds.minItems = Math.max(1, bench.itemCount || 1);
     const run = await evalReplay.startRun({ rec: null, dataset: bench, judgeModel: judgeModel || null, thresholds, candidateModel, maxRunCostUsd: maxRunCostUsd ?? null });
-    setImmediate(() => logAction("benchmark.run", "evalRun", String(run._id), { benchmarkId: String(bench._id), candidateModel, judgeModel: judgeModel || null }));
+    setImmediate(() => logAction("benchmark.run", "evalRun", String(run._id), { benchmarkId: String(bench._id), candidateModel, judgeModel: judgeModel || null }, req.user));
     res.status(run.status === "failed" ? 422 : 201).json(run);
   } catch (e) { next(e); }
 });
 
 // Delete a benchmark and everything derived from it (items, its runs, their results).
-router.delete("/eval-benchmarks/:id", async (req, res, next) => {
+router.delete("/eval-benchmarks/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const bench = await EvalDataset.findById(req.params.id).lean().catch(() => null);
     if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
@@ -120,13 +121,13 @@ router.delete("/eval-benchmarks/:id", async (req, res, next) => {
     await EvalRun.deleteMany({ datasetId: bench._id });
     await EvalItem.deleteMany({ datasetId: bench._id });
     await EvalDataset.deleteOne({ _id: bench._id });
-    setImmediate(() => logAction("benchmark.delete", "evalDataset", String(req.params.id), { name: bench.name }));
+    setImmediate(() => logAction("benchmark.delete", "evalDataset", String(req.params.id), { name: bench.name }, req.user));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
 // Curation: pin a specific logged request into a benchmark as a case (e.g. one that went wrong).
-router.post("/eval-benchmarks/:id/items", async (req, res, next) => {
+router.post("/eval-benchmarks/:id/items", requireRole("operator"), async (req, res, next) => {
   try {
     const bench = await EvalDataset.findById(req.params.id).catch(() => null);
     if (!bench || !bench.isBenchmark) return res.status(404).json({ error: "not found" });
@@ -148,7 +149,7 @@ router.post("/eval-benchmarks/:id/items", async (req, res, next) => {
       severity: sev, pinned: true,
     });
     await EvalDataset.updateOne({ _id: bench._id }, { $inc: { itemCount: 1 } });
-    setImmediate(() => logAction("benchmark.item.add", "evalItem", String(item._id), { benchmarkId: String(bench._id), requestId, severity: sev }));
+    setImmediate(() => logAction("benchmark.item.add", "evalItem", String(item._id), { benchmarkId: String(bench._id), requestId, severity: sev }, req.user));
     res.status(201).json(item);
   } catch (e) { next(e); }
 });
@@ -168,7 +169,7 @@ router.get("/eval-benchmarks/:id/items", async (req, res, next) => {
 });
 
 // Set a case's severity (weights the worse-rate on the next run).
-router.patch("/eval-items/:id", async (req, res, next) => {
+router.patch("/eval-items/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const { severity } = req.body || {};
     if (!["trivial", "normal", "critical"].includes(severity)) return res.status(400).json({ error: "severity must be trivial | normal | critical" });
@@ -179,7 +180,7 @@ router.patch("/eval-items/:id", async (req, res, next) => {
 });
 
 // Remove a case from a benchmark.
-router.delete("/eval-items/:id", async (req, res, next) => {
+router.delete("/eval-items/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const item = await EvalItem.findById(req.params.id).lean().catch(() => null);
     if (!item) return res.status(404).json({ error: "not found" });

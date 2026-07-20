@@ -3,6 +3,7 @@ const express = require("express");
 const ApiKey = require("../../models/ApiKey");
 const auth = require("../../gateway/auth");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const crypto = require("crypto");
 
 const router = express.Router();
@@ -25,7 +26,7 @@ router.get("/keys", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/keys", async (req, res, next) => {
+router.post("/keys", requireRole("operator"), async (req, res, next) => {
   try {
     const { name, application, rpm, allowedModels, defaultModel, userId, department, expiresAt } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: "name is required" });
@@ -45,13 +46,13 @@ router.post("/keys", async (req, res, next) => {
       expiresAt: parsedExpiry && !isNaN(parsedExpiry) ? parsedExpiry : null,
     });
     auth.invalidate();
-    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application, userId: doc.userId }));
+    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application, userId: doc.userId }, req.user));
     // The ONLY time the full secret is ever returned.
     res.json({ ...keyView(doc.toObject()), key: secret });
   } catch (e) { next(e); }
 });
 
-router.patch("/keys/:id", async (req, res, next) => {
+router.patch("/keys/:id", requireRole("operator"), async (req, res, next) => {
   try {
     const update = {};
     if (req.body.name) update.name = String(req.body.name).trim();
@@ -72,18 +73,18 @@ router.patch("/keys/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/keys/:id", async (req, res, next) => {
+router.delete("/keys/:id", requireRole("operator"), async (req, res, next) => {
   try {
     await ApiKey.findByIdAndUpdate(req.params.id, { enabled: false, revokedAt: new Date() });
     auth.invalidate();
-    setImmediate(() => logAction("key.revoke", "key", req.params.id, null));
+    setImmediate(() => logAction("key.revoke", "key", req.params.id, null, req.user));
     res.json({ revoked: true });
   } catch (e) { next(e); }
 });
 
 // Rotate: revoke the old key and create a replacement with identical settings.
 // Returns the new keyView + the full secret (one-time, same as key creation).
-router.post("/keys/:id/rotate", async (req, res, next) => {
+router.post("/keys/:id/rotate", requireRole("operator"), async (req, res, next) => {
   try {
     const old = await ApiKey.findById(req.params.id).lean();
     if (!old || old.revokedAt) return res.status(404).json({ error: "Key not found or already revoked." });
@@ -102,7 +103,7 @@ router.post("/keys/:id/rotate", async (req, res, next) => {
       expiresAt: old.expiresAt || null,
     });
     auth.invalidate();
-    setImmediate(() => logAction("key.rotate", "key", doc._id, { replacedId: old._id, name: doc.name, application: doc.application }));
+    setImmediate(() => logAction("key.rotate", "key", doc._id, { replacedId: old._id, name: doc.name, application: doc.application }, req.user));
     res.json({ ...keyView(doc.toObject()), key: secret });
   } catch (e) { next(e); }
 });
@@ -112,7 +113,7 @@ router.get("/require-api-key", async (_req, res, next) => {
   try { res.json({ requireApiKey: await auth.requireApiKeyOn() }); } catch (e) { next(e); }
 });
 
-router.put("/require-api-key", async (req, res, next) => {
+router.put("/require-api-key", requireRole("administrator"), async (req, res, next) => {
   try { res.json({ requireApiKey: await auth.setRequireApiKey(!!req.body.on) }); } catch (e) { next(e); }
 });
 

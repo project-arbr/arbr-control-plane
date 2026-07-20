@@ -1,6 +1,11 @@
 // Tiny fetch wrapper for the control-plane API.
-// Admin auth: when the instance has ARBR_ADMIN_KEY set, the key entered at
-// login is stored locally and sent as a Bearer token on every call.
+//
+// Identity (F-04): the normal path is a server-side session, carried in an
+// httpOnly cookie the browser sends automatically (credentials: "include") —
+// nothing to store or attach here. ARBR_ADMIN_KEY is a break-glass fallback
+// for adminkey-mode deployments / scripts; when a key was entered at login
+// it's still sent as a Bearer token, but it no longer sits in the normal
+// per-request path once a real auth mode is configured (see Login.jsx).
 const TOKEN_KEY = "arbr_admin_key";
 
 export function getAdminToken() {
@@ -19,6 +24,7 @@ async function req(path, options = {}) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, {
     headers,
+    credentials: "include",
     ...options,
   });
   if (!res.ok) {
@@ -39,6 +45,17 @@ function qs(params = {}) {
 export const api = {
   status: () => req("/status"),
   about: () => req("/about"),
+
+  // Identity (F-04). authMode/currentUser are safe unauthenticated — used by
+  // Login.jsx to decide what to render before a session exists.
+  authMode: () => req("/auth/mode"),
+  currentUser: () => req("/auth/me"),
+  logout: () => req("/auth/logout", { method: "POST" }),
+
+  users: () => req("/users"),
+  setUserRole: (id, role) => req(`/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+  disableUser: (id) => req(`/users/${id}/disable`, { method: "POST" }),
+  enableUser: (id) => req(`/users/${id}/enable`, { method: "POST" }),
 
   // Gateway discovery endpoints (same auth as /v1/chat — usable by SDK clients).
   gatewayModels: () => fetch("/v1/models", { headers: { "Content-Type": "application/json" } }).then((r) => r.json()),
@@ -106,7 +123,8 @@ export const api = {
   routingExperiment: (id) => req(`/routing-experiments/${id}`),
   updateRoutingExperiment: (id, body) => req(`/routing-experiments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   rollbackExperiment: (id, reason) => req(`/routing-experiments/${id}/rollback`, { method: "POST", body: JSON.stringify({ reason }) }),
-  promoteExperiment: (id, approvedBy) => req(`/routing-experiments/${id}/promote`, { method: "POST", body: JSON.stringify({ approvedBy }) }),
+  // approvedBy is derived server-side from the signed-in user, not sent from here.
+  promoteExperiment: (id) => req(`/routing-experiments/${id}/promote`, { method: "POST" }),
 
   models: ({ live, routable } = {}) => {
     const q = [live && "live=true", routable && "routable=true"].filter(Boolean).join("&");

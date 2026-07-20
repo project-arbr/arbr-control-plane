@@ -1,6 +1,7 @@
 // Admin API routes — connections
 const express = require("express");
 const connections = require("../../providers/connections");
+const { requireRole } = require("../rbac");
 const { createRouter } = require("../../providers/llm-router");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 
@@ -13,7 +14,7 @@ router.get("/connections", async (_req, res, next) => {
 
 // Add / replace a provider credential (stored encrypted; never echoed back).
 // Body shape depends on the provider: { apiKey } or { accessKeyId, secretAccessKey, region }.
-router.put("/connections/:provider", async (req, res, next) => {
+router.put("/connections/:provider", requireRole("administrator"), async (req, res, next) => {
   try {
     await connections.setCredential(req.params.provider, req.body || {});
     res.json(await connections.statuses());
@@ -21,7 +22,7 @@ router.put("/connections/:provider", async (req, res, next) => {
 });
 
 // Remove a stored credential (an env credential for the same provider still applies).
-router.delete("/connections/:provider", async (req, res, next) => {
+router.delete("/connections/:provider", requireRole("administrator"), async (req, res, next) => {
   try {
     await connections.removeCredential(req.params.provider);
     res.json(await connections.statuses());
@@ -29,7 +30,7 @@ router.delete("/connections/:provider", async (req, res, next) => {
 });
 
 // Choose the default provider used when a request names none.
-router.put("/default-provider", async (req, res, next) => {
+router.put("/default-provider", requireRole("administrator"), async (req, res, next) => {
   try {
     await connections.setDefaultProvider(req.body?.provider || null);
     res.json(await connections.statuses());
@@ -37,7 +38,7 @@ router.put("/default-provider", async (req, res, next) => {
 });
 
 // Choose the default model (applies to the default provider; used in auto mode).
-router.put("/default-model", async (req, res, next) => {
+router.put("/default-model", requireRole("administrator"), async (req, res, next) => {
   try {
     await connections.setDefaultModel(req.body?.model || null);
     res.json(await connections.statuses());
@@ -45,7 +46,7 @@ router.put("/default-model", async (req, res, next) => {
 });
 
 // Live "test" — make a tiny real call with the effective key for one provider.
-router.post("/connections/:provider/test", async (req, res) => {
+router.post("/connections/:provider/test", requireRole("administrator"), async (req, res) => {
   try {
     const provider = req.params.provider;
     const eff = await connections.effective();

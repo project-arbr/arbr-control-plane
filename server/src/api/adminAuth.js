@@ -1,33 +1,28 @@
-// Master-key auth for the dashboard / admin API (everything under /api).
+// Admin auth for the dashboard / admin API (everything under /api, except
+// /api/auth/* which is mounted ahead of this middleware — see index.js).
 //
-// Model (LiteLLM master-key style): one ARBR_ADMIN_KEY env value IS the
-// credential — sessionless, sent as `Authorization: Bearer <key>` by the
-// dashboard (stored client-side after login) or any admin tooling.
+// Two layers, always in this order:
+//   1. Master key (ARBR_ADMIN_KEY) — sessionless break-glass credential, works
+//      in every authMode. Not the everyday human login path once a real
+//      identity mode is configured; kept for bootstrap + server-side
+//      automation (ops/deploy.sh health checks, CI). Resolves to a standing
+//      "master-key" identity so audit entries never default to "admin".
+//   2. Per-user identity (config.authMode: "oidc" or "trusted-header") via
+//      identity.resolveUser() — a real session or a verified trusted header.
 //
-//   - ARBR_ADMIN_KEY unset → middleware passes everything through (local
-//     dev / demo; config.describe() prints a loud warning at boot).
-//   - Set → every /api/* request must carry the admin key, EXCEPT:
-//       GET /api/status — also accepted with a valid GATEWAY API key, so SDK
-//       status() healthchecks keep working without the admin credential.
+//   - authMode "adminkey" (default) + ARBR_ADMIN_KEY unset → middleware
+//     passes everything through (local dev/demo; config.describe() warns).
+//   - Otherwise every /api/* request must resolve to a master-key OR
+//     per-user identity, EXCEPT: GET /api/status also accepts a valid
+//     GATEWAY API key, so SDK status() healthchecks work without either.
 //
 // The data plane (/v1/*) is NOT handled here — it uses gateway API keys
 // (gateway/auth.js). /health sits outside /api and stays public.
-//
-// Structured so richer schemes (user accounts, SSO) can slot in behind the
-// same gate later: everything funnels through isAdminRequest().
-const crypto = require("crypto");
 const { config } = require("../config");
+const { timingSafeEqual, bearerOf } = require("./authUtil");
+const identity = require("./identity");
 
-function timingSafeEqual(a, b) {
-  const ha = crypto.createHash("sha256").update(String(a)).digest();
-  const hb = crypto.createHash("sha256").update(String(b)).digest();
-  return crypto.timingSafeEqual(ha, hb);
-}
-
-function bearerOf(req) {
-  const header = req.headers.authorization || "";
-  return header.startsWith("Bearer ") ? header.slice(7).trim() : null;
-}
+const MASTER_USER = { id: "master-key", email: "master-key", role: "administrator", isMasterKey: true };
 
 function isAdminRequest(req) {
   const token = bearerOf(req);
@@ -36,8 +31,21 @@ function isAdminRequest(req) {
 
 async function middleware(req, res, next) {
   try {
-    if (!config.adminKey) return next(); // dev/demo: open, warned at boot
-    if (isAdminRequest(req)) return next();
+    if (!config.adminKey && config.authMode === "adminkey") {
+      req.user = MASTER_USER; // dev/demo: open, warned at boot — still gives rbac/audit a real actor
+      return next();
+    }
+
+    if (isAdminRequest(req)) {
+      req.user = MASTER_USER;
+      return next();
+    }
+
+    const user = await identity.resolveUser(req);
+    if (user) {
+      req.user = user;
+      return next();
+    }
 
     // SDK healthcheck exception: /api/status with a valid GATEWAY key.
     if (req.method === "GET" && (req.path === "/status" || req.path === "/status/")) {
@@ -57,11 +65,14 @@ async function middleware(req, res, next) {
 
     return res.status(401).json({
       error: "admin_auth_required",
-      message: "This instance requires the admin key (Authorization: Bearer <ARBR_ADMIN_KEY>).",
+      message:
+        config.authMode === "adminkey"
+          ? "This instance requires the admin key (Authorization: Bearer <ARBR_ADMIN_KEY>)."
+          : "Sign in required (or Authorization: Bearer <ARBR_ADMIN_KEY> for break-glass access).",
     });
   } catch (err) {
     return next(err);
   }
 }
 
-module.exports = { middleware, isAdminRequest };
+module.exports = { middleware, isAdminRequest, MASTER_USER };

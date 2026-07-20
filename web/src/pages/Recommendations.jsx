@@ -94,8 +94,8 @@ function RecCard({ rec, models, onChange }) {
       if (e.status === 409) {
         const reason = window.prompt("This recommendation has not passed an eval. Enter an override reason to accept anyway (or Cancel):");
         if (!reason) { setBusy(false); return; }
-        const approver = window.prompt("Approver name:") || "console";
-        try { await api.acceptRecommendation(rec._id, { reason, approver }); await onChange(); }
+        // Approver is derived server-side from the signed-in user — no longer prompted here.
+        try { await api.acceptRecommendation(rec._id, { reason }); await onChange(); }
         catch (e2) { setErr(e2.message); }
       } else setErr(e.message);
     } finally { setBusy(false); }

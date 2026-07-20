@@ -1,13 +1,14 @@
 // Admin API routes — sync
 const express = require("express");
 const aiPolicy = require("../../routing/aiPolicy");
+const { requireRole } = require("../rbac");
 const pricing = require("../../pricing/registry");
 const Settings = require("../../models/Settings");
 
 const router = express.Router();
 
 // ── LiveBench benchmark score sync ───────────────────────────────────────────
-router.post("/livebench/sync", async (_req, res, next) => {
+router.post("/livebench/sync", requireRole("administrator"), async (_req, res, next) => {
   try {
     const result = await require("../../livebench/sync").run();
     await pricing.reload();
@@ -24,7 +25,7 @@ router.get("/livebench/status", async (_req, res, next) => {
 });
 
 // ── LMSYS Arena Elo sync ─────────────────────────────────────────────────────
-router.post("/lmsys/sync", async (_req, res, next) => {
+router.post("/lmsys/sync", requireRole("administrator"), async (_req, res, next) => {
   try {
     const result = await require("../../lmsys/sync").run();
     await pricing.reload();
@@ -41,7 +42,7 @@ router.get("/lmsys/status", async (_req, res, next) => {
 });
 
 // ── LiteLLM pricing/spec sync ────────────────────────────────────────────────
-router.post("/litellm/sync", async (_req, res, next) => {
+router.post("/litellm/sync", requireRole("administrator"), async (_req, res, next) => {
   try {
     const result = await require("../../litellm/sync").run();
     await pricing.reload();
@@ -57,7 +58,7 @@ router.get("/litellm/status", async (_req, res, next) => {
 });
 
 // ── Consolidated benchmark + pricing sync (single-button flow) ────────────────
-router.post("/benchmarks/sync", async (_req, res, next) => {
+router.post("/benchmarks/sync", requireRole("administrator"), async (_req, res, next) => {
   try {
     // LiteLLM (pricing) runs first — no ordering dependency
     const lt = await require("../../litellm/sync").run().catch((e) => ({ error: e.message }));

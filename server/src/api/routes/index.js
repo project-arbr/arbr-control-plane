@@ -24,5 +24,6 @@ router.use(require("./audit.js"));
 router.use(require("./providerHealth.js"));
 router.use(require("./appConfigs.js"));
 router.use(require("./shadow.js"));
+router.use(require("./users.js"));
 
 module.exports = router;

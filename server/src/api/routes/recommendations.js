@@ -4,6 +4,7 @@ const RequestRecord = require("../../models/RequestRecord");
 const Rule = require("../../models/Rule");
 const Recommendation = require("../../models/Recommendation");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const recommender = require("../../recommend/engine");
 const ruleEngine = require("../../routing/ruleEngine");
 const EvalDataset = require("../../models/EvalDataset");
@@ -29,7 +30,7 @@ router.get("/recommendations/analysis", async (_req, res, next) => {
   try { res.json(await recommender.analyze()); } catch (e) { next(e); }
 });
 
-router.post("/recommendations/recompute", async (_req, res, next) => {
+router.post("/recommendations/recompute", requireRole("operator"), async (_req, res, next) => {
   try { res.json(await recommender.recompute()); } catch (e) { next(e); }
 });
 
@@ -37,19 +38,22 @@ router.post("/recommendations/recompute", async (_req, res, next) => {
 // GATE (P0 eval-backed routing): a recommendation may only become a rule once it has PASSED an
 // offline eval, or the caller supplies an override { reason, approver, expiresAt? }. This is the
 // core promise — no cost-saving rule ships on price math alone. Pass ?dryRun=1 to check the gate.
-router.post("/recommendations/:id/accept", async (req, res, next) => {
+router.post("/recommendations/:id/accept", requireRole("operator"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
 
-    const override = (req.body && req.body.override) || null;
+    const rawOverride = (req.body && req.body.override) || null;
+    const override = rawOverride && rawOverride.reason
+      ? { reason: rawOverride.reason, approver: req.user.email, expiresAt: rawOverride.expiresAt || null }
+      : null;
     const gate = evalThresholds.gateAccept(rec, override);
     if (!gate.allowed) {
       return res.status(409).json({ error: "eval_required", message: gate.reason, evalStatus: rec.evalStatus });
     }
     if (gate.status === "overridden") {
       rec.evalStatus = "overridden";
-      rec.override = { reason: override.reason, approver: override.approver, at: new Date(), expiresAt: override.expiresAt || null };
+      rec.override = { reason: override.reason, approver: override.approver, at: new Date(), expiresAt: override.expiresAt };
     }
 
     // Rule scope is explicit, not silently global: use the caller-provided scope, else the
@@ -78,13 +82,13 @@ router.post("/recommendations/:id/accept", async (req, res, next) => {
     setImmediate(() => logAction("recommendation.accept", "recommendation", String(rec._id), {
       via: qualityGate, ruleId: String(rule._id), candidateModel: rec.suggestedModel,
       evalRunId: rec.evalRunId ? String(rec.evalRunId) : null, qualityGate,
-    }));
+    }, req.user));
     res.json({ recommendation: rec, rule, acceptedVia: qualityGate, qualityGate });
   } catch (e) { next(e); }
 });
 
 // Build an immutable eval dataset from historical traffic for this recommendation's scope.
-router.post("/recommendations/:id/create-eval-dataset", async (req, res, next) => {
+router.post("/recommendations/:id/create-eval-dataset", requireRole("operator"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
@@ -95,7 +99,7 @@ router.post("/recommendations/:id/create-eval-dataset", async (req, res, next) =
       if (rec.evalStatus === "not_started") rec.evalStatus = "dataset_ready";
       await rec.save();
     }
-    setImmediate(() => logAction("eval.dataset.create", "evalDataset", String(dataset._id), { recommendationId: String(rec._id), itemCount: dataset.itemCount, status: dataset.status }));
+    setImmediate(() => logAction("eval.dataset.create", "evalDataset", String(dataset._id), { recommendationId: String(rec._id), itemCount: dataset.itemCount, status: dataset.status }, req.user));
     if (dataset.status === "failed") {
       // Surface the reason as `message` so the UI shows *why*, not a bare "422".
       const body = dataset.toObject ? dataset.toObject() : dataset;
@@ -106,7 +110,7 @@ router.post("/recommendations/:id/create-eval-dataset", async (req, res, next) =
 });
 
 // Start an offline eval run for this recommendation (uses its latest ready dataset, or a given datasetId).
-router.post("/recommendations/:id/run-eval", async (req, res, next) => {
+router.post("/recommendations/:id/run-eval", requireRole("operator"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
@@ -129,23 +133,24 @@ router.post("/recommendations/:id/run-eval", async (req, res, next) => {
     const risk = evalThresholds.riskForTier(tierForTask(rec.taskType));
     const thresholds = evalThresholds.defaultThresholds(risk);
     const run = await evalReplay.startRun({ rec, dataset, judgeModel: judgeModel || null, thresholds, maxRunCostUsd: maxRunCostUsd ?? null });
-    setImmediate(() => logAction("eval.run.start", "evalRun", String(run._id), { recommendationId: String(rec._id), candidateModel: dataset.candidateModel, judgeModel: judgeModel || null }));
+    setImmediate(() => logAction("eval.run.start", "evalRun", String(run._id), { recommendationId: String(rec._id), candidateModel: dataset.candidateModel, judgeModel: judgeModel || null }, req.user));
     res.status(run.status === "failed" ? 422 : 202).json(run);
   } catch (e) { next(e); }
 });
 
 // Record a manual override reason on a recommendation (audited). Does not create the rule;
 // the subsequent accept call carries the override, or reads this one.
-router.post("/recommendations/:id/override", async (req, res, next) => {
+router.post("/recommendations/:id/override", requireRole("operator"), async (req, res, next) => {
   try {
-    const { reason, approver, expiresAt } = req.body || {};
-    if (!reason || !approver) return res.status(400).json({ error: "reason and approver are required" });
+    const { reason, expiresAt } = req.body || {};
+    if (!reason) return res.status(400).json({ error: "reason is required" });
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });
+    const approver = req.user.email;
     rec.override = { reason, approver, at: new Date(), expiresAt: expiresAt || null };
     rec.evalStatus = "overridden";
     await rec.save();
-    setImmediate(() => logAction("eval.override", "recommendation", String(rec._id), { approver, reason }));
+    setImmediate(() => logAction("eval.override", "recommendation", String(rec._id), { approver, reason }, req.user));
     res.json(rec);
   } catch (e) { next(e); }
 });
@@ -155,7 +160,7 @@ router.post("/recommendations/:id/override", async (req, res, next) => {
 // baseline. Lets users test ANY candidate, recommended or not. Mirrors the recommendation
 // create-dataset + run-eval flow in one call, reusing the same builder/runner with a
 // recommendation-shaped scope (recommendationId stays null).
-router.post("/evals", async (req, res, next) => {
+router.post("/evals", requireRole("operator"), async (req, res, next) => {
   try {
     const { application, taskType, baselineModel, candidateModel, judgeModel, targetCount, piiMode, windowDays, maxRunCostUsd } = req.body || {};
     if (!application) return res.status(400).json({ error: "application is required" });
@@ -181,7 +186,7 @@ router.post("/evals", async (req, res, next) => {
     // not a promotion-grade result. The other gates (worse-rate, latency, cost) still apply.
     thresholds.minItems = Math.max(1, dataset.itemCount || 1);
     const run = await evalReplay.startRun({ rec: null, dataset, judgeModel: judgeModel || null, thresholds, maxRunCostUsd: maxRunCostUsd ?? null, exploratory: true });
-    setImmediate(() => logAction("eval.create", "evalRun", String(run._id), { application, baselineModel, candidateModel, judgeModel: judgeModel || null, exploratory: true }));
+    setImmediate(() => logAction("eval.create", "evalRun", String(run._id), { application, baselineModel, candidateModel, judgeModel: judgeModel || null, exploratory: true }, req.user));
     res.status(run.status === "failed" ? 422 : 201).json({ dataset, run });
   } catch (e) { next(e); }
 });

@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
 const { config, describe, assertProductionReady } = require("./config");
 const registry = require("./pricing/registry");
@@ -21,6 +22,7 @@ const auth = require("./gateway/auth");
 const adminAuth = require("./api/adminAuth");
 const adminRateLimit = require("./api/adminRateLimit");
 const apiRoutes = require("./api/routes");
+const authRoutes = require("./api/routes/auth");
 const connections = require("./providers/connections");
 
 // Built dashboard (created by `npm --prefix web run build`). When present, the
@@ -51,9 +53,14 @@ async function start() {
   app.set("trust proxy", true);
   app.use(cors({
     origin: config.corsOrigin,
+    // Sessions (F-04) ride in an httpOnly cookie — the browser only attaches it
+    // cross-origin (Vite :5173 → server :4100 in dev) when both this and the
+    // fetch call (see web/src/api.js) opt into credentialed requests.
+    credentials: true,
     exposedHeaders: ["X-Arbr-Request-ID", "X-Arbr-Model", "X-Arbr-Provider", "X-Arbr-Routing", "X-Arbr-Task-Type"],
   }));
   app.use(express.json({ limit: "2mb" }));
+  app.use(cookieParser());
 
   // Liveness. `demoMode` reflects the EFFECTIVE provider state (env creds +
   // dashboard-connected creds), matching the console and gateway routing — not
@@ -131,8 +138,12 @@ async function start() {
     }
   });
 
-  // Dashboard / admin API — master-key gated when ARBR_ADMIN_KEY is set,
-  // rate-limited per source IP (see adminRateLimit.js).
+  // Identity endpoints (login/callback/logout/mode/me) — must be reachable
+  // before a session exists, so mounted ahead of adminAuth.middleware.
+  app.use("/api/auth", adminRateLimit.middleware, authRoutes);
+
+  // Dashboard / admin API — master-key or per-user identity gated (see
+  // adminAuth.js), rate-limited per source IP (see adminRateLimit.js).
   app.use("/api", adminRateLimit.middleware, adminAuth.middleware, apiRoutes);
 
   // Serve the built dashboard if it exists (single-port mode).

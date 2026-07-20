@@ -2,6 +2,7 @@
 const express = require("express");
 const auth = require("../../gateway/auth");
 const { logAction } = require("../auditLogger");
+const { requireRole } = require("../rbac");
 const connections = require("../../providers/connections");
 const pricing = require("../../pricing/registry");
 const ModelEntry = require("../../models/ModelEntry");
@@ -24,7 +25,7 @@ router.get("/custom-providers", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/custom-providers", async (req, res, next) => {
+router.post("/custom-providers", requireRole("administrator"), async (req, res, next) => {
   try {
     const { id, label, baseURL, apiKey } = req.body || {};
     if (!id || !String(id).trim()) return res.status(400).json({ error: "id is required" });
@@ -49,7 +50,7 @@ router.post("/custom-providers", async (req, res, next) => {
   }
 });
 
-router.patch("/custom-providers/:id", async (req, res, next) => {
+router.patch("/custom-providers/:id", requireRole("administrator"), async (req, res, next) => {
   try {
     const doc = await CustomProvider.findOne({ id: req.params.id });
     if (!doc) return res.status(404).json({ error: "not_found" });
@@ -68,7 +69,7 @@ router.patch("/custom-providers/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/custom-providers/:id", async (req, res, next) => {
+router.delete("/custom-providers/:id", requireRole("administrator"), async (req, res, next) => {
   try {
     const doc = await CustomProvider.findOne({ id: req.params.id });
     if (!doc) return res.status(404).json({ error: "not_found" });
@@ -78,7 +79,7 @@ router.delete("/custom-providers/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/custom-providers/:id/test", async (req, res) => {
+router.post("/custom-providers/:id/test", requireRole("administrator"), async (req, res) => {
   try {
     const doc = await CustomProvider.findOne({ id: req.params.id }).lean();
     if (!doc || !doc.enabled) return res.status(400).json({ ok: false, message: "provider not found or disabled" });
@@ -131,7 +132,7 @@ router.get("/custom-providers/:id/models", async (req, res) => {
 
 // Bulk-register selected discovered models under a custom provider. Adopts orphaned synced rows
 // (re-points their provider) and enriches from the existing catalog; unmatched → $0 pricing row.
-router.post("/custom-providers/:id/models", async (req, res, next) => {
+router.post("/custom-providers/:id/models", requireRole("administrator"), async (req, res, next) => {
   try {
     const doc = await CustomProvider.findOne({ id: req.params.id }).lean();
     if (!doc) return res.status(404).json({ error: "not_found" });
@@ -162,7 +163,7 @@ router.post("/custom-providers/:id/models", async (req, res, next) => {
       }
     }
     await pricing.reload();
-    setImmediate(() => logAction("customProvider.importModels", "customProvider", doc.id, { count: ids.length, created: result.created, adopted: result.adopted }));
+    setImmediate(() => logAction("customProvider.importModels", "customProvider", doc.id, { count: ids.length, created: result.created, adopted: result.adopted }, req.user));
     res.json(result);
   } catch (e) { next(e); }
 });

@@ -16,25 +16,43 @@ import Audit from "./pages/Audit.jsx";
 import Governance from "./pages/Governance.jsx";
 import Applications from "./pages/Applications.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
+import Users from "./pages/Users.jsx";
 
 export default function App() {
   const [status, setStatus] = useState(null);
-  // null = probing, "open" = no auth needed / authed, "login" = needs the admin key
+  // null = probing, "open" = no auth needed / authed, "login" = needs to sign in
   const [authState, setAuthState] = useState(null);
+  // "adminkey" (default) | "oidc" | "trusted-header" — which Login.jsx renders
+  const [authMode, setAuthMode] = useState("adminkey");
+  const [user, setUser] = useState(null); // { id, email, role } once authed under oidc/trusted-header
 
   const refreshStatus = () =>
     api.status()
-      .then((s) => { setStatus(s); setAuthState("open"); })
-      .catch((e) => { if (e.status === 401) setAuthState("login"); });
+      .then(async (s) => {
+        setStatus(s);
+        setAuthState("open");
+        try { setUser((await api.currentUser()).user); } catch { setUser(null); }
+      })
+      .catch(async (e) => {
+        if (e.status !== 401) return;
+        try { setAuthMode((await api.authMode()).mode); } catch { /* keep default */ }
+        setAuthState("login");
+      });
   useEffect(() => { refreshStatus(); }, []);
 
-  const signOut = () => { clearAdminToken(); setStatus(null); setAuthState("login"); };
+  const signOut = async () => {
+    try { await api.logout(); } catch { /* ignore — still clear local state */ }
+    clearAdminToken();
+    setStatus(null);
+    setUser(null);
+    setAuthState("login");
+  };
 
-  if (authState === "login") return <Login onAuthed={refreshStatus} />;
+  if (authState === "login") return <Login mode={authMode} onAuthed={refreshStatus} />;
   if (authState === null) return null; // probing — avoid a flash of either state
 
   return (
-    <Layout status={status} onSignOut={signOut}>
+    <Layout status={status} user={user} onSignOut={signOut}>
       <Routes>
         <Route path="/" element={<Overview />} />
         <Route path="/applications" element={<Applications />} />
@@ -48,6 +66,7 @@ export default function App() {
         <Route path="/settings" element={<Settings onChange={refreshStatus} />} />
         <Route path="/governance" element={<Governance />} />
         <Route path="/audit" element={<Audit />} />
+        <Route path="/users" element={<Users />} />
         <Route path="/docs" element={<Docs />} />
 
         {/* Redirects for old / deep links. */}

@@ -6,6 +6,7 @@ const { createRouter } = require("../../providers/llm-router");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 const pricing = require("../../pricing/registry");
 const ModelEntry = require("../../models/ModelEntry");
+const { requireRole } = require("../rbac");
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ router.get("/models", async (req, res) => {
 });
 
 // Live test — send a user message to a specific model and return the response.
-router.post("/models/:id/test", async (req, res) => {
+router.post("/models/:id/test", requireRole("administrator"), async (req, res) => {
   try {
     const model = pricing.getModel(req.params.id);
     if (!model) return res.status(404).json({ ok: false, message: "model not found" });
@@ -54,7 +55,7 @@ router.post("/models/:id/test", async (req, res) => {
   }
 });
 
-router.post("/models", async (req, res, next) => {
+router.post("/models", requireRole("administrator"), async (req, res, next) => {
   try {
     const { id, provider, label, inputPer1M, outputPer1M, tier } = req.body || {};
     if (!id || !String(id).trim()) return res.status(400).json({ error: "id is required" });
@@ -83,7 +84,7 @@ router.post("/models", async (req, res, next) => {
   }
 });
 
-router.patch("/models/:id", async (req, res, next) => {
+router.patch("/models/:id", requireRole("administrator"), async (req, res, next) => {
   try {
     const doc = await ModelEntry.findOne({ id: req.params.id });
     if (!doc) return res.status(404).json({ error: "not_found" });
@@ -102,7 +103,7 @@ router.patch("/models/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/models/:id", async (req, res, next) => {
+router.delete("/models/:id", requireRole("administrator"), async (req, res, next) => {
   try {
     const doc = await ModelEntry.findOne({ id: req.params.id });
     if (!doc) return res.status(404).json({ error: "not_found" });
