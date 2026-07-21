@@ -6,6 +6,7 @@
 // without paying for classification on every request.
 
 const crypto = require("crypto");
+const { internalComplete } = require("../internal/complete");
 
 // 30 built-in task types grouped by complexity tier.
 // tier: "light" = fast & cheap, "mid" = balanced, "premium" = deep reasoning.
@@ -236,7 +237,7 @@ function normalizeLabel(text) {
 }
 
 // One LLM call on a CHEAP model → { taskType, difficulty, confidence } from TASK_TYPES, or null.
-async function classifyWithLLM({ messages, router, eff }) {
+async function classifyWithLLM({ messages, router, eff, application = null }) {
   if (!router || !eff || !eff.defaultProvider) return null;
   const text = lastUserText(messages).slice(0, 800);
   const prompt =
@@ -246,12 +247,18 @@ async function classifyWithLLM({ messages, router, eff }) {
     `Return ONLY a JSON object: {"taskType": "...", "difficulty": <1-10>, "confidence": <0-1>}\n\n` +
     `Request:\n"""${text}"""`;
   const m = pickClassifierModel(eff);
-  const result = await router.complete({
+  // Accounted here rather than by the gateway. This call is made on both /v1/chat and
+  // /v1/chat/completions; when the two gateways each logged it themselves, the
+  // OpenAI-compatible path silently didn't, so its classifier spend was invisible.
+  const result = await internalComplete({
+    kind: "classifier",
+    router,
     messages: [{ role: "user", content: prompt }],
-    providerOverride: m.provider,
-    modelOverride: m.model,
+    provider: m.provider,
+    model: m.model,
     temperature: 0,
     maxTokens: 256, // headroom for "thinking" models (e.g. Gemini 2.5)
+    context: { application: application || null },
   });
   const parsed = parseJsonBlock(result.text || "");
   let label = parsed ? normalizeLabel(parsed.taskType) : null;
@@ -278,7 +285,7 @@ async function classifyWithLLM({ messages, router, eff }) {
 // A provided taskType is always trusted. Otherwise: when useLLM, the AI classifier
 // is primary (default model, cached) and keyword is only the fallback; when useLLM
 // is off, the keyword heuristic decides.
-async function classifyTask({ taskType, messages, router, eff, useLLM }) {
+async function classifyTask({ taskType, messages, router, eff, useLLM, application = null }) {
   if (taskType && String(taskType).trim()) {
     return { taskType: String(taskType).trim().toLowerCase(), method: "provided", confidence: 1.0, difficulty: null, difficultyScore: null, llm: null };
   }
@@ -287,7 +294,7 @@ async function classifyTask({ taskType, messages, router, eff, useLLM }) {
     const hit = _llmCache.get(key);
     if (hit) return { taskType: hit.taskType, method: "ai", confidence: hit.confidence ?? 0.8, difficulty: hit.difficulty || null, difficultyScore: hit.difficultyScore ?? null, llm: null };
     try {
-      const r = await classifyWithLLM({ messages, router, eff });
+      const r = await classifyWithLLM({ messages, router, eff, application });
       if (r && r.label) {
         const entry = { taskType: r.label, difficulty: r.difficulty || null, difficultyScore: r.difficultyScore ?? null, confidence: r.confidence };
         if (_llmCache.size >= LLM_CACHE_MAX) _llmCache.delete(_llmCache.keys().next().value);

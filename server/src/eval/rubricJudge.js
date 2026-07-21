@@ -7,6 +7,7 @@
 //      high-risk tasks (self-preference). `sameFamily()` is exported for that check.
 const pricing = require("../pricing/registry");
 const { lastUserText } = require("./judge");
+const { internalComplete } = require("../internal/complete");
 
 const RUBRIC_DIMS = ["correctness", "completeness", "instruction_following", "format", "safety"];
 
@@ -135,8 +136,9 @@ async function judgeItem({ router, eff, judgeModel, userText, baselineText, cand
   // On failure return { error } (not null) so the run can explain WHY 0 items were judged.
   // null is reserved for "no judge configured / not live" (an intentional capture-only run).
   try {
-    const res = await router.complete({
-      messages: [{ role: "user", content: prompt }], providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
+    const res = await internalComplete({
+      kind: "eval-judge", router,
+      messages: [{ role: "user", content: prompt }], provider: jm.provider, model: judgeModel, temperature: 0,
     });
     const parsed = parseRubricVerdict(res.text || "");
     if (!parsed) return { error: `judge "${judgeModel}" did not return a valid A/B/tie JSON verdict` };
@@ -175,8 +177,9 @@ async function disproveWorse({ router, eff, judgeModel, userText, baselineText, 
     'Set "worse_verdict_holds": false ONLY when the "worse" verdict is clearly wrong.',
   ].join("\n");
   try {
-    const res = await router.complete({
-      messages: [{ role: "user", content: prompt }], providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
+    const res = await internalComplete({
+      kind: "eval-disprove", router,
+      messages: [{ role: "user", content: prompt }], provider: jm.provider, model: judgeModel, temperature: 0,
     });
     const m = String(res.text || "").match(/\{[\s\S]*\}/);
     if (!m) return { overturned: false };

@@ -4,6 +4,7 @@ const connections = require("../../providers/connections");
 const { requireRole } = require("../rbac");
 const { createRouter } = require("../../providers/llm-router");
 const { toRouterConfig, getRouter } = require("../../providers/router");
+const { internalComplete } = require("../../internal/complete");
 
 const router = express.Router();
 
@@ -57,7 +58,11 @@ router.post("/connections/:provider/test", requireRole("administrator"), async (
       defaultProvider: provider,
     });
     // Generous budget so "thinking" models (e.g. Gemini 2.5) have room to answer.
-    const out = await r.complete({ messages: [{ role: "user", content: "Reply with: ok" }], maxTokens: 256 });
+    const out = await internalComplete({
+      kind: "connection-test", router: r,
+      messages: [{ role: "user", content: "Reply with: ok" }], maxTokens: 256,
+      context: { provider },
+    });
     res.json({ ok: true, model: out.modelId, sample: (out.text || "").slice(0, 40) });
   } catch (e) {
     res.json({ ok: false, message: String(e.message || e) });

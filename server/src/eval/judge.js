@@ -3,6 +3,7 @@
 // perspective, or null when no judge model is available. Used by shadow-eval.
 const pricing = require("../pricing/registry");
 const { parseVerdict } = require("./logic");
+const { internalComplete } = require("../internal/complete");
 
 function lastUserText(messages) {
   if (typeof messages === "string") return messages;
@@ -35,8 +36,9 @@ async function judge({ router, eff, judgeModel, messages, prodText, candidateTex
     'Reply with ONLY JSON: {"winner": "A" | "B" | "tie", "reason": "<one short sentence>"}',
   ].join("\n");
   try {
-    const res = await router.complete({
-      messages: [{ role: "user", content: prompt }], providerOverride: jm.provider, modelOverride: judgeModel, temperature: 0,
+    const res = await internalComplete({
+      kind: "shadow-judge", router,
+      messages: [{ role: "user", content: prompt }], provider: jm.provider, model: judgeModel, temperature: 0,
     });
     return parseVerdict(res.text || "");
   } catch {

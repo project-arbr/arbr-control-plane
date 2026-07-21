@@ -121,7 +121,9 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
 }
 
 // Shared routing resolution: classify task + decide served {provider, model}.
-// Returns { served, routingDecision, taskType, classifiedBy, cls }.
+// Returns { served, routingDecision, taskType, classifiedBy }. The classifier's own
+// spend is accounted inside classify/classifier.js, so callers don't have to remember
+// to log it — the OpenAI-compatible gateway used to forget, and its cost vanished.
 // Callers are responsible for budget enforcement (it may short-circuit the response).
 async function resolveRoute(body, { router, eff, application, workflow, userId = null, appConfig = {}, appDbConfig = null }) {
   const routingMode = await ruleEngine.getRoutingMode();
@@ -134,6 +136,9 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
     messages: body.messages,
     router, eff,
     useLLM: routingMode === "ai" && autoMode && !providedTaskType,
+    // Provenance only — recorded on internalContext so the overhead view can show
+    // which app's traffic triggered a classification. Never a queryable dimension.
+    application,
   });
   const taskType = cls.taskType;
   const classifiedBy = cls.method;
@@ -266,7 +271,7 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
   }
 
   return {
-    served, routingDecision, taskType, classifiedBy, cls,
+    served, routingDecision, taskType, classifiedBy,
     difficulty, difficultyScore, confidence, explain, qualityGate,
   };
 }
@@ -344,9 +349,9 @@ async function handleChat(req, res) {
     allowedModels: req.apiKey?.allowedModels || [],
     defaultModel: req.apiKey?.defaultModel || null,
   };
-  let served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain, qualityGate;
+  let served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain, qualityGate;
   try {
-    ({ served, routingDecision, taskType, classifiedBy, cls, difficulty, difficultyScore, confidence, explain, qualityGate } =
+    ({ served, routingDecision, taskType, classifiedBy, difficulty, difficultyScore, confidence, explain, qualityGate } =
       await resolveRoute(body, { router, eff, application: meta.application, workflow: meta.workflow, userId: meta.userId, appConfig, appDbConfig: appCfg }));
   } catch (err) {
     if (err.code === "model_not_allowed") {
@@ -355,22 +360,9 @@ async function handleChat(req, res) {
     throw err;
   }
 
-  if (cls.llm) {
-    setImmediate(() =>
-      logger.write({
-        requestId: uuidv4(), timestamp: new Date(),
-        application: "arbr-internal", workflow: "auto-classifier",
-        userId: null, department: "arbr",
-        provider: cls.llm.provider, model: cls.llm.model, modelRequested: cls.llm.model,
-        taskType: "classification",
-        promptTokens: cls.llm.usage?.inputTokens || 0,
-        completionTokens: cls.llm.usage?.outputTokens || 0,
-        totalTokens: cls.llm.usage?.totalTokens || 0,
-        latencyMs: cls.llm.latencyMs || 0, status: "success",
-        routingDecision: "passthrough", cacheHit: false,
-      })
-    );
-  }
+  // The classifier's own spend is recorded by classify/classifier.js via
+  // internal/complete.js — not here. It used to be logged at this call site, which meant
+  // the OpenAI-compatible gateway (which shares resolveRoute) never logged it at all.
 
   // Budget enforcement — a breached enforcing cap outranks everything, including
   // explicit pins (that is the point of enforcement). block → 429; downgrade →

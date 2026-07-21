@@ -11,6 +11,7 @@ const Recommendation = require("../models/Recommendation");
 const { clampText, maskPii } = require("../logging/piiFilter");
 const { judgeItem, disproveWorse, runValidators, lastUserText } = require("./rubricJudge");
 const { evaluateRun } = require("./thresholds");
+const { internalComplete } = require("../internal/complete");
 
 // Curation weights for the severity-weighted worse-rate. "normal" = 1 so uncurated benchmarks are
 // unchanged; a critical regression counts 3x, a trivial one 0.3x.
@@ -175,10 +176,13 @@ async function executeRun(runId) {
       if (fresh && fresh.status === "cancelled") { cancelled = true; break; }
     }
     try {
-      const candidate = await router.complete({
-        messages: item.messages, providerOverride: cm.provider, modelOverride: run.candidateModel,
+      const candidate = await internalComplete({
+        kind: "eval-replay", router,
+        messages: item.messages, provider: cm.provider, model: run.candidateModel,
+        context: { runId: String(run._id) },
       });
-      const candCost = pricing.costFor(run.candidateModel, candidate.usage?.inputTokens || 0, candidate.usage?.outputTokens || 0).totalCost;
+      // From the wrapper, so the EvalRun ledger and the RequestRecord ledger agree.
+      const candCost = candidate.costUsd;
       actualCost += candCost;
       const { formatPass, results } = runValidators(candidate.text, item.validators);
       const flip = Math.random() < 0.5; // A/B position de-bias
