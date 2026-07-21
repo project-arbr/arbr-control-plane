@@ -38,6 +38,9 @@ const routingExperimentSchema = new mongoose.Schema(
     rollbackReason: { type: String, default: null },
     lastMonitoredAt: { type: Date, default: null },
     lastMetrics: { type: mongoose.Schema.Types.Mixed, default: null },
+
+    // F-06: propagated from a fixture-owned Recommendation at create-canary time.
+    isDemoFixture: { type: Boolean, default: false, index: true },
   },
   { collection: "routing_experiments", timestamps: true }
 );

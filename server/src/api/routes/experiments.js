@@ -99,6 +99,7 @@ router.post("/recommendations/:id/create-canary", requireRole("operator"), async
       guardrails: sanitizeGuardrails(b.guardrails),
       metricsWindowMinutes: b.metricsWindowMinutes != null ? Math.max(5, Number(b.metricsWindowMinutes)) : 60,
       status: "active", createdBy: "console", approvedBy: req.user.email,
+      isDemoFixture: rec.isDemoFixture || false, // F-06: propagate fixture ownership forward
     });
     rec.experimentId = exp._id;
     await rec.save();
