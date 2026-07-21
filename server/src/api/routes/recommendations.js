@@ -24,7 +24,10 @@ const router = express.Router();
 // stored, so it can never drift from what's actually happened. See recommend/stage.js.
 router.get("/recommendations", async (req, res, next) => {
   try {
-    const q = req.query.status ? { status: req.query.status } : {};
+    // String(...) matters: req.query.status could be an object (e.g. ?status[$ne]=x, which
+    // Express's query parser happily produces), which would otherwise pass a Mongo operator
+    // straight into the filter (codeql[js/sql-injection]).
+    const q = req.query.status ? { status: String(req.query.status) } : {};
     const recs = await Recommendation.find(q).sort({ projectedSavings: -1 }).lean();
     res.json(await stageBatch.attachStages(recs));
   } catch (e) { next(e); }
