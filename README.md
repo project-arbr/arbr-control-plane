@@ -89,8 +89,8 @@ Open **http://localhost:4100** and follow the demo lifecycle:
 1. Inspect workload cost and model usage on **Overview**.
 2. Open **Recommendations → Recompute** to discover an optimisation opportunity.
 3. Inspect its projected savings and evidence requirements.
-4. Add a provider under **Settings → Connections** when you are ready to run a live
-   candidate evaluation and guarded rollout.
+4. Add a provider on the **Models** page when you are ready to run a live candidate
+   evaluation and guarded rollout.
 
 ### Option B — Local (Node + your own MongoDB)
 
@@ -113,10 +113,10 @@ See [Model registry](#model-registry) below.
 
 Two ways, and you can mix them:
 
-- **Dashboard** — open **Settings → Connections**, paste a key, and the provider goes live
-  immediately (no restart). Keys are stored **encrypted at rest**, shown only masked, and
-  never returned to the browser. Set `ARBR_ENCRYPTION_KEY` so they're encrypted under your
-  own secret (a dev fallback is used otherwise, with a warning).
+- **Dashboard** — open the **Models** page, paste a key on the provider's card, and the
+  provider goes live immediately (no restart). Keys are stored **encrypted at rest**, shown
+  only masked, and never returned to the browser. Set `ARBR_ENCRYPTION_KEY` so they're
+  encrypted under your own secret (a dev fallback is used otherwise, with a warning).
 - **Environment** — set `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` in `.env`
   (or your secrets manager). **Env vars take precedence** over dashboard-stored keys — the
   recommended path for production.
@@ -232,7 +232,7 @@ Arbr doesn't replace your existing LiteLLM proxy — it sits **in front of it** 
 observability, routing, and governance. Configure LiteLLM as an OpenAI-compatible provider
 in Arbr and route requests to it like any other:
 
-**1. Register LiteLLM in Arbr Settings → Connections**
+**1. Register LiteLLM in Arbr on the Models page**
 
 Add it as an OpenAI-compatible provider. In your `.env` (or dashboard):
 
