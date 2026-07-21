@@ -4,6 +4,8 @@ const { logAction } = require("../auditLogger");
 const { requireRole } = require("../rbac");
 const Settings = require("../../models/Settings");
 const { config } = require("../../config");
+const telemetry = require("../../telemetry");
+const telemetryConfig = require("../../telemetry/config");
 
 const router = express.Router();
 
@@ -30,6 +32,14 @@ function governanceView(s) {
     semanticCacheEnabled:    s.semanticCacheEnabled ?? false,
     semanticCacheThreshold:  s.semanticCacheThreshold ?? 0.92,
     semanticCacheTtlMinutes: s.semanticCacheTtlMinutes ?? 60,
+    // OTLP tracing. otelConfigured is read-only: whether ARBR_OTEL_ENABLED is set in
+    // the environment (the hard gate). The editable fields only narrow an env-enabled
+    // exporter; null means "use the environment value".
+    otelConfigured:          telemetryConfig.enabled,
+    otelEndpoint:            telemetryConfig.enabled ? telemetryConfig.endpointDisplay : null,
+    otelEnabled:             s.otel?.enabled ?? null,
+    otelSampleRatio:         s.otel?.sampleRatio ?? telemetryConfig.sampleRatio,
+    otelCaptureContent:      s.otel?.captureContent ?? null,
   };
 }
 
@@ -85,10 +95,19 @@ router.patch("/governance", requireRole("administrator"), async (req, res, next)
       update.semanticCacheThreshold = Math.min(1, Math.max(0, Number(body.semanticCacheThreshold) || 0.92));
     if ("semanticCacheTtlMinutes" in body)
       update.semanticCacheTtlMinutes = Math.max(1, Number(body.semanticCacheTtlMinutes) || 60);
+    // OTLP tracing runtime overrides. These only narrow an env-enabled exporter.
+    if ("otelEnabled" in body)
+      update["otel.enabled"] = body.otelEnabled == null ? null : !!body.otelEnabled;
+    if ("otelSampleRatio" in body)
+      update["otel.sampleRatio"] = body.otelSampleRatio == null ? null : Math.min(1, Math.max(0, Number(body.otelSampleRatio) || 0));
+    if ("otelCaptureContent" in body)
+      update["otel.captureContent"] = body.otelCaptureContent == null ? null : !!body.otelCaptureContent;
 
     await Settings.updateOne({ key: "global" }, { $set: update }, { upsert: true });
     Settings.invalidateCache();
     const s = await Settings.get();
+    // Push tracing changes to the live exporter now, rather than waiting for the poll.
+    setImmediate(() => telemetry.refreshRuntime());
     setImmediate(() => logAction("governance.update", "settings", "global", body, req.user));
     res.json(governanceView(s));
   } catch (e) { next(e); }

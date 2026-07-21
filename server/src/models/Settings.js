@@ -104,6 +104,18 @@ const settingsSchema = new mongoose.Schema(
     semanticCacheEnabled:      { type: Boolean, default: false },
     semanticCacheThreshold:    { type: Number,  default: 0.92 },  // 0–1 cosine similarity
     semanticCacheTtlMinutes:   { type: Number,  default: 60 },    // cache TTL in minutes
+
+    // Runtime overrides for OTLP trace export. ARBR_OTEL_ENABLED (env) is the HARD
+    // gate — whether the exporter is loaded at all; these only narrow an env-enabled
+    // exporter, so an operator can pause tracing or retune it without a redeploy.
+    //   enabled:        soft on/off. null = on (default when env-enabled).
+    //   sampleRatio:    0–1 head sampling. null = use ARBR_OTEL_SAMPLE_RATIO.
+    //   captureContent: put prompt/response on spans. null = use ARBR_OTEL_CAPTURE_CONTENT.
+    otel: {
+      enabled:        { type: Boolean, default: null },
+      sampleRatio:    { type: Number,  default: null },
+      captureContent: { type: Boolean, default: null },
+    },
   },
   { collection: "settings" }
 );
