@@ -45,6 +45,11 @@ const evalRunSchema = new mongoose.Schema(
     createdBy: { type: String, default: "console" },
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
+
+    // F-06: true only for runs synthesized by the demo-fixture's run-eval short-circuit
+    // (eval/demoFixture.js) — summary/failures are genuinely computed by the real aggregate()/
+    // evaluateRun() pure functions from synthetic entries, never a live replay.
+    isDemoFixture: { type: Boolean, default: false, index: true },
   },
   { collection: "eval_runs", timestamps: true }
 );

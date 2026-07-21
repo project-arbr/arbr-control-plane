@@ -84,6 +84,12 @@ const requestRecordSchema = new mongoose.Schema(
     // (see server/src/api/routes/ingest.js) so two integrations can't collide.
     externalRequestId: { type: String, default: null },
 
+    // true = written by the design-partner demo fixture (F-06), never real traffic. Lets
+    // `npm run demo:reset` find and delete every fixture-owned document with one scoped
+    // query, without touching anything real. Default false = today's behavior for every
+    // existing and future non-fixture record; no backfill needed.
+    isDemoFixture: { type: Boolean, default: false, index: true },
+
     // performance + outcome
     latencyMs: { type: Number, default: 0 },
     // Time-to-first-token in ms (streaming proxy path only; null for non-streaming or LangChain path).

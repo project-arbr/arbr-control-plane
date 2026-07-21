@@ -64,6 +64,7 @@ export default defineConfig({
           { text: 'Model registry', link: '/models' },
           { text: 'Budgets & governance', link: '/budgets' },
           { text: 'Accountable admin access', link: '/auth' },
+          { text: 'Design-partner demo fixture', link: '/demo-fixture' },
         ]
       },
       {
