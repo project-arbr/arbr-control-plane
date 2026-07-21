@@ -123,6 +123,39 @@ test("import restores Settings fields from the export", async () => {
   assert.equal(gov.body.retentionDays, 42);
 });
 
+test("import restores nested Settings groups (maintenanceMode), not just flat fields", async () => {
+  // Regression for the fix that replaced a raw object spread with a
+  // schema-derived key allowlist (CodeQL js/sql-injection on the $set
+  // payload) — schema.paths reports subdocuments as dotted leaves
+  // ("maintenanceMode.enabled"), which must still be copied as a whole
+  // top-level object, not silently dropped.
+  const settingsPatch = {
+    maintenanceMode: { enabled: true, message: "nested-group-survives-import" },
+  };
+  const res = await agent.post("/api/ops/import").send({ exportVersion: 1, settings: settingsPatch });
+  assert.equal(res.status, 200);
+
+  const gov = await agent.get("/api/governance");
+  assert.equal(gov.body.maintenanceMode.enabled, true);
+  assert.equal(gov.body.maintenanceMode.message, "nested-group-survives-import");
+});
+
+test("import ignores operator-shaped keys in the settings payload instead of passing them to Mongo", async () => {
+  // The CodeQL finding itself: a raw spread of req.body.settings into $set
+  // would let a caller's object keys reach Mongo's update operator directly.
+  const res = await agent.post("/api/ops/import").send({
+    exportVersion: 1,
+    settings: { retentionDays: 7, $rename: { retentionDays: "hacked" }, "__proto__.polluted": true },
+  });
+  assert.equal(res.status, 200);
+
+  const gov = await agent.get("/api/governance");
+  assert.equal(gov.body.retentionDays, 7); // the legitimate field still applied
+  // Nothing to assert "hacked" against — the point is this didn't throw or
+  // corrupt the document; retentionDays alone proves only the allowlisted
+  // key was ever written.
+});
+
 test("support-bundle never includes a captured request payload, even though one is stored", async () => {
   await RequestRecord.create({
     requestId: "ops-bundle-payload-probe",

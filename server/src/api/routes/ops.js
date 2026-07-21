@@ -21,6 +21,31 @@ function stripInternal({ _id, __v, ...rest }) {
   return rest;
 }
 
+// Copies only real Settings schema fields out of an imported object, derived
+// from the schema itself (not a hand-maintained list, so it can't drift).
+// Values are still whatever the caller sent — that's the point of import —
+// but the KEY SET reaching Mongo's $set is fixed by code, never by the
+// request body, so an imported object can't inject an operator-shaped key
+// ($where, $rename, a dotted path, __proto__, ...) into the update.
+// schema.paths has one entry PER LEAF, so a subdocument field like
+// maintenanceMode appears as "maintenanceMode.enabled"/"maintenanceMode.message"
+// rather than a single "maintenanceMode" key — take only the top-level
+// segment (deduped) so nested groups are copied as whole objects, matching
+// both what export produces and what $set expects.
+const SETTINGS_FIELDS = [...new Set(
+  Object.keys(Settings.schema.paths)
+    .map((p) => p.split(".")[0])
+    .filter((k) => !["_id", "__v", "key"].includes(k))
+)];
+function pickSettingsFields(obj) {
+  const out = {};
+  if (!obj || typeof obj !== "object") return out;
+  for (const k of SETTINGS_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k];
+  }
+  return out;
+}
+
 // ── config/policy export + import ──
 router.get("/ops/export", requireRole("administrator"), async (_req, res, next) => {
   try {
@@ -52,7 +77,7 @@ router.post("/ops/import", requireRole("administrator"), async (req, res, _next)
     if (body.settings && typeof body.settings === "object") {
       await Settings.updateOne(
         { key: "global" },
-        { $set: { ...stripInternal(body.settings), key: "global" } },
+        { $set: { ...pickSettingsFields(body.settings), key: "global" } },
         { upsert: true }
       );
       Settings.invalidateCache();
