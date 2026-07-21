@@ -95,16 +95,17 @@ Open **http://localhost:4100** and follow the demo lifecycle:
 ### Option B — Local (Node + your own MongoDB)
 
 ```sh
-npm run setup     # installs deps, seeds 28 built-in models + synthetic request records
+npm run setup     # installs deps, seeds synthetic request records
 npm run dev       # server (:4100) + Vite dashboard (:5173)
 ```
 
 Open **http://localhost:5173**. (Requires a MongoDB reachable at `MONGO_URI`; the default
 is `mongodb://localhost:27017/arbr-control-plane`.)
 
-`npm run setup` runs `seed:models` (model registry) followed by `seed` (synthetic request
-records). The model seed is idempotent — re-running it updates built-in pricing, never
-touches user-created entries. To re-seed models only: `npm run seed:models`.
+`npm run setup` installs dependencies and runs `seed` (synthetic request records). The
+model registry is populated separately: on first server boot, if the registry is empty,
+Arbr automatically syncs the full model catalog from LiteLLM — no seed script involved.
+See [Model registry](#model-registry) below.
 
 ---
 
@@ -156,9 +157,10 @@ curl -X POST http://localhost:4100/v1/chat \
 ```
 
 Response fields: `model` (served), `modelRequested`, `routingDecision`
-(`explicit` | `passthrough` | `rule` | `auto` | `ai` | `cache` | `fallback` | `budget`),
-`classifiedBy`, `cacheHit`, and token `usage` (including `cachedReadTokens` / `cacheWriteTokens`
-when the provider reported prompt-cache usage). Every call is logged to MongoDB as a **RequestRecord**.
+(`explicit` | `passthrough` | `rule` | `auto` | `ai` | `cache` | `fallback` | `budget` |
+`canary` | `external`), `classifiedBy`, `cacheHit`, and token `usage` (including
+`cachedReadTokens` / `cacheWriteTokens` when the provider reported prompt-cache usage).
+Every call is logged to MongoDB as a **RequestRecord**.
 
 `taskType`, `model`, and `provider` are all optional. Omitting `model` (or sending
 `"auto"`) defers to the router.
@@ -259,7 +261,7 @@ curl -X POST http://localhost:4100/v1/chat \
 ```
 
 Arbr routes the request, logs the call, and records `totalCost: 0` until you add a
-pricing entry for that model. Add the entry in **Settings → Models** to get accurate
+pricing entry for that model. Add the entry on the **Models** page to get accurate
 cost tracking and recommendations.
 
 **3. Streaming through the full chain**
@@ -324,26 +326,47 @@ earlier versions.
 You can route to **any model on any live provider** without a registry entry. Entries
 are only needed for accurate cost tracking and tier-aware recommendations.
 
-### Built-in models (seeded automatically)
+### Catalog sync (LiteLLM is the source of truth)
 
-28 models are seeded on first boot covering Anthropic, OpenAI, Google Gemini, Amazon
-Bedrock (Nova + cross-inference: GLM-5, Kimi K2.5, Qwen3 Next, DeepSeek V3.2/R1,
-Gemma 3 12B), DeepSeek, Moonshot AI, xAI (Grok), and Groq. Prices reflect public
-provider pricing pages at the time of last update.
+There is no static model seed. On a fresh install, when the registry is empty, Arbr
+automatically runs a one-time sync against LiteLLM's public model catalog
+(`server/src/litellm/sync.js`) at boot, so the registry isn't empty on first use. On an
+existing install, any legacy `builtIn: true` entries are converted to `builtIn: false` so
+future syncs can manage them the same way as discovered models.
+
+To refresh the catalog later — pull in new models, update pricing/context windows on
+existing ones, and drop stale entries — click **Sync Models** on the dashboard's Models
+page (calls `POST /api/benchmarks/sync`, which runs LiteLLM pricing sync plus the
+LiveBench and LMSYS benchmark-score syncs in one pass), or call LiteLLM sync alone:
+
+```sh
+# LiteLLM catalog + pricing only
+curl -X POST http://localhost:4100/api/litellm/sync
+
+# Same as the dashboard's "Sync Models" button — LiteLLM + LiveBench + LMSYS
+curl -X POST http://localhost:4100/api/benchmarks/sync
+```
+
+A sync never touches `tier`, `label`, `builtIn`, or `enabled` — once you've set those,
+they're yours. See [ARCHITECTURE.md](ARCHITECTURE.md) for details on the benchmark syncs.
 
 ### Adding a new model
 
 **Option A — Dashboard (Models page)**
 
-Click **"+ Add model"** and fill in:
+Open a provider's card on the **Models** page, click **"+ Add model"**, and fill in:
 - **Model ID** — the exact string sent in `"model":` in API requests
-- **Provider** — must match a live provider key on the Models page
-- **Label** — human-readable display name (optional)
+- **Display name** (required) — human-readable label
 - **Tier** — `light` / `mid` / `premium` (drives guardrail and recommendations)
-- **Input $/1M** and **Output $/1M** — from the provider's pricing page
 
-Edit existing entries (pencil icon per row) to update prices or tier. Built-in models
-cannot be deleted (disable them with the toggle instead); custom models can be removed.
+There's no separate provider field (the model is added under the provider card you're
+already on) and no manual pricing fields — if the Model ID matches an existing registry
+entry, pricing and metadata auto-fill from it; otherwise pricing defaults to $0 and can be
+corrected afterward via the API below or the pencil-icon edit form (which does expose
+Input $/1M and Output $/1M).
+
+Built-in models cannot be deleted (disable them with the toggle instead); custom models
+can be removed.
 
 **Option B — Admin API**
 
@@ -365,26 +388,6 @@ curl -X DELETE http://localhost:4100/api/models/my-model
 Each write is reflected immediately — the in-memory cache reloads after every mutation,
 so the next request uses the updated pricing with no restart.
 
-**Option C — Seed script**
-
-Re-run the built-in seed to refresh pricing for all 28 built-in models (user-created
-entries are never touched):
-
-```sh
-npm run seed:models
-# or standalone:
-node server/src/seed/seedModels.js
-```
-
-To add your own models as part of the install process, extend the `SEED` array in
-`server/src/seed/seedModels.js` before running `npm run setup`. The upsert strategy is:
-
-| Entry state | Action |
-|---|---|
-| Not in DB | Create with `builtIn: true` |
-| In DB, `builtIn: true` | Update pricing / label (prices change) |
-| In DB, `builtIn: false` | Skip — user-created entries are never overwritten |
-
 ---
 
 ## How it works
@@ -402,9 +405,10 @@ Applications ─▶ POST /v1/chat              ─▶ ingress ─▶ match ─�
 - **Gateway** — two endpoints (Arbr-native + OpenAI-compat); provider keys held server-side;
   an explicitly pinned, connected model is honored as-is (pass-through even for unknown models);
   `"auto"` defers to the router.
-- **Model registry** — MongoDB-backed `ModelEntry` collection; 28 built-in models seeded on
-  first boot; in-memory cache keeps the hot path synchronous. Routing works without entries;
-  entries enable cost tracking, tiering, and recommendations.
+- **Model registry** — MongoDB-backed `ModelEntry` collection; LiteLLM sync is the source of
+  truth, running once automatically on a fresh/empty install and on-demand afterward via the
+  dashboard's **Sync Models** button; in-memory cache keeps the hot path synchronous. Routing
+  works without entries; entries enable cost tracking, tiering, and recommendations.
 - **Usage logging** — one `RequestRecord` per call, recording **both the model requested
   and the model served** (so realised savings are measurable), full conversation context
   (`messages` + `responseText`), cache token breakdown, and `routingExplain` (the
@@ -429,10 +433,14 @@ Applications ─▶ POST /v1/chat              ─▶ ingress ─▶ match ─�
 ### RequestRecord shape
 
 `requestId, timestamp, application, workflow, userId, department, provider, model,
-modelRequested, taskType, promptTokens, completionTokens, totalTokens, cachedReadTokens,
-cacheWriteTokens, cacheSavingUsd, inputCost, outputCost, totalCost, latencyMs, status,
-routingDecision, cacheHit, knownPricing, difficulty, difficultyScore, confidence,
-routingExplain, messages, responseText`
+modelRequested, taskType, classifiedBy, promptTokens, completionTokens, totalTokens,
+cachedReadTokens, cacheWriteTokens, cacheSavingUsd, inputCost, outputCost, totalCost,
+latencyMs, status, errorMessage, routingDecision, qualityGate, cacheHit, knownPricing,
+difficulty, difficultyScore, confidence, routingExplain, source, externalRequestId,
+messages, responseText`
+
+This list covers the fields most relevant to attribution, cost, and routing — the full
+schema has ~15 more (see `server/src/models/RequestRecord.js`).
 
 ---
 
@@ -449,8 +457,13 @@ All via `.env` (see `.env.example`). Nothing is required to start.
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `AWS_*` | — | Optional; enable live calls |
 | `DEFAULT_PROVIDER` | first live | Initial default-provider preference (runtime-selectable in Settings) |
 | `ARBR_DEFAULT_MAX_TOKENS` | `4096` | Default `max_tokens` when the caller omits it. Capped by the model's own output ceiling. |
-| `SEED_ON_BOOT` | `false` | Docker only: load demo data on start (**wipes request records**) |
+| `SEED_ON_BOOT` | `false`¹ | Docker only: load demo data on start (**wipes request records**) |
 | `CORS_ORIGIN` | `http://localhost:5173` | Allowed dashboard origin (local dev) |
+
+¹ Bare-metal/no-compose default is `false`. The demo `docker-compose.yml` used in the
+Quickstart above overrides this to `true` (`SEED_ON_BOOT: ${SEED_ON_BOOT:-true}`) so the
+one-command demo has data immediately; `docker-compose.prod.yml` and the GCP overlays force
+it back to `false`.
 
 Runtime settings (routing mode, Require-API-keys, budgets, gateway API keys, default
 provider/model) are managed in the dashboard and stored in MongoDB.
@@ -503,8 +516,8 @@ control-plane/
 │   │   ├── ModelEntry.js       Mongoose schema for the model registry
 │   │   └── ...                 RequestRecord, Rule, Cap, ApiKey, etc.
 │   ├── seed/
-│   │   ├── seed.js             synthetic RequestRecord data for demo mode
-│   │   └── seedModels.js       28 built-in model entries; run standalone or at boot
+│   │   └── seed.js             synthetic RequestRecord data for demo mode
+│   ├── litellm/sync.js         LiteLLM catalog sync; source of truth for the model registry
 │   ├── classify/classifier.js  manual-first, keyword auto-classify
 │   ├── logging/logger.js       writes RequestRecords (zero-cost path for unknown models)
 │   ├── routing/                ruleEngine · autoRouter · aiPolicy · capEngine · cache
@@ -513,7 +526,7 @@ control-plane/
 │   ├── api/routes.js           dashboard / admin API (incl. /api/models CRUD)
 │   └── index.js                boot: mongoose → registry.init() → express
 └── web/                        React + Vite + Tailwind dashboard
-                                Settings → Models tab: add / edit / delete model entries
+                                Models page: add / edit / delete model entries
 ```
 
 This service is **standalone**. The provider router is vendored under

@@ -110,7 +110,9 @@ docs/               VitePress documentation site
   (`security/secrets.js`); the server refuses to boot in production without it.
 - **Catalog sync** — `litellm/sync.js` imports the full LiteLLM model catalog; `livebench`
   and `lmsys` add benchmark scores. These are on-demand (the dashboard "Sync Models" button
-  → `POST /api/benchmarks/sync`), not run on boot.
+  → `POST /api/benchmarks/sync`), not run on boot — except once automatically on a
+  fresh/empty install, where `pricing/registry.js` triggers an initial LiteLLM sync so the
+  registry isn't empty on first boot.
 
 ## Operational semantics and known limitations
 
@@ -152,11 +154,19 @@ traffic.
 - **RPM limits are multi-replica safe.** `routing/rateLimit.js` uses fixed 60s Mongo
   windows (`RateBucket` + atomic `$inc`). Falls back to in-process counters only if Mongo
   is unavailable.
-- **Response cache is exact-match and ephemeral.** `routing/responseCache.js` keys on
+- **Response cache is exact-match and ephemeral by default; near-duplicate matching is a
+  separate, opt-in layer.** `routing/responseCache.js` keys on
   `sha256(model + serialized messages)`, holds at most 5,000 entries in-memory with a
   10-minute TTL, and evicts oldest-first. It does not persist across restarts, is not shared
-  across replicas, and does no semantic/near-duplicate matching. It demonstrates the
-  duplicate-request saving; it is not a durable caching tier.
+  across replicas, and — on its own — does no semantic/near-duplicate matching. It
+  demonstrates the duplicate-request saving; it is not a durable caching tier.
+  `routing/semanticCache.js`, wired into `gateway/handler.js` and gated behind the
+  `semanticCacheEnabled` Settings flag (default `false`), adds embedding-similarity
+  matching on top: it embeds incoming messages with OpenAI `text-embedding-3-small` and
+  serves a cached response when cosine similarity clears a configurable threshold (default
+  `0.92`) within a configurable TTL (default 60 min). It falls back silently to the
+  exact-match cache when no `OPENAI_API_KEY` is set or an embedding call fails, and shares
+  the same in-memory, single-replica limitations as the exact-match cache above.
 - **Output guardrails do not apply to streamed responses.** On the OpenAI-compatible
   streaming path (`gateway/openaiCompat.js`), upstream SSE bytes are relayed to the caller
   unchanged (buffering would defeat streaming). Output content guardrails and response

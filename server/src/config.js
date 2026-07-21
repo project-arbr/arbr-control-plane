@@ -267,7 +267,7 @@ function describe() {
   lines.push(`  fallback:    ${config.fallbackScope}`);
   if (config.demoMode) {
     lines.push(`  mode:        DEMO at boot — no provider keys in env.`);
-    lines.push(`               Add keys in the dashboard (Settings → Connections) or to`);
+    lines.push(`               Add keys in the dashboard (Models page) or to`);
     lines.push(`               .env to enable live gateway calls (POST /v1/chat). All`);
     lines.push(`               dashboards work on seeded data without any keys.`);
   } else {
