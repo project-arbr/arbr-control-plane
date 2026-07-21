@@ -308,6 +308,12 @@ function RecCard({ rec, models, onChange }) {
               </span>
             )}
           </p>
+          <p className="mt-1 text-[11px] text-gray-400">
+            Evidence report:{" "}
+            <button className="text-arbr-accent-600 hover:underline" onClick={() => api.exportRecommendationReport(rec._id, "markdown")}>.md</button>
+            {" · "}
+            <button className="text-arbr-accent-600 hover:underline" onClick={() => api.exportRecommendationReport(rec._id, "json")}>.json</button>
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {isPreRollout ? (
