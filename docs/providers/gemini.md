@@ -36,7 +36,7 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "gemini",
     "model": "gemini-2.5-flash",
-    "messages": "Translate to French: The database is down."
+    "messages": [{ "role": "user", "content": "Translate to French: The database is down." }]
   }'
 ```
 

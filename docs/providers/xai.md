@@ -35,6 +35,6 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "xai",
     "model": "grok-3-mini",
-    "messages": "What are the key features of a good API?"
+    "messages": [{ "role": "user", "content": "What are the key features of a good API?" }]
   }'
 ```

@@ -35,6 +35,6 @@ curl -X POST http://localhost:4100/v1/chat \
   -d '{
     "provider": "deepseek",
     "model": "deepseek-chat",
-    "messages": "Explain REST APIs in one paragraph."
+    "messages": [{ "role": "user", "content": "Explain REST APIs in one paragraph." }]
   }'
 ```
