@@ -64,6 +64,15 @@ const recommendationSchema = new mongoose.Schema(
 
     // Stable key so re-running the engine updates instead of duplicating.
     dedupeKey: { type: String, unique: true, index: true },
+
+    // F-06 design-partner demo fixture. isDemoFixture marks this rec (and its RequestRecord
+    // traffic) as fixture-owned, so `npm run demo:reset` can find and delete it safely.
+    // demoFixtureOutcome is the seed-time intent read by the run-eval route's demo
+    // short-circuit (server/src/eval/demoFixture.js) — "pass"/"fail" decide which deterministic
+    // eval outcome to synthesize when this rec's dataset is eval'd with no live provider
+    // configured. null for every real recommendation; never read outside the fixture path.
+    isDemoFixture: { type: Boolean, default: false, index: true },
+    demoFixtureOutcome: { type: String, enum: ["pass", "fail", null], default: null },
   },
   { collection: "recommendations", timestamps: true }
 );

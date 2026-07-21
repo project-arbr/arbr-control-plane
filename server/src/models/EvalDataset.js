@@ -36,6 +36,9 @@ const evalDatasetSchema = new mongoose.Schema(
     status: { type: String, enum: ["creating", "ready", "failed"], default: "creating", index: true },
     error: { type: String, default: null },
     createdBy: { type: String, default: "console" },
+    // F-06: propagated from a fixture-owned Recommendation at create-eval-dataset time. Lets
+    // the run-eval demo short-circuit recognize this dataset, and `npm run demo:reset` clean it up.
+    isDemoFixture: { type: Boolean, default: false, index: true },
   },
   { collection: "eval_datasets", timestamps: true }
 );

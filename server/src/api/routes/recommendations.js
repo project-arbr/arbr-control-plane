@@ -15,6 +15,9 @@ const { sameFamily } = require("../../eval/rubricJudge");
 const { tierForTask } = require("../../classify/classifier");
 const stageBatch = require("../../recommend/stageBatch");
 const outcome = require("../../recommend/outcome");
+const evidenceReport = require("../../recommend/evidenceReport");
+const demoFixture = require("../../eval/demoFixture");
+const connections = require("../../providers/connections");
 
 const router = express.Router();
 
@@ -51,6 +54,26 @@ router.get("/recommendations/:id/outcome", async (req, res, next) => {
     const rec = await Recommendation.findById(req.params.id).lean();
     if (!rec) return res.status(404).json({ error: "not found" });
     res.json(await outcome.computeOutcome(rec));
+  } catch (e) { next(e); }
+});
+
+// Evidence export (F-05): a durable record of why this substitution was recommended, what
+// evidence backed it, and what happened after rollout. Computed on demand from the same
+// linked records the dashboard already reads — never stored, so it's always regenerable.
+// ?format=markdown for a human-readable download; default is the versioned JSON shape.
+router.get("/recommendations/:id/report", async (req, res, next) => {
+  try {
+    const rec = await Recommendation.findById(req.params.id).lean();
+    if (!rec) return res.status(404).json({ error: "not found" });
+    const report = await evidenceReport.buildReport(rec);
+    const base = rec.dedupeKey || String(rec._id);
+    if (req.query.format === "markdown") {
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${base}-evidence-report.md"`);
+      return res.send(evidenceReport.renderMarkdown(report));
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="${base}-evidence-report.json"`);
+    res.json(report);
   } catch (e) { next(e); }
 });
 
@@ -94,6 +117,7 @@ router.post("/recommendations/:id/accept", requireRole("operator"), async (req, 
       sourceRecommendation: rec._id,
       qualityGate,
       note: rec.title,
+      isDemoFixture: rec.isDemoFixture || false, // F-06: propagate fixture ownership forward
     });
     rec.status = "accepted";
     rec.acceptedVia = qualityGate;
@@ -118,6 +142,10 @@ router.post("/recommendations/:id/create-eval-dataset", requireRole("operator"),
       rec.evalDatasetId = dataset._id;
       if (rec.evalStatus === "not_started") rec.evalStatus = "dataset_ready";
       await rec.save();
+      if (rec.isDemoFixture) { // F-06: propagate fixture ownership forward
+        dataset.isDemoFixture = true;
+        await dataset.save();
+      }
     }
     setImmediate(() => logAction("eval.dataset.create", "evalDataset", String(dataset._id), { recommendationId: String(rec._id), itemCount: dataset.itemCount, status: dataset.status }, req.user));
     if (dataset.status === "failed") {
@@ -142,6 +170,16 @@ router.post("/recommendations/:id/run-eval", requireRole("operator"), async (req
     if (!dataset || dataset.status !== "ready") {
       return res.status(409).json({ error: "no_dataset", message: "Create a ready eval dataset first (POST .../create-eval-dataset)." });
     }
+
+    // F-06 demo fixture: no live provider is configured, and this dataset is fixture-owned —
+    // synthesize a result with the same pure aggregate()/evaluateRun() functions production
+    // uses, instead of calling the live replay pipeline (which would 503). See eval/demoFixture.js.
+    if (dataset.isDemoFixture && (await connections.effective()).demoMode) {
+      const run = await demoFixture.synthesizeRun({ rec, dataset, outcome: rec.demoFixtureOutcome || "pass" });
+      setImmediate(() => logAction("eval.run.start", "evalRun", String(run._id), { recommendationId: String(rec._id), candidateModel: dataset.candidateModel, demoFixture: true }, req.user));
+      return res.status(run.status === "failed" ? 422 : 202).json(run);
+    }
+
     if (dataset.piiMode === "metadata_only") {
       return res.status(422).json({ error: "not_replayable", message: "A metadata_only dataset has no prompts to replay. Use a masked dataset." });
     }
