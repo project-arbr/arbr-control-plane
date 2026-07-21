@@ -114,6 +114,17 @@ export const api = {
   createCanary: (id, body = {}) => req(`/recommendations/${id}/create-canary`, { method: "POST", body: JSON.stringify(body) }),
   overrideRecommendation: (id, body) => req(`/recommendations/${id}/override`, { method: "POST", body: JSON.stringify(body) }),
   recommendationOutcome: (id) => req(`/recommendations/${id}/outcome`),
+  // F-05: evidence export. Server sets Content-Disposition, so a plain anchor click
+  // downloads it directly — same pattern as exportRequests/exportAuditLog.
+  exportRecommendationReport: (id, format = "json") => {
+    const url = `/api/recommendations/${id}/report${format === "markdown" ? "?format=markdown" : ""}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${id}-evidence-report.${format === "markdown" ? "md" : "json"}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  },
   evalDatasets: (recommendationId) => req(`/evals/datasets${qs({ recommendationId })}`),
   evalDataset: (id) => req(`/evals/datasets/${id}`),
   createEval: (body) => req("/evals", { method: "POST", body: JSON.stringify(body) }),

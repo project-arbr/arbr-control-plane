@@ -15,6 +15,7 @@ const { sameFamily } = require("../../eval/rubricJudge");
 const { tierForTask } = require("../../classify/classifier");
 const stageBatch = require("../../recommend/stageBatch");
 const outcome = require("../../recommend/outcome");
+const evidenceReport = require("../../recommend/evidenceReport");
 
 const router = express.Router();
 
@@ -48,6 +49,26 @@ router.get("/recommendations/:id/outcome", async (req, res, next) => {
     const rec = await Recommendation.findById(req.params.id).lean();
     if (!rec) return res.status(404).json({ error: "not found" });
     res.json(await outcome.computeOutcome(rec));
+  } catch (e) { next(e); }
+});
+
+// Evidence export (F-05): a durable record of why this substitution was recommended, what
+// evidence backed it, and what happened after rollout. Computed on demand from the same
+// linked records the dashboard already reads — never stored, so it's always regenerable.
+// ?format=markdown for a human-readable download; default is the versioned JSON shape.
+router.get("/recommendations/:id/report", async (req, res, next) => {
+  try {
+    const rec = await Recommendation.findById(req.params.id).lean();
+    if (!rec) return res.status(404).json({ error: "not found" });
+    const report = await evidenceReport.buildReport(rec);
+    const base = rec.dedupeKey || String(rec._id);
+    if (req.query.format === "markdown") {
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${base}-evidence-report.md"`);
+      return res.send(evidenceReport.renderMarkdown(report));
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="${base}-evidence-report.json"`);
+    res.json(report);
   } catch (e) { next(e); }
 });
 
