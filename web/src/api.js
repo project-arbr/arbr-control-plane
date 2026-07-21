@@ -81,6 +81,7 @@ export const api = {
   gatewayProviders: () => fetch("/v1/providers", { headers: { "Content-Type": "application/json" } }).then((r) => r.json()),
 
   overview: (filter) => req(`/analytics/overview${qs(filter)}`),
+  internalSpend: (filter) => req(`/analytics/internal-spend${qs(filter)}`),
   timeseries: (filter) => req(`/analytics/timeseries${qs(filter)}`),
   latencyPercentiles: (filter) => req(`/analytics/latency-percentiles${qs(filter)}`),
   providerHealth: () => req("/analytics/provider-health"),
