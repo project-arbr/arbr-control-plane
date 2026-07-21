@@ -61,6 +61,21 @@ it and warns at boot if it finds it set. Installing the OpenTelemetry packages b
 activates nothing.
 :::
 
+## Runtime controls (no redeploy)
+
+`ARBR_OTEL_ENABLED` in the environment is the hard on/off switch: it decides whether the
+exporter is loaded at all. Once it's on, you can pause and retune tracing from the dashboard
+under **Governance → Observability → Distributed tracing**, without a restart:
+
+- **Emit spans** — pause and resume exporting. While on, failures and caller-sampled traces
+  are always kept regardless of the sample ratio; while paused, nothing is emitted.
+- **Sample ratio** — retune the fraction of successful requests traced.
+- **Capture prompt & response on spans** — toggle content capture (still gated on payload
+  capture being on).
+
+These override the environment values and take effect within a few seconds. Leaving a field
+unset falls back to the corresponding `ARBR_OTEL_*` environment value.
+
 ## What's on a span
 
 - **GenAI conventions:** `gen_ai.operation.name`, `gen_ai.system` / `gen_ai.provider.name`,

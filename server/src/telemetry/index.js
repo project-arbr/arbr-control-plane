@@ -4,6 +4,7 @@
 // so leaving tracing off costs nothing on the request path.
 const config = require("./config");
 const otel = require("./otel");
+const runtime = require("./runtime");
 
 let _started = false;
 
@@ -39,4 +40,8 @@ function isEnabled() {
 const forceFlush = () => otel.forceFlush();
 const shutdown = () => otel.shutdown();
 
-module.exports = { init, emit, isEnabled, forceFlush, shutdown, config };
+// Re-read the Settings-backed runtime overrides now, instead of waiting for the poll.
+// Called from PATCH /governance so a dashboard change takes effect immediately.
+const refreshRuntime = () => (config.enabled ? runtime.refresh() : Promise.resolve());
+
+module.exports = { init, emit, isEnabled, forceFlush, shutdown, refreshRuntime, config };
