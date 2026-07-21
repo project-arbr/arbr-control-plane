@@ -28,6 +28,8 @@ const ruleSchema = new mongoose.Schema(
       index: true,
     },
     note: { type: String, default: "" },
+    // F-06: propagated from a fixture-owned Recommendation at accept time.
+    isDemoFixture: { type: Boolean, default: false, index: true },
   },
   { collection: "rules", timestamps: true }
 );

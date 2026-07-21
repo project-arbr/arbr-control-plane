@@ -16,6 +16,8 @@ const { tierForTask } = require("../../classify/classifier");
 const stageBatch = require("../../recommend/stageBatch");
 const outcome = require("../../recommend/outcome");
 const evidenceReport = require("../../recommend/evidenceReport");
+const demoFixture = require("../../eval/demoFixture");
+const connections = require("../../providers/connections");
 
 const router = express.Router();
 
@@ -115,6 +117,7 @@ router.post("/recommendations/:id/accept", requireRole("operator"), async (req, 
       sourceRecommendation: rec._id,
       qualityGate,
       note: rec.title,
+      isDemoFixture: rec.isDemoFixture || false, // F-06: propagate fixture ownership forward
     });
     rec.status = "accepted";
     rec.acceptedVia = qualityGate;
@@ -139,6 +142,10 @@ router.post("/recommendations/:id/create-eval-dataset", requireRole("operator"),
       rec.evalDatasetId = dataset._id;
       if (rec.evalStatus === "not_started") rec.evalStatus = "dataset_ready";
       await rec.save();
+      if (rec.isDemoFixture) { // F-06: propagate fixture ownership forward
+        dataset.isDemoFixture = true;
+        await dataset.save();
+      }
     }
     setImmediate(() => logAction("eval.dataset.create", "evalDataset", String(dataset._id), { recommendationId: String(rec._id), itemCount: dataset.itemCount, status: dataset.status }, req.user));
     if (dataset.status === "failed") {
@@ -163,6 +170,16 @@ router.post("/recommendations/:id/run-eval", requireRole("operator"), async (req
     if (!dataset || dataset.status !== "ready") {
       return res.status(409).json({ error: "no_dataset", message: "Create a ready eval dataset first (POST .../create-eval-dataset)." });
     }
+
+    // F-06 demo fixture: no live provider is configured, and this dataset is fixture-owned —
+    // synthesize a result with the same pure aggregate()/evaluateRun() functions production
+    // uses, instead of calling the live replay pipeline (which would 503). See eval/demoFixture.js.
+    if (dataset.isDemoFixture && (await connections.effective()).demoMode) {
+      const run = await demoFixture.synthesizeRun({ rec, dataset, outcome: rec.demoFixtureOutcome || "pass" });
+      setImmediate(() => logAction("eval.run.start", "evalRun", String(run._id), { recommendationId: String(rec._id), candidateModel: dataset.candidateModel, demoFixture: true }, req.user));
+      return res.status(run.status === "failed" ? 422 : 202).json(run);
+    }
+
     if (dataset.piiMode === "metadata_only") {
       return res.status(422).json({ error: "not_replayable", message: "A metadata_only dataset has no prompts to replay. Use a masked dataset." });
     }

@@ -34,6 +34,10 @@ const evalResultSchema = new mongoose.Schema(
     abFlipped: { type: Boolean, default: false }, // candidate was placed in slot A this item
     judgeRationale: { type: String, default: null },
     error: { type: String, default: null }, // candidate/judge call error, if any
+
+    // F-06: true for synthetic per-item rows generated alongside a demo-fixture EvalRun.
+    // candidateResponse/judgeRationale are never real text for these — see eval/demoFixture.js.
+    isDemoFixture: { type: Boolean, default: false, index: true },
   },
   { collection: "eval_results", timestamps: true }
 );
