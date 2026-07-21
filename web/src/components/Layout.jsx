@@ -209,19 +209,31 @@ export default function Layout({ status, user, onSignOut, children }) {
               <div className="text-[10.5px] uppercase tracking-widest text-gray-400">{user.role}</div>
             </div>
           )}
-          <NavLink to={FOOTER_LINK.to} className={navClass}>
-            {FOOTER_LINK.icon}
-            {FOOTER_LINK.label}
-          </NavLink>
-          <a
-            href={PROJECT_LINK.href}
-            target="_blank"
-            rel="noreferrer"
-            className="mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
-          >
-            {PROJECT_LINK.icon}
-            {PROJECT_LINK.label}
-          </a>
+          <div className="mx-1 my-0.5 flex items-stretch gap-1">
+            <NavLink
+              to={FOOTER_LINK.to}
+              className={({ isActive }) =>
+                `flex flex-none items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium transition-colors ${
+                  isActive
+                    ? "bg-arbr-accent-50 text-arbr-charcoal font-semibold"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                }`
+              }
+            >
+              {FOOTER_LINK.icon}
+              {FOOTER_LINK.label}
+            </NavLink>
+            <a
+              href={PROJECT_LINK.href}
+              target="_blank"
+              rel="noreferrer"
+              title={PROJECT_LINK.href}
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-2 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+            >
+              {PROJECT_LINK.icon}
+              <span className="truncate">{PROJECT_LINK.label}</span>
+            </a>
+          </div>
           {(getAdminToken() || user) && onSignOut && (
             <button
               onClick={onSignOut}
