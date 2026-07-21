@@ -83,6 +83,7 @@ export default defineConfig({
           { text: 'Data privacy & retention', link: '/privacy' },
           { text: 'Deployment', link: '/deployment' },
           { text: 'Deploy on GCP', link: '/deployment-gcp' },
+          { text: 'Operational readiness', link: '/operational-readiness' },
         ]
       },
     ],

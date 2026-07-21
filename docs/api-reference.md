@@ -25,10 +25,25 @@ Returns gateway health and current settings. Accepted by both the admin key and 
 
 ### `GET /health`
 
-Liveness endpoint. Public — no auth required.
+Liveness endpoint. Public — no auth required. Always 200 if the process is up — never depends
+on Mongo being reachable, so it must not be used as a readiness probe.
 
 ```json
 { "ok": true, "demoMode": false }
+```
+
+### `GET /health/ready`
+
+Readiness endpoint. Public — no auth required. Returns `503` while draining after SIGTERM/SIGINT
+or while Mongo is disconnected — a load balancer or orchestrator should stop routing new traffic
+here on `503`, without treating the instance as dead. See
+[Operational readiness](/operational-readiness) for the liveness-vs-readiness distinction.
+
+```json
+{ "ok": true, "ready": true, "reason": null }
+```
+```json
+{ "ok": false, "ready": false, "reason": "shutting_down" }
 ```
 
 ---
