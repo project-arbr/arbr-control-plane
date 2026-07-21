@@ -29,6 +29,7 @@ const apiRoutes = require("./api/routes");
 const authRoutes = require("./api/routes/auth");
 const connections = require("./providers/connections");
 const { computeReadiness } = require("./health/readiness");
+const telemetry = require("./telemetry");
 
 // Built dashboard (created by `npm --prefix web run build`). When present, the
 // server serves it on the same port — single-port production / Docker.
@@ -57,6 +58,7 @@ async function start() {
   await mongoose.connect(config.mongoUri);
   await registry.init(); // seed ModelEntry if empty + warm in-memory cache
   await backfillInternalKind(); // idempotent; no-op after the first run
+  telemetry.init(); // OTLP trace export — a no-op unless ARBR_OTEL_ENABLED is set
 
   // Production: force data-plane API keys on so anonymous /v1 calls are rejected.
   if (config.isProduction) {
@@ -299,7 +301,11 @@ function installShutdownHandlers({ server }) {
       canaryMonitor.stop();
       evalWorker.stop();
 
-      // 6 · Mongo last — the drained writes above need it alive.
+      // 6 · Flush and shut down the OTel exporter, so spans buffered for the drained
+      // writes above are exported before the process exits (a no-op when disabled).
+      await telemetry.shutdown();
+
+      // 7 · Mongo last — the drained writes above need it alive.
       await mongoose.disconnect();
       console.log("[shutdown] clean");
     } catch (err) {

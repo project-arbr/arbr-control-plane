@@ -72,6 +72,9 @@ async function handleRealtimeSession(req, clientWs) {
     workflow:    req.headers["x-arbr-workflow"] || "realtime-voice",
     userId:      req.apiKey?.userId     || req.headers["x-arbr-user-id"] || null,
     department:  req.apiKey?.department || req.headers["x-arbr-department"] || null,
+    // W3C trace context for the OTel span (stripped before storage; see logger.js).
+    _traceparent: req.headers.traceparent,
+    _tracestate: req.headers.tracestate,
   };
 
   function teardown(status) {

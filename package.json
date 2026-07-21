@@ -14,7 +14,7 @@
   "homepage": "https://github.com/project-arbr/arbr-control-plane#readme",
   "type": "commonjs",
   "engines": {
-    "node": ">=18"
+    "node": "^18.19.0 || >=20.6.0"
   },
   "scripts": {
     "server": "node server/src/index.js",
@@ -55,6 +55,12 @@
     "@langchain/core": "^1.2.2",
     "@langchain/google-genai": "^2.2.0",
     "@langchain/openai": "^1.5.5",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",

@@ -266,6 +266,10 @@ function describe() {
     lines.push(`               or trusted-header for individual accountable access)`);
   }
   lines.push(`  fallback:    ${config.fallbackScope}`);
+  const otel = require("./telemetry/config");
+  lines.push(otel.enabled
+    ? `  tracing:     OTLP → ${otel.endpointDisplay} (sample ${otel.sampleRatio})`
+    : `  tracing:     OFF (set ARBR_OTEL_ENABLED=true to export OTLP spans)`);
   if (config.demoMode) {
     lines.push(`  mode:        DEMO at boot — no provider keys in env.`);
     lines.push(`               Add keys in the dashboard (Models page) or to`);
