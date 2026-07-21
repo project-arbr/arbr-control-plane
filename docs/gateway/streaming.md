@@ -1,21 +1,31 @@
 # Streaming
 
-Arbr supports real token-by-token SSE streaming through the OpenAI-compatible endpoint. The stream flows all the way from the provider through Arbr to your client with no intermediate buffering.
+Arbr supports real, token-by-token SSE streaming through the OpenAI-compatible endpoint — but only for the **OpenAI-compat provider set**: `openai`, `deepseek`, `moonshot`, `xai`, `groq`, `litellm` (and any custom OpenAI-compatible provider you add). For these, Arbr raw-proxies the upstream response over `fetch`, byte-for-byte, with no LangChain in the path and no intermediate buffering.
+
+> **Native providers don't stream token-by-token.** For `anthropic`, `gemini`, and `bedrock-nova` (without tool calls), Arbr calls LangChain's `invoke()` — not `.stream()` — waits for the *entire* response, and then emits it as three SSE frames back to back: a role-delta, one chunk containing the full response text, and a finish chunk. The response is still valid SSE and still arrives on `stream: true`, but nothing is incremental: the client sees no chunks at all until the whole answer is ready, then gets it all at once. This is deliberate, not a bug — LangChain's `.stream()` filters out thinking tokens per-chunk for thinking models (Gemini 2.5 Pro/Flash, Claude 3.x), which truncates the visible answer; `invoke()` assembles the full response correctly. See `server/src/gateway/openaiCompat.js` for the buffered-emit path. Every Claude/Gemini/Bedrock example below is therefore "streaming" in protocol only, not in delivery.
 
 ## How it works
 
 ```
-Client ──stream:true──▶ Arbr /v1/chat/completions ──▶ LangChain model.stream() ──▶ Provider
-                               │                                                       │
-                               ◀─── SSE chunk (data: {...}) ◀─── token ───────────────┘
+OpenAI-compat providers (openai, deepseek, moonshot, xai, groq, litellm):
+Client ──stream:true──▶ Arbr /v1/chat/completions ──▶ raw fetch proxy ──▶ Provider
+                               │                                              │
+                               ◀─── SSE chunk (data: {...}) ◀─── token ──────┘
+
+Native providers (anthropic, gemini, bedrock-nova w/o tools):
+Client ──stream:true──▶ Arbr /v1/chat/completions ──▶ LangChain model.invoke() ──▶ Provider
+                               │                                                        │
+                               ◀── 3 SSE frames (role, full text, finish) ◀── full response ─┘
 ```
 
-When `stream: true` is set:
+When `stream: true` is set for an **OpenAI-compat** model:
 
 1. Arbr sends the `200 OK` + `Content-Type: text/event-stream` headers **immediately** (before any tokens arrive), so clients and proxies know they're getting an SSE stream
-2. LangChain's `.stream()` makes a real streaming HTTP request to the provider (or LiteLLM)
+2. Arbr opens a raw streaming `fetch` to the upstream (or LiteLLM) and relays the bytes unchanged
 3. Each token chunk is forwarded as a `data: {...}` SSE event
 4. The stream ends with `data: [DONE]`
+
+For a **native** model, the same headers go out immediately, but no data follows until the full `invoke()` response comes back — then Arbr writes all three SSE frames and ends the stream. There is no step 2/3 equivalent: no incremental chunks exist to forward.
 
 ## Basic streaming call
 
@@ -103,7 +113,7 @@ for chunk in stream:
 
 :::
 
-Each token arrives in real-time. Arbr pipes LangChain chunks to the SSE response without buffering — the chain is Application → Arbr → LiteLLM → Bedrock → back with no delays between hops.
+Each token arrives in real-time. Because `provider: "openai"` routes through the OpenAI-compat raw proxy (LiteLLM speaks the OpenAI protocol), there's no LangChain in this path at all — Arbr relays the raw upstream SSE bytes without buffering, so the chain is Application → Arbr → LiteLLM → Bedrock → back with no delays between hops. (Calling a Bedrock model directly through the native `bedrock-nova` provider, instead of via LiteLLM, hits the buffered path described above.)
 
 ## Streaming vs buffered `stream()`
 
@@ -112,9 +122,9 @@ The arbr-client SDKs have a `stream()` / `astream()` method that works different
 | | OpenAI-compat SSE | arbr-client `stream()` |
 |---|---|---|
 | Endpoint | `POST /v1/chat/completions` | `POST /v1/chat` |
-| Token delivery | Real-time, token by token | Buffered — full call, then yields chunks |
+| Token delivery | Real-time, token by token — **only for OpenAI-compat providers** (see the callout above; native providers buffer the full response and emit it as one chunk even here) | Buffered — full call, then yields chunks |
 | Routing metadata | Not in stream chunks | Available on generator return value |
-| Use when | Chat UIs, latency-sensitive streaming | Buffered streaming with routing metadata |
+| Use when | Chat UIs, latency-sensitive streaming (OpenAI-compat models) | Buffered streaming with routing metadata |
 
 ## Nginx configuration for SSE
 

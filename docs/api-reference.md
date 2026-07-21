@@ -47,6 +47,26 @@ OpenAI-compatible endpoint. See [OpenAI-compatible endpoint](/gateway/openai-com
 
 Reports metadata for calls that already happened elsewhere (a partner's own gateway, LiteLLM, ...) with no live provider call. See [Observe-only ingestion](/gateway/observe-only-ingestion) for full docs.
 
+### `POST /v1/embeddings`
+
+OpenAI-compatible embeddings endpoint — routes to Gemini or an OpenAI-compat provider based on the model ID, with the same observability as the chat endpoints.
+
+### `GET /v1/models`
+
+Lists models whose provider is currently connected (live), in the OpenAI model-list shape, with a `toolCallSupported` flag per model.
+
+### `GET /v1/task-types`
+
+Lists all supported task types with tier and description.
+
+### `GET /v1/providers`
+
+Lists which providers are currently live and the model IDs each one serves. No credentials exposed.
+
+### `/v1/realtime` (WebSocket)
+
+Realtime voice session proxy. Authenticated the same way as the HTTP gateway (`Authorization: Bearer ab_…`) at the WebSocket upgrade — see `server/src/gateway/wsAuth.js`.
+
 ---
 
 ## Model registry
@@ -86,7 +106,7 @@ Update label, tier, prices, or enabled state. Only the fields you send are chang
 
 ### `DELETE /api/models/:id`
 
-Delete a custom model entry. Returns 403 for built-in models (disable them with `enabled: false` instead).
+Delete a custom model entry. Returns 400 for built-in models (disable them with `enabled: false` instead).
 
 ---
 
@@ -149,32 +169,39 @@ List all gateway API keys (raw key never returned — only metadata).
   "_id": "abc123",
   "prefix": "ab_abc1",
   "application": "support-chat",
-  "rpmLimit": 60,
+  "rpm": 60,
   "enabled": true,
+  "expiresAt": null,
   "createdAt": "2024-01-01T00:00:00.000Z"
 }]
 ```
 
 ### `POST /api/keys`
 
-Create a new gateway key. The raw key is returned **once** — it cannot be retrieved again.
+Create a new gateway key. The raw key is returned **once** — it cannot be retrieved again. `name` and `application` are both required (400 if either is missing).
 
 ```json
-{ "application": "support-chat", "rpmLimit": 60 }
+{ "name": "Support bot", "application": "support-chat", "rpm": 60, "expiresAt": "2026-12-31T00:00:00.000Z" }
 ```
+
+`expiresAt` is optional — omit it (or pass `null`) for a key that never expires. Once it passes, the key is rejected with `401 expired_api_key`.
 
 Response:
 ```json
-{ "key": "ab_abc1…", "prefix": "ab_abc1", "application": "support-chat" }
+{ "key": "ab_abc1…", "prefix": "ab_abc1", "application": "support-chat", "expiresAt": null }
 ```
 
 ### `PATCH /api/keys/:id`
 
-Enable/disable a key or update its RPM limit.
+Enable/disable a key, update its RPM limit, or change `expiresAt`.
 
 ### `DELETE /api/keys/:id`
 
 Revoke a key permanently.
+
+### `POST /api/keys/:id/rotate`
+
+Revoke the key and create a replacement with identical settings (name, application, `rpm`, `allowedModels`, `defaultModel`). Returns the new key's metadata plus its raw secret **once**, same shape as `POST /api/keys`.
 
 ---
 
@@ -208,11 +235,11 @@ Delete a rule.
 
 ## Routing settings
 
-### `GET /api/routing/mode`
+### `GET /api/routing-mode`
 
 Current routing mode: `"off"` | `"guardrail"` | `"ai"`.
 
-### `POST /api/routing/mode`
+### `PUT /api/routing-mode`
 
 Set routing mode.
 
@@ -220,13 +247,15 @@ Set routing mode.
 { "mode": "guardrail" }
 ```
 
-### `GET /api/routing/policy`
+### `GET /api/policy`
 
-The current AI routing policy (task → model map).
+The current automated-routing policy (cost-guardrail knobs: cheap task types, light-model targets, mode).
 
-### `POST /api/routing/policy/regenerate`
+### `PUT /api/policy`
 
-Regenerate the AI routing policy using the default model.
+Update the automated-routing policy.
+
+> This is a different feature from `POST /api/ai-policy/regenerate` (`server/src/api/routes/aiPolicy.js`), which regenerates the AI-routing task→model assignment map using the connected providers. `/api/policy` only holds the guardrail-mode knobs above.
 
 ---
 
@@ -234,13 +263,11 @@ Regenerate the AI routing policy using the default model.
 
 ### `GET /api/analytics/overview`
 
-Aggregated cost, token, and request counts. Includes:
-- `cacheHitRate`, `cachedReadTokens`, `cacheSavingUsd` — prompt-cache observability
-- `totalSaved` — realised savings from model substitutions (requests served cheaper than requested)
+Aggregated cost, token, and request counts. Includes `cacheHitRate`, `cachedReadTokens`, `cacheSavingUsd` — prompt-cache observability. Realised savings from model substitutions is a separate metric, not part of this response — see `GET /api/analytics/realised-savings` below.
 
-### `GET /api/analytics/by-dimension`
+### `GET /api/analytics/by/:dimension`
 
-Breakdown by `application`, `model`, `provider`, `department`, `workflow`, `taskType`, or `user`. Pass `?dimension=user&from=2024-01-01`. Null `userId` groups as `(unattributed)`.
+Breakdown by `application`, `team`, `workflow`, `model`, `provider`, `taskType`, or `user` — `dimension` is a path segment, e.g. `/api/analytics/by/user?from=2024-01-01`. `team` groups by the underlying `department` field. Null `userId` groups as `(unattributed)`.
 
 ### `GET /api/analytics/realised-savings`
 
@@ -275,7 +302,7 @@ Re-run the recommendation engine against recent request records.
 
 Accept a recommendation — creates a disabled routing rule ready to review and enable.
 
-### `DELETE /api/recommendations/:id`
+### `POST /api/recommendations/:id/dismiss`
 
 Dismiss a recommendation.
 
@@ -287,10 +314,30 @@ Dismiss a recommendation.
 
 List all providers with their connection status and default model.
 
-### `POST /api/connections/:providerId`
+### `PUT /api/connections/:provider`
 
 Store or update a provider credential (encrypted at rest).
 
-### `DELETE /api/connections/:providerId`
+### `DELETE /api/connections/:provider`
 
 Remove a stored credential (falls back to env var if set).
+
+### `POST /api/connections/:provider/test`
+
+Make a live test call to the provider using its currently effective credential.
+
+### `PUT /api/default-provider`
+
+Set the default provider used when a request names none.
+
+```json
+{ "provider": "openai" }
+```
+
+### `PUT /api/default-model`
+
+Set the default model (applies to the default provider; used in auto mode).
+
+```json
+{ "model": "gpt-4o-mini" }
+```
