@@ -13,7 +13,7 @@ MOONSHOT_API_KEY=...
 ```
 
 ```
-Dashboard: Settings → Connections → Moonshot AI (Kimi) → API Key
+Dashboard: Models → Moonshot AI (Kimi) → API Key
 ```
 
 :::
