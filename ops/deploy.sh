@@ -62,6 +62,16 @@ df -h / | awk 'NR==2{printf "    disk before: %s used, %s free\n",$5,$4}'
 sudo docker image prune -f >/dev/null 2>&1 || echo "!! prune skipped (non-fatal)"
 df -h / | awk 'NR==2{printf "    disk after:  %s used, %s free\n",$5,$4}'
 
+# 1.6 DISK PRE-FLIGHT. Checked AFTER pruning, not before — pruning might already fix a
+# high reading, and checking first could abort a deploy that didn't need to be. A pull
+# dying mid-way with "no space left on device" is a worse failure mode than refusing to
+# start; this catches it early with an actionable message instead.
+DISK_PCT="$(df -h / | awk 'NR==2{print $5}' | tr -d '%')"
+if [ "$DISK_PCT" -gt 90 ] 2>/dev/null; then
+  echo "!! Disk at ${DISK_PCT}% after prune — refusing to pull. Run ops/backup.sh then free space (old backups, docker system prune), or extend the disk."
+  exit 1
+fi
+
 # 2. DEPLOY.
 deploy "$TAG"
 

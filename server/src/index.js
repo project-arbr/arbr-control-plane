@@ -28,10 +28,16 @@ const csrf = require("./api/csrf");
 const apiRoutes = require("./api/routes");
 const authRoutes = require("./api/routes/auth");
 const connections = require("./providers/connections");
+const { computeReadiness } = require("./health/readiness");
 
 // Built dashboard (created by `npm --prefix web run build`). When present, the
 // server serves it on the same port — single-port production / Docker.
 const WEB_DIST = path.resolve(__dirname, "../../web/dist");
+
+// Set by installShutdownHandlers on the first SIGTERM/SIGINT; read by
+// GET /health/ready so readiness (unlike liveness) can correctly reflect a
+// server that's draining in-flight requests before exit.
+let isShuttingDown = false;
 
 async function start() {
   // Fail closed before any network bind when running as production.
@@ -95,6 +101,17 @@ async function start() {
     let demoMode = config.demoMode;
     try { demoMode = (await connections.effective()).demoMode; } catch { /* keep boot-time fallback */ }
     res.json({ ok: true, demoMode });
+  });
+
+  // Readiness (distinct from liveness above): can legitimately fail — a
+  // load balancer/orchestrator should stop routing new traffic here without
+  // treating the instance as dead. Draining during shutdown or a
+  // disconnected Mongo both fail this; neither means the process is unhealthy.
+  app.get("/health/ready", (_req, res) => {
+    const { ready, reason } = computeReadiness({
+      isShuttingDown, mongoReadyState: mongoose.connection.readyState,
+    });
+    res.status(ready ? 200 : 503).json({ ok: ready, ready, reason });
   });
 
   // The unified AI gateway — one endpoint for all AI requests.
@@ -238,6 +255,11 @@ async function start() {
 // served. Draining briefly after server.close() is what makes those writes land.
 const SHUTDOWN_DRAIN_MS = 250;
 const SHUTDOWN_FORCE_MS = 15_000; // under Kubernetes' 30s default grace period
+// server.close() stops accepting new connections immediately — a readiness
+// probe reporting "not ready" is only useful to an orchestrator if there's a
+// window where the server still accepts traffic while reporting that,
+// giving a load balancer time to notice and stop routing here first.
+const READINESS_GRACE_MS = 3_000;
 
 // The daily purge interval is deliberately not cleared: this always ends in
 // process.exit(0), and a 24h timer cannot fire inside the drain window.
@@ -247,6 +269,7 @@ function installShutdownHandlers({ server }) {
   async function shutdown(signal) {
     if (shuttingDown) return; // a second Ctrl-C shouldn't re-enter
     shuttingDown = true;
+    isShuttingDown = true; // module-level: read by GET /health/ready
     console.log(`\n[shutdown] ${signal} received — draining…`);
 
     const force = setTimeout(() => {
@@ -256,22 +279,27 @@ function installShutdownHandlers({ server }) {
     if (force.unref) force.unref();
 
     try {
-      // 1 · Stop accepting connections; let in-flight responses finish.
+      // 1 · Report not-ready while STILL accepting traffic, so a
+      //     readiness-polling load balancer can drain us before we actually
+      //     stop listening (see READINESS_GRACE_MS above).
+      await new Promise((resolve) => setTimeout(resolve, READINESS_GRACE_MS));
+
+      // 2 · Stop accepting connections; let in-flight responses finish.
       await new Promise((resolve) => server.close(resolve));
 
-      // 2 · server.close() leaves established WebSockets open — end them explicitly.
+      // 3 · server.close() leaves established WebSockets open — end them explicitly.
       const closed = closeRealtimeSessions();
       if (closed > 0) console.log(`[shutdown] closed ${closed} realtime session(s)`);
 
-      // 3 · Let the detached logger.write callbacks for those responses run.
+      // 4 · Let the detached logger.write callbacks for those responses run.
       await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
 
-      // 4 · Stop background work before tearing down its dependencies.
+      // 5 · Stop background work before tearing down its dependencies.
       errorAlertMonitor.stop();
       canaryMonitor.stop();
       evalWorker.stop();
 
-      // 5 · Mongo last — the drained writes above need it alive.
+      // 6 · Mongo last — the drained writes above need it alive.
       await mongoose.disconnect();
       console.log("[shutdown] clean");
     } catch (err) {

@@ -5,6 +5,15 @@
 # Brings up MongoDB + the control plane (dashboard + API + gateway on one port).
 # This file is the DEMO/EVAL profile: it seeds synthetic data on boot. For a
 # production deployment (no seeding, admin auth, reverse proxy) see DEPLOYMENT.md.
+# Bounds each container's stdout log growth. Docker's default json-file driver has
+# no size cap; a long-running host can otherwise fill its disk from logs alone
+# (see docs/operational-readiness.md's log-rotation section).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   mongo:
     image: mongo:7
@@ -17,6 +26,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging: *default-logging
     # Not published to the host by default; the app talks to it over the compose network.
 
   app:
@@ -25,6 +35,7 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    logging: *default-logging
     environment:
       PORT: 4100
       MONGO_URI: mongodb://mongo:27017/arbr-control-plane

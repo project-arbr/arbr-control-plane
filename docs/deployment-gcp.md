@@ -171,9 +171,11 @@ docker compose logs -f app
 docker compose restart app
 
 # Backup MongoDB
-docker compose exec mongo mongodump --out /tmp/backup
-docker cp $(docker compose ps -q mongo):/tmp/backup ./backup-$(date +%F)
+bash ops/backup.sh
 ```
+
+See [Operational readiness](/operational-readiness) for restore, disaster recovery, and a
+post-restore verification checklist.
 
 ## Deploying a new version (gated, image-based)
 
