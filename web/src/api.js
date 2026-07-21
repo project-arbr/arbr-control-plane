@@ -113,6 +113,7 @@ export const api = {
   startShadow: (id, body = {}) => req(`/recommendations/${id}/start-shadow`, { method: "POST", body: JSON.stringify(body) }),
   createCanary: (id, body = {}) => req(`/recommendations/${id}/create-canary`, { method: "POST", body: JSON.stringify(body) }),
   overrideRecommendation: (id, body) => req(`/recommendations/${id}/override`, { method: "POST", body: JSON.stringify(body) }),
+  recommendationOutcome: (id) => req(`/recommendations/${id}/outcome`),
   evalDatasets: (recommendationId) => req(`/evals/datasets${qs({ recommendationId })}`),
   evalDataset: (id) => req(`/evals/datasets/${id}`),
   createEval: (body) => req("/evals", { method: "POST", body: JSON.stringify(body) }),

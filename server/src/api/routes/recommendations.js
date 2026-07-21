@@ -13,14 +13,23 @@ const evalReplay = require("../../eval/replay");
 const evalThresholds = require("../../eval/thresholds");
 const { sameFamily } = require("../../eval/rubricJudge");
 const { tierForTask } = require("../../classify/classifier");
+const stageBatch = require("../../recommend/stageBatch");
+const outcome = require("../../recommend/outcome");
 
 const router = express.Router();
 
 // ── recommendations ──
+// Every recommendation carries a derived lifecycle `stage` (F-03: unified optimization
+// workflow) — computed fresh from linked dataset/run/campaign/experiment/rule state, never
+// stored, so it can never drift from what's actually happened. See recommend/stage.js.
 router.get("/recommendations", async (req, res, next) => {
   try {
-    const q = req.query.status ? { status: req.query.status } : {};
-    res.json(await Recommendation.find(q).sort({ projectedSavings: -1 }).lean());
+    // String(...) matters: req.query.status could be an object (e.g. ?status[$ne]=x, which
+    // Express's query parser happily produces), which would otherwise pass a Mongo operator
+    // straight into the filter (codeql[js/sql-injection]).
+    const q = req.query.status ? { status: String(req.query.status) } : {};
+    const recs = await Recommendation.find(q).sort({ projectedSavings: -1 }).lean();
+    res.json(await stageBatch.attachStages(recs));
   } catch (e) { next(e); }
 });
 
@@ -32,6 +41,17 @@ router.get("/recommendations/analysis", async (_req, res, next) => {
 
 router.post("/recommendations/recompute", requireRole("operator"), async (_req, res, next) => {
   try { res.json(await recommender.recompute()); } catch (e) { next(e); }
+});
+
+// Projected-vs-realised outcome for a promoted_live recommendation (F-03). Deliberately NOT
+// inlined into the list endpoint above — two extra aggregations per row on every list load is
+// the wrong default cost; the UI calls this on-demand when a "Live" card's outcome panel opens.
+router.get("/recommendations/:id/outcome", async (req, res, next) => {
+  try {
+    const rec = await Recommendation.findById(req.params.id).lean();
+    if (!rec) return res.status(404).json({ error: "not found" });
+    res.json(await outcome.computeOutcome(rec));
+  } catch (e) { next(e); }
 });
 
 // Accept → create a disabled rule from the recommendation, mark accepted.
