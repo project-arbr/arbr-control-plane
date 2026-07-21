@@ -13,7 +13,7 @@ XAI_API_KEY=...
 ```
 
 ```
-Dashboard: Settings → Connections → xAI (Grok) → API Key
+Dashboard: Models → xAI (Grok) → API Key
 ```
 
 :::

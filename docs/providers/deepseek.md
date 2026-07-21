@@ -13,7 +13,7 @@ DEEPSEEK_API_KEY=...
 ```
 
 ```
-Dashboard: Settings → Connections → DeepSeek → API Key
+Dashboard: Models → DeepSeek → API Key
 ```
 
 :::

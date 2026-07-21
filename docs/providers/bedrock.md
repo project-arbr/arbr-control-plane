@@ -15,7 +15,7 @@ AWS_REGION=us-east-1   # optional, defaults to us-east-1
 ```
 
 ```
-Dashboard: Settings → Connections → Amazon Bedrock → Access Key ID + Secret Access Key + Region
+Dashboard: Models → Amazon Bedrock → Access Key ID + Secret Access Key + Region
 ```
 
 :::

@@ -132,7 +132,7 @@ In GCP Console → **VPC Network → Firewall rules** — confirm there is **no 
 
 1. Open **https://arbr.yourco.com** — the login screen appears
 2. Enter your `ARBR_ADMIN_KEY` value
-3. **Settings → Connections** — add at least one provider key
+3. **Models** page — add at least one provider key
 4. **Settings → API Keys** — create a gateway key per developer app; the one-time reveal shows a ready-to-paste snippet for each developer
 5. Toggle **Require API Keys** ON once every app has a key
 

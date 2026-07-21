@@ -91,11 +91,11 @@ You can route to **any model on any live provider** without a registry entry. En
 
 ## Adding a model
 
-### Dashboard (Settings → Models)
+### Dashboard (Models page)
 
 Click **+ Add model** and fill in:
 - **Model ID** — the exact string you'll send in `"model":` requests
-- **Provider** — must match a live provider in Settings → Connections
+- **Provider** — must match a live provider on the Models page
 - **Label** — human-readable display name (optional)
 - **Tier** — `light` / `mid` / `premium`
 - **Input $/1M** and **Output $/1M** — from the provider's pricing page

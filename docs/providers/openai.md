@@ -19,7 +19,7 @@ OPENAI_API_KEY=sk-...
 ```
 
 ```
-Dashboard: Settings → Connections → OpenAI → API Key
+Dashboard: Models → OpenAI → API Key
 ```
 
 :::
