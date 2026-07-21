@@ -18,7 +18,7 @@ Arbr supports 8 providers out of the box. All use the same connection interface 
 ## Two ways to connect
 
 **Dashboard (runtime, no restart):**
-1. Open **Settings → Connections**
+1. Open the **Models** page
 2. Click **Connect** next to a provider
 3. Paste the key — it's stored encrypted immediately and the provider goes live
 
@@ -38,7 +38,7 @@ If no provider keys are configured, Arbr starts in **demo mode**: every dashboar
 
 ## Default provider
 
-The default provider is the one used when `model: "auto"` finds no matching rule. Set it in **Settings → Connections** (runtime) or via the `DEFAULT_PROVIDER` environment variable.
+The default provider is the one used when `model: "auto"` finds no matching rule. Set it in **Settings → General → Default gateway** (runtime) or via the `DEFAULT_PROVIDER` environment variable.
 
 ## Provider pages
 

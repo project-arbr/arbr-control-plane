@@ -11,7 +11,7 @@ GEMINI_API_KEY=...
 ```
 
 ```
-Dashboard: Settings → Connections → Google Gemini → API Key
+Dashboard: Models → Google Gemini → API Key
 ```
 
 :::

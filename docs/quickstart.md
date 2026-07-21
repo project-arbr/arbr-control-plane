@@ -33,7 +33,7 @@ Open **http://localhost:4100** — the dashboard loads with seeded demo data. Go
 
 The demo dashboard works without any keys. To make real AI calls:
 
-1. Open **Settings → Connections**
+1. Open the **Models** page
 2. Paste a key for any provider (OpenAI, Anthropic, Gemini, DeepSeek, …)
 3. The provider goes live immediately — no restart
 
