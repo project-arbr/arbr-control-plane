@@ -65,14 +65,36 @@ Leave provider keys blank — the server starts in demo mode with seeded data so
 
 ## Step 6 — Start the control plane
 
+`docker-compose.gcp.yml` is gitignored (it's VM/environment-specific) and isn't part of the
+clone — create it once:
+
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+cat > docker-compose.gcp.yml <<'EOF'
+# GCP override — keeps the app bound to 0.0.0.0:4100 so a GCP load balancer's Google Front
+# End can reach it (a VPC firewall restricting :4100 to Google's LB/health-check ranges is
+# the real security boundary here, not loopback binding). Also disables demo seeding.
+services:
+  app:
+    environment:
+      SEED_ON_BOOT: "false"
+EOF
+```
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d
 curl http://localhost:4100/health   # → {"ok":true,"demoMode":false}
 ```
 
-`docker-compose.prod.yml` binds port 4100 to loopback (`127.0.0.1`) so it is never directly internet-reachable.
-It also sets `NODE_ENV=production`, which makes ARBR refuse to start without the admin and
-encryption keys and forces gateway API-key authentication on.
+Use the `docker-compose.gcp.yml` overlay here, not `docker-compose.prod.yml` — it's what
+`ops/deploy.sh` uses for every deploy after this one, so starting with it now avoids the app's
+port binding silently changing on the first automated deploy.
+
+Unlike `docker-compose.prod.yml` (which binds port 4100 to loopback), `docker-compose.gcp.yml`
+deliberately keeps the base `0.0.0.0:4100` binding. On this topology the real security boundary
+is the VPC firewall — ingress on `:4100` restricted to Google's load-balancer/health-check IP
+ranges (`130.211.0.0/22`, `35.191.0.0/16`) — not loopback binding, so `0.0.0.0` here is
+intentional, not a regression. It still sets `NODE_ENV=production`, which makes ARBR refuse to
+start without the admin and encryption keys and forces gateway API-key authentication on.
 
 ## Step 7 — Configure nginx
 
@@ -134,7 +156,10 @@ In GCP Console → **VPC Network → Firewall rules** — confirm there is **no 
 2. Enter your `ARBR_ADMIN_KEY` value
 3. **Models** page — add at least one provider key
 4. **Settings → API Keys** — create a gateway key per developer app; the one-time reveal shows a ready-to-paste snippet for each developer
-5. Toggle **Require API Keys** ON once every app has a key
+5. Toggle **Require API Keys** ON once every app has a key — note this may already be on:
+   `NODE_ENV=production` (set by the Step 6 compose overlay) forces `requireApiKey` on at boot,
+   so depending on when you check, this toggle can read as already-enabled rather than something
+   you're switching on here.
 
 ## Ongoing operations
 
@@ -166,8 +191,13 @@ bash ops/deploy.sh sha-1a2b3c4   # or pin to a specific commit / a vX.Y.Z tag
 
 What it does: verifies the image exists (the green gate) → records the current tag →
 pulls + `up -d` the new image → polls `/health` for ~60s → **rolls back to the previous tag
-if unhealthy** → re-runs the LiteLLM model sync if the seed version changed (keeps pricing
-intact) → posts a success/rollback note to the governance webhook.
+if unhealthy** → posts a success/rollback note to the governance webhook.
+
+The script also carries a legacy conditional re-sync keyed on a `modelSeedVersion` field that's
+no longer written by the registry (see [Model registry](/models) for the real LiteLLM-sync
+mechanism), so in practice it won't fire. Treat catalog refresh as a manual step today — run it
+from the dashboard's **Sync Models** button (Models page) after a deploy if you need current
+pricing, rather than relying on the deploy script for it.
 
 > The old build-on-VM path (`git pull && docker compose build app && up -d app`) is
 > deprecated — it built on the prod host and had no rollback. Use `ops/deploy.sh`.
@@ -183,7 +213,7 @@ intact) → posts a success/rollback note to the governance webhook.
 - [ ] Port 4100 not in any public GCP firewall rule
 - [ ] TLS certificate issued by certbot
 - [ ] At least one provider key configured
-- [ ] Started with `docker-compose.prod.yml` (fail-closed mode; gateway keys forced on)
+- [ ] Started with `docker-compose.gcp.yml` (fail-closed mode; gateway keys forced on; matches what `ops/deploy.sh` uses)
 - [ ] Gateway API keys created per app
 - [ ] MongoDB volume is on a persistent disk (default in Docker Compose)
 - [ ] `docker compose logs` checked for any boot errors

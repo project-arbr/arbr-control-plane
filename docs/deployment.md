@@ -113,7 +113,7 @@ Point apps at the **internal** address (`http://10.x.x.x:4100`) — gateway traf
 
 ## Operational notes
 
-- **Single instance by design (today).** The response cache, per-key rate-limit windows, and caches are in-process. Two instances behind an ALB each keep their own (budgets/keys/rules are Mongo-backed and shared; enforcement counters aren't). Scale vertically first.
+- **Single instance by design (today).** Rate limits and budget/cap enforcement counters are Mongo-backed and multi-replica-safe — they're correctly shared across instances. Only the exact-match and semantic response caches are in-process/per-instance: two instances behind an ALB would each keep their own cache, so cache hit rate drops (not a correctness issue). Scale vertically first; caching is the one thing that doesn't yet benefit from a second replica.
 - **Restarts are cheap** — all durable state is in MongoDB. `docker compose restart` loses only in-memory caches.
 - **Upgrades:** `git pull && docker compose build app && docker compose up -d app`
 - **Logs:** `docker compose logs -f app`
