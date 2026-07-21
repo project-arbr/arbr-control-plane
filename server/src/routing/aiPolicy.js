@@ -6,6 +6,7 @@ const RequestRecord = require("../models/RequestRecord");
 const pricing = require("../pricing/registry");
 const { TASK_TYPES, TASK_CATALOG } = require("../classify/classifier");
 const { projectImpact } = require("./policySim");
+const { internalComplete } = require("../internal/complete");
 
 // Increment when MODEL_CAPABILITIES or TASK_CAPABILITIES change.
 // GET /api/ai-policy auto-regenerates if the stored version is behind.
@@ -309,10 +310,12 @@ async function _computeAssignments({ router, eff, excludeModels = [], goal = "ba
       `Return ONLY a valid JSON object mapping each task ID to one model ID. Example:\n` +
       `{"faq":"model-a","coding":"model-b","translation":"model-c"}`;
 
-    const resp = await router.complete({
+    const resp = await internalComplete({
+      kind: "policy-generation",
+      router,
       messages: [{ role: "user", content: prompt }],
-      providerOverride: generatorModel.provider,
-      modelOverride:    generatorModel.id,
+      provider: generatorModel.provider,
+      model:    generatorModel.id,
       temperature: 0.2,
       maxTokens:   1200,
     });

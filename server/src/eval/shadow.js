@@ -9,6 +9,7 @@ const pricing = require("../pricing/registry");
 const { maskMessages, maskPii, clampText } = require("../logging/piiFilter");
 const { judge } = require("./judge");
 const { isSingleShot, shouldSample, withinWindow, campaignMatches } = require("./logic");
+const { internalComplete } = require("../internal/complete");
 
 function shadowPayload({ messages, prodText, candidateText }, settings) {
   if (settings?.captureRequestPayloads === false) {
@@ -106,8 +107,10 @@ async function maybeShadowEval({ application, workflow, taskType, messages, hasT
     // Daily shadow budget: stop mirroring once today's candidate spend hits the cap.
     if (campaign.maxDailyShadowBudgetUsd != null && await spentTodayUsd(campaign._id) >= campaign.maxDailyShadowBudgetUsd) return;
 
-    const candidate = await router.complete({
-      messages, providerOverride: cm.provider, modelOverride: campaign.candidateModel,
+    const candidate = await internalComplete({
+      kind: "shadow-candidate", router,
+      messages, provider: cm.provider, model: campaign.candidateModel,
+      context: { campaignId: String(campaign._id), application, requestId },
     }).catch(() => null);
     if (!candidate) { await recordCandidateError(campaign); return; }
 
@@ -118,7 +121,9 @@ async function maybeShadowEval({ application, workflow, taskType, messages, hasT
       prodModel: prod.model, prodProvider: prod.provider, prodCost: costOf(prod.model, prod.usage),
       prodLatencyMs: prod.latencyMs, prodResponse: stored.prodResponse,
       candidateModel: campaign.candidateModel, candidateProvider: cm.provider,
-      candidateCost: costOf(campaign.candidateModel, candidate.usage), candidateLatencyMs: candidate.latencyMs,
+      // From the wrapper, so the EvalPair ledger and the RequestRecord ledger price the
+      // same call identically (costOf ignores prompt-cache discounts; the wrapper doesn't).
+      candidateCost: candidate.costUsd, candidateLatencyMs: candidate.latencyMs,
       candidateResponse: stored.candidateResponse,
       judgeModel: campaign.judgeModel || null,
       messages: stored.messages,

@@ -7,6 +7,7 @@ const { toRouterConfig, getRouter } = require("../../providers/router");
 const pricing = require("../../pricing/registry");
 const ModelEntry = require("../../models/ModelEntry");
 const { requireRole } = require("../rbac");
+const { internalComplete } = require("../../internal/complete");
 
 const router = express.Router();
 
@@ -41,7 +42,11 @@ router.post("/models/:id/test", requireRole("administrator"), async (req, res) =
     const start = Date.now();
     const cfg = { ...toRouterConfig(model.provider, p), model: model.id };
     const r = createRouter({ providers: { [model.provider]: cfg }, defaultProvider: model.provider });
-    const out = await r.complete({ messages: [{ role: "user", content: message }], maxTokens: 512 });
+    const out = await internalComplete({
+      kind: "model-test", router: r,
+      messages: [{ role: "user", content: message }], maxTokens: 512,
+      context: { model: model.id },
+    });
     res.json({
       ok: true,
       text: out.text || "",
