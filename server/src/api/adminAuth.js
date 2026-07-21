@@ -21,12 +21,24 @@
 const { config } = require("../config");
 const { timingSafeEqual, bearerOf } = require("./authUtil");
 const identity = require("./identity");
+const secretResolver = require("../security/secretResolver");
 
 const MASTER_USER = { id: "master-key", email: "master-key", role: "administrator", isMasterKey: true };
 
+// Live read so a rotated ARBR_ADMIN_KEY (via a secret-manager reference)
+// takes effect on the next periodic refresh / manual refresh call, with no
+// restart. Returns undefined (never a still-unresolved ref string) when
+// resolution hasn't happened or failed — config.adminKey (the raw env
+// value) is used only to detect "was anything configured at all", below,
+// never as a fallback credential here.
+function effectiveAdminKey() {
+  return secretResolver.resolvedOrLiteral("ARBR_ADMIN_KEY");
+}
+
 function isAdminRequest(req) {
   const token = bearerOf(req);
-  return !!(token && config.adminKey && timingSafeEqual(token, config.adminKey));
+  const adminKey = effectiveAdminKey();
+  return !!(token && adminKey && timingSafeEqual(token, adminKey));
 }
 
 async function middleware(req, res, next) {

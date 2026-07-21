@@ -6,6 +6,7 @@
 //   - aws providers (bedrock-nova / Amazon Nova): accessKeyId + secretAccessKey + region
 // The registry below captures that so the rest of the system stays generic.
 require("dotenv").config();
+const secretResolver = require("./security/secretResolver");
 
 const PROVIDERS = {
   openai: {
@@ -110,7 +111,7 @@ function envCredentialFor(id) {
   const required = spec.required || spec.fields;
   const cred = {};
   for (const field of spec.fields) {
-    const val = process.env[spec.env[field]];
+    const val = secretResolver.resolvedOrLiteral(spec.env[field]);
     if (val && val.trim()) cred[field] = val.trim();
   }
   if (spec.authType === "aws" && !cred.region) cred.region = spec.regionDefault;

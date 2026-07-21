@@ -8,13 +8,14 @@
 // it would make them trivially decryptable by anyone. Set ARBR_ENCRYPTION_KEY (any
 // strong string) in real deployments.
 const crypto = require("crypto");
+const secretResolver = require("./secretResolver");
 
 // Public, intentionally-insecure constant: safe to ship only because it is refused in production.
 const DEV_FALLBACK = "arbr-dev-insecure-encryption-key-change-me";
 let warned = false;
 
 function secret() {
-  const s = process.env.ARBR_ENCRYPTION_KEY;
+  const s = secretResolver.resolvedOrLiteral("ARBR_ENCRYPTION_KEY");
   if (s && s.trim()) return s.trim();
 
   // Never silently fall back to the public dev key in production — fail loud and early.

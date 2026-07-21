@@ -5,6 +5,8 @@ const { requireRole } = require("../rbac");
 const { createRouter } = require("../../providers/llm-router");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 const { internalComplete } = require("../../internal/complete");
+const secretResolver = require("../../security/secretResolver");
+const { PROVIDERS } = require("../../config");
 
 const router = express.Router();
 
@@ -69,5 +71,19 @@ router.post("/connections/:provider/test", requireRole("administrator"), async (
   }
 });
 
+
+// Re-resolve every credential-shaped env var (picks up a rotated
+// secret-manager value with no restart) and invalidate the connections
+// cache so the next request reflects it. Never returns a value — matches
+// the statuses() masking convention exactly.
+router.post("/secrets/refresh", requireRole("administrator"), async (_req, res, next) => {
+  try {
+    const envVarNames = ["ARBR_ADMIN_KEY", "ARBR_ENCRYPTION_KEY",
+      ...Object.values(PROVIDERS).flatMap((p) => Object.values(p.env))];
+    const { resolved, failures } = await secretResolver.refreshAll(envVarNames);
+    connections.invalidate();
+    res.json({ resolved: resolved.length, failures });
+  } catch (e) { next(e); }
+});
 
 module.exports = router;
