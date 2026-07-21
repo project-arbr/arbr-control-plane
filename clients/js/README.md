@@ -17,7 +17,6 @@ rules and cost policies, and logs every call with full cost attribution — visi
 
 ```sh
 npm install arbr-client
-# (pre-release: npm install /path/to/arbr-client-0.1.0.tgz)
 ```
 
 ## 60-second quickstart
@@ -130,6 +129,34 @@ for await (const chunk of arbr.stream({ messages: "…" })) {
 
 Use the OpenAI-compat endpoint when you need real token-by-token delivery or are integrating with
 chat UIs. Use `stream()` when you want the routing metadata the OpenAI endpoint doesn't expose.
+
+### `client.embeddings(request) → Promise<EmbeddingsResponse>`
+
+Generate vector embeddings — `POST /v1/embeddings`. OpenAI-compatible wire format, same
+observability as `chat()`.
+
+```js
+const res = await arbr.embeddings({
+  model: "gemini-embedding-001",
+  input: "Summarise the customer's pain points",
+  dimensions: 768,   // must match your vector index size
+});
+const vector = res.data[0].embedding;   // float[] of length 768
+
+// Batch
+const batch = await arbr.embeddings({
+  model: "gemini-embedding-001",
+  input: ["sentence one", "sentence two", "sentence three"],
+});
+const vectors = batch.data.map((d) => d.embedding);   // float[][]
+```
+
+Request fields: `model` (required — an embedding model whose provider is connected, e.g.
+`"gemini-embedding-001"`, `"text-embedding-3-small"`), `input` (required — string or array of
+strings), `dimensions` (optional; truncates output — for Gemini this becomes
+`outputDimensionality`), plus per-call `timeoutMs`, `retries`, `signal`.
+
+Response: `{ object: "list", data: [{ object: "embedding", index, embedding }], model, usage: { prompt_tokens, total_tokens } }`.
 
 ### `client.status() → Promise<StatusResponse>`
 

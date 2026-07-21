@@ -135,10 +135,17 @@ if (model && !model.toolCallSupported) {
 
 **`toolCallSupported` rules:**
 
-| Value | Providers / models |
+`true` for `openai`, `deepseek`, `groq`, `xai`, `moonshot`, `litellm` — these proxy tools
+natively. For Bedrock (`provider: "bedrock-nova"`), it's a pattern-matched allowlist against the
+model id, not a blanket Nova-only rule:
+
+| Value | Bedrock models |
 |-------|--------------------|
-| `true` | `openai`, `deepseek`, `groq`, `xai`, `moonshot`, `litellm` (all proxy tools natively); Amazon Nova models on Bedrock (`nova-lite`, `nova-micro`, `nova-pro`) |
-| `false` | `gemini`, `anthropic`, DeepSeek R1 on Bedrock (`us.deepseek.r1-v1:0`), GLM, Llama, and other non-Nova Bedrock models |
+| `true` | Amazon Nova (`nova-lite`, `nova-micro`, `nova-pro`, `nova-premier`), Claude 3.x (Haiku, Sonnet, Opus, 3.5, 3.7), Llama 3.x, Command R / R+, Mistral Large / Small, AI21 Jamba, Writer Palmyra X5, Kimi K2.5 |
+| `false` | Everything else on Bedrock not matched above (e.g. Mistral 7B, Mixtral 8x7B, DeepSeek R1 (`us.deepseek.r1-v1:0`)) |
+
+`false` outright for `gemini` and direct `anthropic` (not proxied through Bedrock's Converse API).
+See `BEDROCK_TOOL_PATTERNS` in `server/src/gateway/capabilities.js` for the exact list.
 
 ## `client.taskTypes() → Promise<TaskTypesResponse>`
 

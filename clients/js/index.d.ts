@@ -25,7 +25,11 @@ export type RoutingDecision =
   | "auto"
   | "ai"
   | "cache"
-  | "fallback";
+  | "semantic_cache"
+  | "fallback"
+  | "budget"
+  | "canary"
+  | "external";
 
 export type ClassifiedBy = "provided" | "keyword" | "ai";
 

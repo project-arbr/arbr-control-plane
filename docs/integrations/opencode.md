@@ -36,9 +36,9 @@ global config). Register Arbr as an OpenAI-compatible provider:
         "apiKey": "ARBR_API_KEY"
       },
       "models": {
-        "claude-haiku-4-5": { "name": "Claude Haiku 4.5 (via Arbr)" },
-        "gpt-4o":           { "name": "GPT-4o (via Arbr)" },
-        "bedrock-nova-pro": { "name": "Nova Pro (via Arbr)" }
+        "claude-haiku-4-5":          { "name": "Claude Haiku 4.5 (via Arbr)" },
+        "gpt-4o":                    { "name": "GPT-4o (via Arbr)" },
+        "us.amazon.nova-pro-v1:0":   { "name": "Nova Pro (via Arbr)" }
       }
     }
   }
