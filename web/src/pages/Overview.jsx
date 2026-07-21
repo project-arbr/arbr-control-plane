@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, fmt } from "../api.js";
 import { Stat, Card, Table, Spinner, Tabs, useTabParam } from "../components/ui.jsx";
 import ByDimension from "./ByDimension.jsx";
@@ -77,10 +78,19 @@ function Summary() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${data.internalCost > 0 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         <Stat label="Cache hit rate" value={`${((data.cacheHitRate || 0) * 100).toFixed(1)}%`} />
         <Stat label="Cached tokens" value={fmt.num(data.cachedReadTokens)} />
         <Stat label="Cache savings" value={fmt.usd(data.cacheSavingUsd)} />
+        {data.internalCost > 0 && (
+          <Link to="/internal-spend" className="block rounded-lg transition hover:ring-2 hover:ring-arbr-500/30">
+            <Stat
+              label="Arbr overhead"
+              value={fmt.usd(data.internalCost)}
+              sub={`${((data.internalShare || 0) * 100).toFixed(1)}% of total spend · view breakdown`}
+            />
+          </Link>
+        )}
       </div>
 
       <Card title="Latency breakdown">
@@ -107,6 +117,7 @@ function Summary() {
         {latency?.overheadP99 > 500 && (
           <p className="mt-3 text-xs text-gray-400">
             High 99%ile gateway overhead reflects AI task classification — the gateway makes a short LLM call to determine task type when AI routing is on.
+            That call costs money as well as time; see <Link to="/internal-spend" className="text-arbr-600 underline">Arbr overhead</Link>.
             Pin <code className="rounded bg-gray-100 px-1">taskType</code> in your requests to skip it.
           </p>
         )}

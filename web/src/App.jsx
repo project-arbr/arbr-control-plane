@@ -15,6 +15,7 @@ import Budgets from "./pages/Budgets.jsx";
 import Audit from "./pages/Audit.jsx";
 import Governance from "./pages/Governance.jsx";
 import Applications from "./pages/Applications.jsx";
+import InternalSpend from "./pages/InternalSpend.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
 import Users from "./pages/Users.jsx";
 
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/applications" element={<Applications />} />
         <Route path="/applications/:name" element={<ApplicationDetail />} />
         <Route path="/requests" element={<Requests />} />
+        <Route path="/internal-spend" element={<InternalSpend />} />
         <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
         <Route path="/recommendations" element={<Recommendations />} />
         <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
