@@ -87,6 +87,13 @@ const icons = {
       <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/>
     </Icon>
   ),
+  globe: (
+    <Icon>
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M3 12h18"/>
+      <path d="M12 3a13 13 0 0 1 0 18a13 13 0 0 1 0-18z"/>
+    </Icon>
+  ),
 };
 
 // ── Navigation definition ─────────────────────────────────────────────────────
@@ -120,6 +127,7 @@ function buildNavGroups(canManageUsers) {
   ];
 }
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
+const PROJECT_LINK = { href: "https://projectarbr.org/", label: "projectarbr.org", icon: icons.globe };
 
 function navClass({ isActive }) {
   return `mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
@@ -205,6 +213,15 @@ export default function Layout({ status, user, onSignOut, children }) {
             {FOOTER_LINK.icon}
             {FOOTER_LINK.label}
           </NavLink>
+          <a
+            href={PROJECT_LINK.href}
+            target="_blank"
+            rel="noreferrer"
+            className="mx-1 my-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+          >
+            {PROJECT_LINK.icon}
+            {PROJECT_LINK.label}
+          </a>
           {(getAdminToken() || user) && onSignOut && (
             <button
               onClick={onSignOut}
