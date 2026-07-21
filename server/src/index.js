@@ -6,7 +6,8 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
-const { config, describe, assertProductionReady } = require("./config");
+const { config, describe, assertProductionReady, PROVIDERS } = require("./config");
+const secretResolver = require("./security/secretResolver");
 const registry = require("./pricing/registry");
 const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
@@ -35,6 +36,17 @@ const WEB_DIST = path.resolve(__dirname, "../../web/dist");
 async function start() {
   // Fail closed before any network bind when running as production.
   assertProductionReady();
+
+  // Resolve any credential-shaped env var that holds a secret-manager
+  // reference (gcp-sm://...) instead of a literal — before Mongo connects
+  // or anything else reads a credential, same fail-closed timing as
+  // assertProductionReady() above. A no-op when every value is a literal
+  // (every existing deployment, forever, unless it opts into a reference).
+  const secretEnvVarNames = ["ARBR_ADMIN_KEY", "ARBR_ENCRYPTION_KEY",
+    ...Object.values(PROVIDERS).flatMap((p) => Object.values(p.env))];
+  const { failures } = await secretResolver.refreshAll(secretEnvVarNames);
+  secretResolver.assertResolvedOrThrow(failures, config.isProduction);
+  secretResolver.startPeriodicRefresh(secretEnvVarNames);
 
   await mongoose.connect(config.mongoUri);
   await registry.init(); // seed ModelEntry if empty + warm in-memory cache

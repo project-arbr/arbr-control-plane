@@ -14,6 +14,7 @@ const ProviderCredential = require("../models/ProviderCredential");
 const CustomProvider = require("../models/CustomProvider");
 const Settings = require("../models/Settings");
 const secrets = require("../security/secrets");
+const secretResolver = require("../security/secretResolver");
 const pricing = require("../pricing/registry");
 
 const TTL_MS = 3000;
@@ -116,6 +117,9 @@ async function statuses() {
       const envCred = envCredentialFor(id);
       last4 = (envCred?.[primaryField(id)] || "").slice(-4);
       region = envCred?.region || null;
+      // Surface that this credential came from a managed secret store —
+      // never the reference itself, just the boolean.
+      if (secretResolver.wasSecretRef(spec.env[primaryField(id)])) source = "secret-manager";
     } else if (source === "stored") {
       last4 = storedDocs[id]?.last4 || "";
       region = storedDocs[id]?.region || null;

@@ -12,6 +12,7 @@
 //   _textFromMessages(messages)           → string (exported for tests)
 
 const { OpenAIEmbeddings } = require("@langchain/openai");
+const secretResolver = require("../security/secretResolver");
 
 const MAX_ENTRIES = 1000;
 const _store = new Map(); // key → { embedding: number[], value, expiresAt }
@@ -20,7 +21,7 @@ let _embedder = null;
 let _embedderInitKey = null;
 
 function _initEmbedder() {
-  const key = process.env.OPENAI_API_KEY;
+  const key = secretResolver.resolvedOrLiteral("OPENAI_API_KEY");
   if (!key) return null;
   if (_embedder && _embedderInitKey === key) return _embedder;
   _embedder = new OpenAIEmbeddings({
@@ -134,4 +135,4 @@ async function set(messages, value, ttlMinutes) {
 function clear() { _store.clear(); }
 function size()  { return _store.size; }
 
-module.exports = { get, set, clear, size, cosineSimilarity, invalidate, _textFromMessages };
+module.exports = { get, set, clear, size, cosineSimilarity, invalidate, _textFromMessages, _initEmbedder };

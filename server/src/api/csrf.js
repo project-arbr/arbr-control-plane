@@ -8,14 +8,19 @@ const crypto = require("crypto");
 const { doubleCsrf } = require("csrf-csrf");
 const { config } = require("../config");
 const { SESSION_COOKIE } = require("./identity");
+const secretResolver = require("../security/secretResolver");
 
 // Falls back to a per-boot random secret when ARBR_ENCRYPTION_KEY is unset —
 // harmless since this only matters once ARBR_AUTH_MODE=oidc is configured
 // (adminkey mode, the default, never sets a session cookie to begin with).
-const secret = process.env.ARBR_ENCRYPTION_KEY || crypto.randomBytes(32).toString("hex");
+// Stable for the process lifetime; read live (not a cached const) so a
+// gcp-sm:// reference resolves to the real value instead of being used
+// literally as the CSRF secret.
+const randomFallback = crypto.randomBytes(32).toString("hex");
+const secret = () => secretResolver.resolvedOrLiteral("ARBR_ENCRYPTION_KEY") ?? randomFallback;
 
 const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
-  getSecret: () => secret,
+  getSecret: () => secret(),
   getSessionIdentifier: (req) => (req.cookies && req.cookies[SESSION_COOKIE]) || "no-session",
   cookieName: "arbr_csrf",
   cookieOptions: { httpOnly: true, sameSite: "lax", secure: config.isProduction, path: "/" },
