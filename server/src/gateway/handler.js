@@ -338,6 +338,11 @@ async function handleChat(req, res) {
     workflow: body.workflow || "unknown",
     userId: body.userId || null,
     department: body.department || "unknown",
+    // W3C trace context, so the OTel span nests inside the caller's trace. Stripped
+    // before the record is stored (see logging/logger.js). Spread into every log
+    // call below via ...meta, so no per-call-site edits are needed.
+    _traceparent: req.headers.traceparent,
+    _tracestate: req.headers.tracestate,
   };
 
   // The developer's literal model intent, for the log ("auto" when deferred).

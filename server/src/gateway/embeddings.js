@@ -128,6 +128,9 @@ async function handleEmbeddings(req, res) {
     workflow:    req.headers["x-arbr-workflow"] || body["x-arbr-workflow"] || "embedding",
     userId:      body.user || req.headers["x-arbr-user-id"] || req.apiKey?.userId || null,
     department:  body["x-arbr-department"] || req.headers["x-arbr-department"] || req.apiKey?.department || null,
+    // W3C trace context for the OTel span (stripped before storage; see logger.js).
+    _traceparent: req.headers.traceparent,
+    _tracestate: req.headers.tracestate,
   };
 
   // Resolve provider from model ID

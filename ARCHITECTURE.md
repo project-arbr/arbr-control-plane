@@ -121,6 +121,21 @@ nobody mistakes a demo-grade mechanism for a hardened one. Several of these are 
 single-instance tradeoffs; they matter most if you run multiple replicas or high burst
 traffic.
 
+- **OTel spans are emitted from the post-response log path, not the request path.**
+  When `ARBR_OTEL_ENABLED` is set, `telemetry.emit` is called from `logging/logger.js`
+  inside the same detached `setImmediate` that writes the `RequestRecord`, so tracing
+  adds nothing to request latency and cannot throw into it. Consequences to know:
+  (a) span duration is `latencyMs`, which is provider-measured on the LangChain path and
+  wall-clock on the proxy path — it is not gateway end-to-end time; (b) `ttftMs` is
+  captured only on the true byte-relay streaming path, and is absent elsewhere; (c) the
+  five early-return paths in `gateway/handler.js` (maintenance mode, per-app kill switch,
+  demo mode) write no record and so emit no span, so a maintenance window reads as silence
+  rather than errors; (d) the batch queue is per-process and in-memory, so an ungraceful
+  kill loses queued spans — graceful shutdown (SIGTERM) flushes them; (e) sampling is
+  head-based and per-process, though an incoming sampled `traceparent` is always honored so
+  caller-initiated traces stay complete. The master switch is `ARBR_OTEL_ENABLED`, never
+  `OTEL_ENABLED` (which would also flip `@langchain/core` into LangSmith-OTel mode).
+
 - **Arbr's own AI spend is counted but never attributed to a customer.** Arbr makes LLM
   calls for itself (task classification on the routing path, AI policy generation, eval
   judging, connection/model tests). Those are real money on the customer's provider key,

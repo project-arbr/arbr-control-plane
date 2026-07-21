@@ -343,6 +343,9 @@ async function handleOpenAICompat(req, res) {
     workflow: body["x-arbr-workflow"] || req.headers["x-arbr-workflow"] || "completion",
     userId: body.user || req.headers["x-arbr-user-id"] || req.apiKey?.userId || null,
     department: body["x-arbr-department"] || req.headers["x-arbr-department"] || req.apiKey?.department || null,
+    // W3C trace context for the OTel span (stripped before storage; see logger.js).
+    _traceparent: req.headers.traceparent,
+    _tracestate: req.headers.tracestate,
   };
 
   // Normalize max_tokens → maxTokens for the routing layer.
