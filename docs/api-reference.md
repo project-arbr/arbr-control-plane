@@ -356,3 +356,39 @@ Set the default model (applies to the default provider; used in auto mode).
 ```json
 { "model": "gpt-4o-mini" }
 ```
+
+### `POST /api/secrets/refresh`
+
+Administrator only. Re-resolves every credential-shaped env var (picks up a rotated
+cloud secret-manager value with no restart) and invalidates the connections cache.
+Never returns a value.
+
+```json
+{ "resolved": 3, "failures": [] }
+```
+
+## Operational readiness
+
+### `GET /health/ready`
+
+Public, no auth. Readiness — distinct from `GET /health` above. See
+[Operational readiness](/operational-readiness).
+
+### `GET /api/ops/export`
+
+Administrator only. Exports `Settings`, `Rule`, and `Cap` documents as one JSON object.
+Never includes provider credentials — that collection isn't queried.
+
+### `POST /api/ops/import`
+
+Administrator only. Restores a previously exported bundle. Creates fresh documents (not
+an ID-preserving merge); Settings fields are applied from a schema-derived allowlist, not
+a raw merge of the request body.
+
+### `POST /api/ops/support-bundle`
+
+Administrator only. Returns a diagnostics bundle — version/config summary, current
+Settings, disk usage, 24h request/error-rate counts, and the last 50 audit-log entries
+(projected to a fixed field list). Never includes credentials or captured request/response
+content — see [Operational readiness](/operational-readiness) for exactly what's excluded
+and why.

@@ -125,7 +125,7 @@ need the public hostname.
 - [ ] Gateway API keys issued per application
 - [ ] TLS at the proxy (Option A/B); 4100 not directly internet-reachable
 - [ ] MongoDB not publicly bound (compose default is fine — no host port); backups scheduled
-  (`mongodump` cron or a managed Mongo/Atlas)
+  (`ops/backup.sh` on a cron, or a managed Mongo/Atlas) — see "Backup & restore" below
 - [ ] Provider keys via environment/secret manager (env takes precedence over dashboard-stored)
 - [ ] Budgets configured with **Block/Downgrade** actions for cost protection
 - [ ] Payload capture remains off unless partner consent and retention requirements are documented
@@ -139,7 +139,27 @@ need the public hostname.
   aren't. Scale vertically first; Redis-backed state is the documented future path.
 - **Restarts are cheap**: all durable state is in MongoDB. `docker compose restart app` (or
   redeploy the image) loses only the in-memory caches.
-- **Upgrades**: `git pull && docker compose build app && docker compose up -d app`.
+- **Upgrades**: `git pull && docker compose build app && docker compose up -d app`. For a
+  gated, health-checked, auto-rollback-on-failure upgrade instead of building on the host,
+  see `ops/deploy.sh` and the walkthrough in
+  [Deploy on GCP → Deploying a new version](docs/deployment-gcp.md#deploying-a-new-version-gated-image-based) —
+  it pulls the CI-published image (`ghcr.io/project-arbr/arbr-control-plane`) rather than
+  building locally. It was written for the GCP reference deployment's compose-file layout;
+  on another cloud, adjust the `COMPOSE_FILES` variable at the top of the script to match
+  the compose files you actually run.
+
+## Backup & restore
+
+```sh
+bash ops/backup.sh          # mongodump via the mongo container, to a gzip archive
+bash ops/restore.sh <file>  # DESTRUCTIVE — confirms, restores, restarts, health-checks
+```
+
+Same caveat as above: both scripts hardcode the GCP reference deployment's compose-file
+list (`docker-compose.yml` + `docker-compose.gcp.yml` + `docker-compose.deploy.yml`) — adjust
+`COMPOSE_FILES` at the top of each script if this deployment uses a different set (e.g.
+`docker-compose.prod.yml` as set up above). Full runbook, verification checklist, and
+disaster-recovery scenario: [Operational readiness](docs/operational-readiness.md).
 - **Logs**: stdout (`docker compose logs -f app`); the boot banner prints port, mode
   (demo/live), and whether admin auth is on.
 - **Status endpoint** (`/api/status`): use a gateway key from your monitoring system to watch
