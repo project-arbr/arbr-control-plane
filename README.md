@@ -460,7 +460,7 @@ All via `.env` (see `.env.example`). Nothing is required to start.
 | `MONGO_URI` | `mongodb://localhost:27017/arbr-control-plane` | Database |
 | `ARBR_ADMIN_KEY` | — (open, dev only) | **Auth for the dashboard/admin API.** Required in production |
 | `ARBR_ENCRYPTION_KEY` | dev fallback | Encrypts dashboard-stored provider keys. Required in production |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `AWS_*` | — | Optional; enable live calls |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `AWS_*` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` / `XAI_API_KEY` / `GROQ_API_KEY` | — | Optional; enable live calls |
 | `DEFAULT_PROVIDER` | first live | Initial default-provider preference (runtime-selectable in Settings) |
 | `ARBR_DEFAULT_MAX_TOKENS` | `4096` | Default `max_tokens` when the caller omits it. Capped by the model's own output ceiling. |
 | `SEED_ON_BOOT` | `false`¹ | Docker only: load demo data on start (**wipes request records**) |
