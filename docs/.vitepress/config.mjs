@@ -60,6 +60,7 @@ export default defineConfig({
       {
         text: 'Features',
         items: [
+          { text: 'Feature reference (everything, one page)', link: '/features' },
           { text: 'Routing', link: '/routing' },
           { text: 'Model registry', link: '/models' },
           { text: 'Budgets & governance', link: '/budgets' },
