@@ -60,9 +60,10 @@ verified against the code, not approximated:
       diversion** (`routing/canaryEngine.js`) is applied inside this same step, for
       AUTO-routed traffic only — an explicit pin is never diverted.
 4. **Enforce budget** — `routing/capEngine.js` runs *after* routing, against the model
-   routing just decided on; it may block (429) or downgrade to a cheaper model, overriding
-   even a rule/AI-policy choice (never an explicit pin's fallback target — pins already
-   skipped this path).
+   routing just decided on. A breached enforcing cap outranks everything decided in step
+   3, **including an explicit pin** — that's the point of enforcement (per the code's own
+   comment at `gateway/handler.js:372-374`): block returns 429; downgrade forces the
+   provider's light-tier model regardless of how the served model was originally chosen.
 5. **Output-side clamp, then cache** — `pricing.clampMaxTokens` caps output to the *served*
    model's known ceiling, then the exact-match response cache
    (`routing/responseCache.js`) and, if enabled, the semantic cache
