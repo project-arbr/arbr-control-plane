@@ -2,7 +2,7 @@
 # from a minimal layer that serves both the API/gateway and the built dashboard
 # on one port. The runtime layer carries only production deps and no npm/yarn
 # (npm's bundled dependencies are a recurring CVE source flagged by image scans).
-FROM node:20-alpine AS webbuild
+FROM node:26-alpine AS webbuild
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN npm --prefix web ci
 COPY web ./web
 RUN npm --prefix web run build
 
-FROM node:20-alpine
+FROM node:26-alpine
 
 # Pick up base-image security fixes (e.g. openssl) without waiting on a new node tag.
 RUN apk --no-cache upgrade
