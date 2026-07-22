@@ -721,6 +721,68 @@ function ObservabilityTab({ gov, setGov, save, saving, ok, err }) {
         </form>
       </Card>
 
+      {/* Distributed tracing (OTLP) */}
+      <Card title="Distributed tracing">
+        {!gov.otelConfigured ? (
+          <div className="py-2 text-sm text-gray-500">
+            Export an OpenTelemetry span per gateway request, parented to the caller's trace.
+            Set <code className="rounded bg-gray-100 px-1 font-mono text-xs">ARBR_OTEL_ENABLED=true</code> and
+            an endpoint in the environment to turn this on. Once enabled, you can pause and tune it here without a redeploy.
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 text-xs text-gray-400">
+              Exporting to <span className="font-mono">{gov.otelEndpoint}</span>. The environment is the on/off switch for
+              loading the exporter; these controls narrow it at runtime.
+            </div>
+            <div className="divide-y divide-gray-100">
+              <div className="py-3">
+                <SettingRow
+                  label="Emit spans"
+                  sub="Pause tracing without restarting. Failures and caller-sampled traces are always kept."
+                >
+                  <Toggle
+                    checked={gov.otelEnabled !== false}
+                    onChange={(v) => setGov({ ...gov, otelEnabled: v })}
+                    label="emit spans"
+                  />
+                </SettingRow>
+              </div>
+              <div className="py-3">
+                <div className="label mb-1">Sample ratio</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input w-24"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={gov.otelSampleRatio ?? 1}
+                    onChange={(e) => setGov({ ...gov, otelSampleRatio: Number(e.target.value) })}
+                  />
+                  <span className="text-sm text-gray-400">0–1 · fraction of successful requests traced</span>
+                </div>
+              </div>
+              <div className="py-3">
+                <SettingRow
+                  label="Capture prompt & response on spans"
+                  sub="Off by default. Also requires payload capture (Guardrails tab) to be on."
+                >
+                  <Toggle
+                    checked={!!gov.otelCaptureContent}
+                    onChange={(v) => setGov({ ...gov, otelCaptureContent: v })}
+                    label="capture content on spans"
+                  />
+                </SettingRow>
+              </div>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); save("tracing")({ otelEnabled: gov.otelEnabled, otelSampleRatio: gov.otelSampleRatio, otelCaptureContent: gov.otelCaptureContent }); }}>
+              <SaveRow saving={saving.tracing} ok={ok.tracing} err={err.tracing} />
+            </form>
+          </>
+        )}
+      </Card>
+
       {/* Alerting & Webhooks */}
       <Card title="Alerting & Webhooks">
         <div className="divide-y divide-gray-100">

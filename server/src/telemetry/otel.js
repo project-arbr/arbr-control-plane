@@ -5,6 +5,7 @@
 const config = require("./config");
 const { parseTraceparent } = require("./traceContext");
 const attrs = require("./attributes");
+const runtime = require("./runtime");
 
 let _sdk = null;    // { api, provider, tracer } once initialized
 let _lastErrAt = 0; // rate-limit exporter error logs (a dead collector must not flood stdout)
@@ -48,6 +49,7 @@ function init() {
     // process is affected by tracing being on.
     const tracer = provider.getTracer("arbr-control-plane");
     _sdk = { api, provider, tracer };
+    runtime.start(); // begin polling Settings for soft on/off + sampling/content overrides
   } catch (err) {
     console.error("[telemetry] init failed, tracing disabled:", err.message);
     _sdk = null;
@@ -62,8 +64,10 @@ function isEnabled() {
 function emit(record, ctx = {}) {
   if (!_sdk) return;
   try {
+    const rt = runtime.current();
+    if (!rt.softEnabled) return; // paused from the dashboard without a redeploy
     const parent = parseTraceparent(ctx.traceparent);
-    if (!attrs.shouldSample(record, parent, config.sampleRatio)) return;
+    if (!attrs.shouldSample(record, parent, rt.sampleRatio)) return;
     const { api, tracer } = _sdk;
 
     // Anchor to ROOT_CONTEXT (we're in a detached setImmediate with no meaningful
@@ -86,7 +90,7 @@ function emit(record, ctx = {}) {
         kind: api.SpanKind.CLIENT,
         startTime: startMs,
         attributes: attrs.attributesFor(record, {
-          captureContent: config.captureContent,
+          captureContent: rt.captureContent,
           contentMaxChars: config.contentMaxChars,
         }),
       },
@@ -118,6 +122,7 @@ async function shutdown() {
   if (!_sdk) return;
   const p = _sdk;
   _sdk = null;
+  runtime.stop();
   try { await p.provider.shutdown(); } catch { /* best effort */ }
 }
 
