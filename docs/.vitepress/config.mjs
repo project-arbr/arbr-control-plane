@@ -6,6 +6,11 @@ export default defineConfig({
 
   ignoreDeadLinks: [/localhost/],
 
+  // Internal-only — not linked from the sidebar, and excluded here so it's
+  // genuinely file-only: not built, not in the local search index, not
+  // reachable by a direct /competitive-analysis-portkey URL.
+  srcExclude: ['competitive-analysis-portkey.md'],
+
   themeConfig: {
     siteTitle: 'ARBR',
 
