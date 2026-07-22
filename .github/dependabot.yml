@@ -54,3 +54,12 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+
+  # Dockerfile base image (node:20-alpine) — the only ecosystem on disk with no
+  # update coverage before this: base-image security patches never got a PR.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 1
+    labels: ["dependencies", "docker"]
