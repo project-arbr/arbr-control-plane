@@ -89,8 +89,14 @@ Open **http://localhost:4100** and follow the demo lifecycle:
 1. Inspect workload cost and model usage on **Overview**.
 2. Open **Recommendations → Recompute** to discover an optimisation opportunity.
 3. Inspect its projected savings and evidence requirements.
-4. Add a provider on the **Models** page when you are ready to run a live candidate
-   evaluation and guarded rollout.
+4. Open the seeded **"classification on gpt-4o"** recommendation — it's already past
+   approval, with a guarded canary live in production, no provider key required.
+5. Run `npm run demo:seed` (inside the container: `docker compose exec app npm run demo:seed`)
+   to seed a second canary that's already breaching its guardrails, then roll it back —
+   either by clicking **Roll back**, or by waiting for the auto-rollback monitor to catch it
+   itself. `npm run demo:reset` removes only this seeded data, never real data.
+6. Add a provider on the **Models** page when you are ready to run a live candidate
+   evaluation against your own traffic.
 
 ### Option B — Local (Node + your own MongoDB)
 
@@ -545,8 +551,11 @@ absent today:
   difficulty signal, not a learned model of answer quality.
 - **PII-aware routing.** Prompts and responses are masked in logs
   (`server/src/logging/piiFilter.js`), but PII is not yet used as a routing signal.
-- **Closed-loop evaluation.** Shadow-eval measures a candidate model on live traffic; it
-  does not yet feed routing automatically.
+- **Fully autonomous rollout.** Offline replay, shadow evaluation, and canary rollout are all
+  built and gate every routing change on real evidence — but the result is always surfaced to
+  a human to accept, promote, or roll back. Arbr will never expand or promote a rollout by
+  itself, even when every guardrail stays clean. This is permanent, by design, not a
+  to-be-finished feature — see the [optimisation lifecycle](#the-optimisation-lifecycle).
 - **High availability / horizontal scale.** The service runs as a single standalone
   instance today (like a LiteLLM proxy); Helm/Kubernetes is on the [roadmap](ROADMAP.md).
 
