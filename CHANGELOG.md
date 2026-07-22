@@ -7,6 +7,8 @@ changelogs under `clients/`.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-22
+
 ### Added
 - Eval-backed routing: offline replay with recommendation quality-gating (#79), durable
   eval worker with masked-fidelity labeling (#88), reusable benchmarks with a model
@@ -43,6 +45,29 @@ changelogs under `clients/`.
   documentation (#170).
 - Providers: LiteLLM connection type is now discoverable from the UI (#171).
 - Ingestion: an observe-only ingestion API (#172).
+- Unified optimization workflow: a recommendation's lifecycle stage (opportunity through
+  accepted, shadow, canary, or rolled back) is derived on read from its linked records
+  rather than stored, with realised-vs-projected outcome tracking (#180).
+- Exportable recommendation evidence report, as JSON or Markdown, assembled on demand from
+  every linked dataset, eval run, campaign, experiment, and audit entry (#181).
+- Design-partner demo fixture: a full opportunity-to-canary-to-rollback story seeded with
+  zero provider keys, using the same production aggregation/judging code as real evals
+  (`npm run demo:seed` / `demo:reset`) (#182).
+- Internal spend accounting: every LLM call Arbr makes for itself (classification, policy
+  generation, judging, eval replay) now goes through one wrapper that tags and prices it,
+  keeping it out of customer-facing analytics (#183, #184).
+- Cloud secret-manager integration: any credential-shaped env var can hold a `gcp-sm://...`
+  reference instead of a literal, resolved transparently at boot and on a periodic or
+  on-demand refresh; production fails closed on a resolution failure. AWS/Azure adapters
+  are documented against the same interface (#189).
+- Operational readiness package: a `/health/ready` readiness check distinct from the
+  existing liveness check, backup/restore scripts, config/policy export and import, a
+  support-diagnostics bundle with no credentials or captured payloads, a disk-usage guard
+  on deploy, and bounded container log growth (#190).
+- OpenTelemetry trace export: OTLP spans per request, off by default, with sample-ratio
+  and content-capture controls adjustable at runtime from the Governance page (#191, #192,
+  #193).
+- A projectarbr.org link in the web console's sidebar footer (#186).
 
 ### Changed
 - Console reoriented around the five stages (Connect, See, Recommend, Route, Govern)
@@ -50,6 +75,9 @@ changelogs under `clients/`.
   the ARBR monochrome brand (#144-#146).
 - Hot-path latency reduced via a Settings cache and parallel pre-LLM fetches (#85).
 - Web stack migrated to Tailwind CSS v4 (#70).
+- Roughly twenty documentation pages corrected for drift against the actual API, config,
+  and pricing (#173, #175-#179); the README's autonomy claims and quickstart walkthrough
+  clarified (#194); the README dashboard screenshot refreshed (#187).
 
 ### Fixed
 - Eval judge was passed a string instead of a messages array, so judging never worked;
@@ -64,6 +92,10 @@ changelogs under `clients/`.
 - Arbr's own AI spend was polluting customer analytics views (#167).
 - Sign-out showed the admin-key form even in OIDC/trusted-header mode (#168).
 - Sidebar tagline pushed Users out of view without scrolling (#169).
+- `handler.js` logged a `semantic_cache` routing decision the schema's enum didn't
+  include, silently dropping every semantic-cache-hit log row (#174).
+- Sidebar footer links stacked into two rows after adding the projectarbr.org link,
+  pushing Users below the fold again; put back on one row (#188).
 
 ## [0.2.0] - 2026-06-29
 
@@ -99,6 +131,7 @@ Anthropic, OpenAI, Google Gemini, AWS Bedrock, and OpenAI-compatible providers;
 deterministic human-approved routing rules; spend caps; request logging with cost
 attribution; React dashboard; JS and Python client SDKs.
 
-[Unreleased]: https://github.com/project-arbr/arbr-control-plane/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/project-arbr/arbr-control-plane/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/project-arbr/arbr-control-plane/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/project-arbr/arbr-control-plane/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/project-arbr/arbr-control-plane/releases/tag/v0.1.0
