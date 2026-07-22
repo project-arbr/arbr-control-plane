@@ -26,39 +26,62 @@ port (`web/dist`), so the whole thing runs as one container.
 
 `server/src/index.js` → `start()`:
 
-1. Connect to MongoDB (`config.mongoUri`).
-2. `registry.init()` — seed the `ModelEntry` baseline if empty, warm the in-memory model cache.
-3. Mount routes: the gateway (`/v1/chat`, `/v1/chat/completions`), discovery
+1. `assertProductionReady()` — in production, fail closed before any network bind if
+   `ARBR_ADMIN_KEY`/`ARBR_ENCRYPTION_KEY` are missing.
+2. Resolve any credential-shaped env var that holds a secret-manager reference
+   (`security/secretResolver.js`) — before Mongo connects or anything reads a credential.
+   A no-op for a literal value; in production, a resolution failure refuses to start.
+3. Connect to MongoDB (`config.mongoUri`).
+4. `registry.init()` — seed the `ModelEntry` baseline if empty, warm the in-memory model cache.
+5. Mount routes: the gateway (`/v1/chat`, `/v1/chat/completions`), discovery
    (`/v1/models`, `/v1/providers`, `/v1/task-types`), the admin API (`/api/*`, master-key
-   gated), and the static dashboard.
-4. Start a daily purge of `RequestRecord`s past the retention window, then `listen`.
+   gated), and the static dashboard. `GET /health` (liveness) and `GET /health/ready`
+   (readiness) are mounted here too — see `health/readiness.js`.
+6. Start a daily purge of `RequestRecord`s past the retention window, start the
+   secret-resolver's periodic refresh, then `listen`.
 
 ## Request lifecycle
 
-The path of one gateway request (`server/src/gateway/handler.js`, `openaiCompat.js`):
+The real order in `server/src/gateway/handler.js`'s `handleChat` (shared by `openaiCompat.js`),
+verified against the code, not approximated:
 
-1. **Ingress + auth** — `auth.middleware` validates the API key (when required), binds
-   attribution (application / workflow / user), and enforces per-key rate limits.
-2. **Resolve route** — routing precedence honors the developer's explicit choice:
+1. **Ingress** — validate the body, then read settings/app-config/router in parallel. Three
+   early-exit checks fire here, each with no record written: maintenance mode (503), a
+   per-app kill switch (503), and demo mode with no live provider (503).
+2. **Input guardrails** — the max-tokens guardrail clamps `body.maxTokens` to the configured
+   ceiling; prompt injection detection (`gateway/promptInjection.js`, opt-in) blocks (400)
+   before any routing happens if enabled.
+3. **Resolve route** (`resolveRoute`) — routing precedence honors the developer's explicit
+   choice:
    1. An explicit, available model is used **as-is**, skipping all policy.
    2. Otherwise (`model: "auto"`, absent, or the requested provider isn't connected) the
-      router decides: **cache → rules → automated routing (cost guardrail / AI policy) →
-      default**, with fallback to another live provider on error.
-3. **Classify task** — `classify/classifier.js` tags the request's task type
-   (`provided` | `keyword` | `ai`), which feeds the routing policy.
-4. **Enforce budget** — `routing/capEngine.js` may block (429) or downgrade to a cheaper
-   model when a cap is breached.
-5. **Dispatch** — OpenAI-compatible providers (openai/deepseek/moonshot/xai/groq/litellm)
+      router decides: rules → automated routing (cost guardrail / AI policy) → default,
+      with task classification (`classify/classifier.js`) feeding that decision. **Canary
+      diversion** (`routing/canaryEngine.js`) is applied inside this same step, for
+      AUTO-routed traffic only — an explicit pin is never diverted.
+4. **Enforce budget** — `routing/capEngine.js` runs *after* routing, against the model
+   routing just decided on; it may block (429) or downgrade to a cheaper model, overriding
+   even a rule/AI-policy choice (never an explicit pin's fallback target — pins already
+   skipped this path).
+5. **Output-side clamp, then cache** — `pricing.clampMaxTokens` caps output to the *served*
+   model's known ceiling, then the exact-match response cache
+   (`routing/responseCache.js`) and, if enabled, the semantic cache
+   (`routing/semanticCache.js`) are checked — both keyed on the model budget enforcement
+   just settled on, not the originally-resolved one. Output guardrails apply to a cache hit
+   too.
+6. **Dispatch** — OpenAI-compatible providers (openai/deepseek/moonshot/xai/groq/litellm)
    are reverse-proxied raw, preserving tools/vision/streaming; native providers
    (anthropic/gemini/bedrock-nova) go through the LangChain factory.
-6. **Respond, then log** — the response is returned first; `logging/logger.js` writes one
-   `RequestRecord` asynchronously (cost computed from the pricing registry).
+7. **Respond, then log** — the response is returned first; `logging/logger.js` writes one
+   `RequestRecord` asynchronously (cost computed from the pricing registry), and emits an
+   OTel span from the same detached callback if tracing is enabled (see below).
 
 ## Where things live
 
 ```
 server/src/
-  index.js          boot: mongo → registry.init() → mount routes → listen
+  index.js          boot: mongo → registry.init() → mount routes → listen; GET /health
+                    (liveness) and GET /health/ready (readiness — see health/ below)
   config.js         env-driven config + demo-mode detection
   gateway/          /v1 request handling
     core.js           shared resolveRoute / fallback / headers (both entry points)
@@ -66,21 +89,48 @@ server/src/
     openaiCompat.js   OpenAI-compatible /v1/chat/completions (raw proxy + native paths)
     auth.js           data-plane API-key auth, attribution, shared rate limits
     capabilities.js   per-provider/model tool-call support
-  routing/          ruleEngine · autoRouter · aiPolicy (scoring engine) · capEngine · cache
+    promptInjection.js  opt-in deny-list check on inbound messages
+    outputGuardrail.js  opt-in deny-list check + PII masking on outbound responses
+    embeddings.js     POST /v1/embeddings (Gemini + OpenAI-compat backends)
+    ingest.js         POST /v1/ingest — observe-only bulk metadata ingestion
+    realtimeProxy.js / wsAuth.js   POST /v1/realtime — OpenAI Realtime WebSocket proxy
+  routing/          ruleEngine · autoRouter · aiPolicy (scoring engine) · capEngine · cache ·
+                    canaryEngine / canaryMonitor (guarded rollout + auto-rollback) ·
+                    semanticCache · errorAlertMonitor · notifier
   classify/         task-type classification (provided / keyword / AI)
+  recommend/        engine.js (opportunity detection) · stage.js / stageBatch.js (derived
+                    lifecycle stage) · outcome.js (realised-vs-projected) ·
+                    evidenceReport.js (exportable report)
+  eval/             dataset.js (from-traffic sampler) · replay.js (offline replay) ·
+                    rubricJudge.js / judge.js (scoring) · shadow.js (live shadow eval) ·
+                    thresholds.js (risk-tiered pass gates) · worker.js (background runner) ·
+                    demoFixture.js (zero-key demo story)
   providers/
     llm-router/       vendored LangChain factory unifying provider adapters
     connections.js    which providers are "live" (have credentials)
   pricing/          cost registry + pricing table
   litellm/ lmsys/ livebench/   catalog + benchmark-score sync jobs (manual / on-demand)
-  security/secrets.js   AES-256-GCM encryption of provider keys at rest
+  security/
+    secrets.js          AES-256-GCM encryption of provider keys at rest
+    secretRef.js / secretResolver.js / secretProviders/   cloud secret-manager
+                        integration — resolves a `gcp-sm://...` reference transparently;
+                        one new file per additional cloud (AWS/Azure documented, not built)
+  internal/complete.js   the one call site for every LLM call Arbr makes for itself
+                        (classification, policy generation, judging) — tagged and excluded
+                        from customer-facing analytics
+  health/readiness.js   pure GET /health/ready decision logic (shutting-down / Mongo state)
+  telemetry/        OpenTelemetry: otel.js (OTLP export) · attributes.js (span shape,
+                    redaction) · runtime.js (dashboard-adjustable sample ratio / on-off) —
+                    off by default, wired from the post-response log path (see below)
   maintenance/purge.js  retention purge of old request records
   api/routes.js     thin re-export of api/routes/* domain modules (master-key gated)
-  api/routes/       status, caps, keys, recommendations, evals, analytics, …
+  api/routes/       status, caps, keys, recommendations, evals, analytics, ops
+                    (config export/import, support bundle), …
   models/           Mongoose schemas (see below)
 web/src/            React + Vite + Tailwind dashboard (api.js → /api)
 clients/            JS and Python SDKs (published separately)
 docs/               VitePress documentation site
+ops/                deploy.sh (gated, rollback-safe) · backup.sh / restore.sh
 ```
 
 ## Data model (MongoDB collections)
@@ -98,7 +148,11 @@ docs/               VitePress documentation site
 | `Recommendation` | Costed optimization suggestions |
 | `ApplicationConfig` | Per-application routing policy |
 | `CustomProvider` | User-added OpenAI-compatible providers |
-| `AuditLog` | Governance audit trail |
+| `AuditLog` | Governance audit trail, per-user attributed |
+| `User` / `Session` | Per-user identity (OIDC / trusted-header) and role, server-side sessions |
+| `EvalDataset` / `EvalItem` / `EvalRun` / `EvalResult` | Offline-replay evaluation: a frozen sample of real traffic, a candidate run against it, and judged results |
+| `EvalCampaign` / `EvalPair` | Shadow evaluation: live-traffic mirroring config and judged candidate-vs-baseline pairs |
+| `RoutingExperiment` | A guarded canary rollout — baseline/candidate models, rollout %, guardrails, status |
 
 ## Key concepts
 
