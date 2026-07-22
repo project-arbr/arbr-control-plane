@@ -25,15 +25,25 @@ const { maybeShadowEval } = require("../eval/shadow");
 const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
 const ApplicationConfig = require("../models/ApplicationConfig");
+const { createBoundedTtlCache } = require("../utils/boundedTtlCache");
 
 // Short-lived cache to avoid a DB hit per request for app configs.
-const _appConfigCache = new Map(); // appName → { cfg, expiresAt }
+//
+// Bounded on purpose: the key is the caller-supplied application name, and
+// anonymous calls are allowed until Settings.requireApiKey is turned on, so an
+// untrusted caller can otherwise mint a permanent entry per request. The cap is
+// far above any real deployment's application count, so it only ever bites abuse.
+const _appConfigCache = createBoundedTtlCache({ ttlMs: 30_000, maxEntries: 1000 });
+
 async function getAppConfig(appName) {
   if (!appName || appName === "unknown") return null;
-  const cached = _appConfigCache.get(appName);
-  if (cached && cached.expiresAt > Date.now()) return cached.cfg;
+  const hit = _appConfigCache.getEntry(appName);
+  if (hit) return hit.value;
   const cfg = await ApplicationConfig.findOne({ applicationName: appName }).lean().catch(() => null);
-  _appConfigCache.set(appName, { cfg, expiresAt: Date.now() + 30_000 });
+  // Misses are cached too. Unknown names are the cheap case to spam, and caching
+  // the null is exactly what keeps that traffic off the database; now that the
+  // map is bounded, doing so no longer trades a DB problem for a memory one.
+  _appConfigCache.set(appName, cfg);
   return cfg;
 }
 

@@ -2,9 +2,14 @@
 // Events: cap_breach, provider_error (future), new_application (future).
 // Never throws into the caller — network failures are logged and swallowed.
 const Settings = require("../models/Settings");
+const { createBoundedTtlCache } = require("../utils/boundedTtlCache");
 
 // In-memory dedup: prevents duplicate cap_breach pings within a 5-minute window.
-const recentlySent = new Map(); // key → last sent timestamp
+// The TTL is the dedup window, so a live entry means "already sent recently" and
+// entries prune themselves. Bounded because the dedup key falls back to a slice
+// of the payload, which is not guaranteed stable across callers.
+const DEDUP_WINDOW_MS = 5 * 60 * 1000;
+const recentlySent = createBoundedTtlCache({ ttlMs: DEDUP_WINDOW_MS, maxEntries: 1000 });
 
 async function notify(event, payload) {
   try {
@@ -12,10 +17,9 @@ async function notify(event, payload) {
     const url = settings.webhookUrl;
     if (!url) return;
 
-    // Dedup: same event+key → suppress for 5 minutes.
+    // Dedup: same event+key → suppress for the window.
     const dedupKey = `${event}:${payload.key || JSON.stringify(payload).slice(0, 80)}`;
-    const lastSent = recentlySent.get(dedupKey) || 0;
-    if (Date.now() - lastSent < 5 * 60 * 1000) return;
+    if (recentlySent.has(dedupKey)) return;
     recentlySent.set(dedupKey, Date.now());
 
     await fetch(url, {
