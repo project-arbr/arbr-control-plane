@@ -22,10 +22,14 @@ When reporting, include where possible:
 
 This project is an LLM gateway and control plane. Areas of particular interest:
 
-- The admin API and dashboard authentication (`ARBR_ADMIN_KEY`)
-- Encryption of provider credentials at rest (`ARBR_ENCRYPTION_KEY`)
+- The admin API and dashboard authentication (`ARBR_ADMIN_KEY`, and per-user OIDC /
+  trusted-header identity and role-based access control)
+- Encryption of provider credentials at rest (`ARBR_ENCRYPTION_KEY`), and resolution of
+  credentials held in a cloud secret manager (`gcp-sm://...` references)
 - The OpenAI-compatible and native gateway endpoints
-- Any path that could leak stored provider keys
+- Any path that could leak stored provider keys, including config/policy export and the
+  support-diagnostics bundle — both are designed to exclude credentials and captured
+  request/response content by construction, not by redaction
 
 ## Supported versions
 
