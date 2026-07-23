@@ -1,0 +1,43 @@
+{
+  "name": "arbr-cli",
+  "version": "0.1.0",
+  "description": "Arbr CLI — audit a log of past LLM requests for premium-model overuse and get a shareable HTML report, with zero server, zero database, and zero signup.",
+  "license": "MIT",
+  "bin": {
+    "arbr": "./bin/arbr.js"
+  },
+  "main": "./src/audit.js",
+  "files": [
+    "bin",
+    "src",
+    "fixtures",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "audit:demo": "node bin/arbr.js audit --demo"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "cost",
+    "audit",
+    "cli",
+    "openai",
+    "anthropic",
+    "control-plane"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/project-arbr/arbr-control-plane.git",
+    "directory": "clients/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/project-arbr/arbr-control-plane/issues"
+  },
+  "homepage": "https://github.com/project-arbr/arbr-control-plane/tree/main/clients/cli#readme"
+}
