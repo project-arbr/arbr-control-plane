@@ -14,14 +14,35 @@ function pct(n) {
   return `${Math.round(n)}%`;
 }
 
+// Sums groups (whatever their taskType) down to one row per model — the "full
+// picture" view both audit and wrap can show, independent of whether task-based
+// overuse detection ran at all.
+function aggregateByModel(groups) {
+  const byModel = new Map();
+  for (const g of groups || []) {
+    const key = g.model || "unknown";
+    if (!byModel.has(key)) byModel.set(key, { model: key, requests: 0, cost: 0 });
+    const m = byModel.get(key);
+    m.requests += g.requests || 0;
+    m.cost += g.currentCost || 0;
+  }
+  return [...byModel.values()].sort((a, b) => b.cost - a.cost);
+}
+
 // Renders a single self-contained HTML file — no external fonts, scripts, or
 // stylesheets, so it opens correctly offline and is safe to send as a standalone
 // attachment. Uses the same design-token pattern (paper/ink/amber/blue, light+dark
 // via prefers-color-scheme) as Arbr's other shareable reports, scoped to system fonts
 // to keep this package small and independent of network access at render time.
+//
+// opts.mode: "audit" (default) or "wrap" — wrap sessions never run task
+// classification in v1, so they skip the recommendations table entirely (it would
+// always be empty) and lead with the per-model breakdown instead, with copy that
+// doesn't imply overuse detection was attempted.
 function renderReport(result, opts = {}) {
-  const { totalRequests, totalCost, recommendations, flaggedCost, flaggedSavings, overusePct } = result;
+  const { totalRequests, totalCost, recommendations, flaggedCost, flaggedSavings, overusePct, groups } = result;
   const generatedAt = opts.generatedAt || new Date();
+  const mode = opts.mode || "audit";
 
   const rows = recommendations.map((r) => `
     <tr>
@@ -32,18 +53,38 @@ function renderReport(result, opts = {}) {
       <td class="num tone-amber">${money(r.projectedSavings)}</td>
     </tr>`).join("");
 
-  const emptyState = recommendations.length === 0
+  const emptyState = mode === "audit" && recommendations.length === 0
     ? `<p class="empty">No premium-model overuse found in this log — either the traffic is already
        well-routed, or there isn't enough volume yet in any one (task type, model) group to be sure
        (each group needs at least ${result.minRequests || 20} requests before it's flagged).</p>`
     : "";
+
+  const wrapNote = mode === "wrap"
+    ? `<p class="empty">This session's traffic isn't task-classified, so it's reported by spend and
+       model mix only — not per-task overuse. Run <span class="num">arbr audit</span> on a
+       task-labeled log for "switch model X&nbsp;&#8594;&nbsp;Y" recommendations.</p>`
+    : "";
+
+  const modelRows = aggregateByModel(groups).map((m) => `
+    <tr>
+      <td class="num">${esc(m.model)}</td>
+      <td class="num">${m.requests.toLocaleString()}</td>
+      <td class="num">${money(m.cost)}</td>
+    </tr>`).join("");
+  const modelBreakdown = (groups && groups.length > 0) ? `
+  <div class="overflow">
+    <table>
+      <thead><tr><th>Model</th><th>Requests</th><th>Spend</th></tr></thead>
+      <tbody>${modelRows}</tbody>
+    </table>
+  </div>` : "";
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Arbr Audit Report</title>
+<title>${mode === "wrap" ? "Arbr Wrap Report" : "Arbr Audit Report"}</title>
 <style>
   :root {
     --paper: #EEF0F3; --surface: #FFFFFF; --ink: #14171C; --ink-soft: #3B404A;
@@ -84,24 +125,29 @@ function renderReport(result, opts = {}) {
 </head>
 <body>
 <div class="page">
-  <p class="eyebrow">Arbr Audit</p>
-  <h1>Where your LLM spend is going, and what it could cost instead</h1>
+  <p class="eyebrow">${mode === "wrap" ? "Arbr Wrap" : "Arbr Audit"}</p>
+  <h1>${mode === "wrap" ? "What this session cost, model by model" : "Where your LLM spend is going, and what it could cost instead"}</h1>
 
   <div class="stat-row">
     <div class="stat">
       <div class="stat-value num">${totalRequests.toLocaleString()}</div>
-      <div class="stat-label">requests analyzed</div>
+      <div class="stat-label">requests ${mode === "wrap" ? "this session" : "analyzed"}</div>
     </div>
     <div class="stat">
       <div class="stat-value num">${money(totalCost)}</div>
-      <div class="stat-label">total spend in this log</div>
+      <div class="stat-label">total spend ${mode === "wrap" ? "this session" : "in this log"}</div>
     </div>
     <div class="stat">
+      ${mode === "wrap" ? `
+      <div class="stat-value num">${aggregateByModel(groups).length}</div>
+      <div class="stat-label">models used this session</div>` : `
       <div class="stat-value num tone-amber">${money(flaggedSavings)}</div>
-      <div class="stat-label">projected savings found (${pct(overusePct)} of spend)</div>
+      <div class="stat-label">projected savings found (${pct(overusePct)} of spend)</div>`}
     </div>
   </div>
 
+  ${wrapNote}
+  ${mode === "wrap" ? modelBreakdown : ""}
   ${emptyState}
   ${recommendations.length > 0 ? `
   <div class="overflow">
@@ -112,9 +158,10 @@ function renderReport(result, opts = {}) {
       <tbody>${rows}</tbody>
     </table>
   </div>` : ""}
+  ${mode === "audit" ? modelBreakdown : ""}
 
   <footer>
-    Generated by <span class="num">arbr audit</span> on ${esc(generatedAt.toISOString().slice(0, 10))}.
+    Generated by <span class="num">arbr ${mode === "wrap" ? "wrap" : "audit"}</span> on ${esc(generatedAt.toISOString().slice(0, 10))}.
     Flags compare task type and model tier against a static price table, not answer quality —
     verify a suggested downgrade against your own traffic before switching.
   </footer>
