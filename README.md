@@ -9,7 +9,9 @@
 <h1 align="center">Arbr Control Plane</h1>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/arbr-client"><img alt="npm" src="https://img.shields.io/npm/v/arbr-client?label=arbr-client&color=2f37ff"></a>
+  <a href="https://www.npmjs.com/package/arbr-client"><img alt="npm: arbr-client" src="https://img.shields.io/npm/v/arbr-client?label=arbr-client&color=2f37ff"></a>
+  <a href="https://pypi.org/project/arbr-client/"><img alt="PyPI: arbr-client" src="https://img.shields.io/pypi/v/arbr-client?label=pypi&color=2f37ff"></a>
+  <a href="https://www.npmjs.com/package/arbr-audit"><img alt="npm: arbr-audit" src="https://img.shields.io/npm/v/arbr-audit?label=arbr-audit&color=2f37ff"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2f37ff"></a>
   <a href="package.json"><img alt="Node ≥18" src="https://img.shields.io/badge/node-%E2%89%A518-171817"></a>
   <a href="assets/brand/BRAND.md"><img alt="Brand guidelines" src="https://img.shields.io/badge/brand-guidelines-2f37ff"></a>
@@ -18,6 +20,7 @@
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
   <a href="#where-arbr-fits">Why Arbr</a> ·
+  <a href="clients/cli">Try the CLI</a> ·
   <a href="docs/quickstart.md">Docs</a> ·
   <a href="ROADMAP.md">Roadmap</a>
 </p>
@@ -73,6 +76,24 @@ be the right answer. Arbr is for the next question:
   models remain pinned; routing rules and experiments are auditable and reversible.
 - **Realised, not promised, savings:** Arbr records both requested and served models, so the
   post-rollout result can be compared with the original baseline.
+
+---
+
+## Packages
+
+The control plane below is the full product. These are published, independently
+installable pieces — no Docker or MongoDB required for any of them:
+
+| Package | Install | What it's for |
+|---|---|---|
+| [`arbr-client`](clients/js) — npm | `npm install arbr-client` | JS/TS gateway client: retries, timeouts, typed errors, a LangChain adapter |
+| [`arbr-client`](clients/python) — PyPI | `pip install arbr-client` | Same, for Python ≥ 3.11 |
+| [`arbr-audit`](clients/cli) — npm | `npx arbr-audit audit --demo` | Standalone CLI: audit a request log for premium-model overuse, or `wrap` a coding agent live for session cost — zero server, zero database, zero signup |
+
+The two `arbr-client` packages talk to a *running* Arbr gateway. `arbr-audit` doesn't
+need one at all — it's the fastest way to see Arbr's actual recommendation logic
+against your own data or a live coding-agent session before standing up the full
+control plane.
 
 ---
 
