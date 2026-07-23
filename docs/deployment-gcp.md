@@ -150,6 +150,66 @@ Certbot edits the nginx config and sets up auto-renewal. Your dashboard is now a
 
 In GCP Console → **VPC Network → Firewall rules** — confirm there is **no rule** allowing ingress on port `4100` from `0.0.0.0/0`. Only ports `80` and `443` should be publicly reachable.
 
+## Running more than one replica
+
+Optional — Steps 1-9 already give you a working single-instance deployment. This section is
+for teams that want more than one `app` container behind nginx, for capacity or redundancy.
+
+**What's actually safe across replicas today**: budget enforcement (`CapSpend`) and RPM limits
+(`RateBucket`) are Mongo-backed with atomic updates — correct with any number of replicas, no
+double-spend or double-counting. Two things are *not* shared across replicas, by design, and
+are worth knowing rather than being surprised by: the exact-match/semantic response caches are
+per-process, so your aggregate cache-hit rate goes down as replicas go up (not a correctness
+issue — a miss just means a real provider call instead of a hit); and the OpenTelemetry span
+batch queue is per-process, so an ungraceful kill of one replica can lose that replica's queued
+spans (observability data only, never request data).
+
+1. **Overlay the replica ports file** and scale explicitly:
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.gcp.yml -f docker-compose.replicas.yml up -d --scale app=3
+   ```
+   This runs 3 `app` containers on host ports 4100-4102 (see `docker-compose.replicas.yml` —
+   add more ports to its range for more replicas).
+
+2. **Point nginx at all of them** — replace the single `proxy_pass http://127.0.0.1:4100;`
+   lines from Step 7 with an `upstream` block:
+   ```nginx
+   upstream arbr_app {
+       server 127.0.0.1:4100;
+       server 127.0.0.1:4101;
+       server 127.0.0.1:4102;
+   }
+
+   server {
+       listen 80;
+       server_name arbr.yourco.com;
+
+       location / {
+           proxy_pass http://arbr_app;
+           proxy_set_header Host              $host;
+           proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_read_timeout 300s;
+       }
+
+       location /v1/chat/completions {
+           proxy_pass http://arbr_app;
+           proxy_http_version 1.1;
+           proxy_set_header Connection '';
+           proxy_buffering off;
+           proxy_cache off;
+           proxy_read_timeout 300s;
+           chunked_transfer_encoding on;
+       }
+   }
+   ```
+   Then `sudo nginx -t && sudo systemctl reload nginx`.
+
+3. **Know the `ops/deploy.sh` gotcha**: its `up -d` call doesn't pass `--scale`, so a routine
+   deploy silently scales you back down to 1 replica. If you're running N replicas, edit the
+   `up -d --no-build app` line in `ops/deploy.sh` to add `--scale app=N` — otherwise every
+   deploy undoes your scaling.
+
 ## Step 10 — First login and setup
 
 1. Open **https://arbr.yourco.com** — the login screen appears

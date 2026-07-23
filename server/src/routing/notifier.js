@@ -2,14 +2,20 @@
 // Events: cap_breach, provider_error (future), new_application (future).
 // Never throws into the caller — network failures are logged and swallowed.
 const Settings = require("../models/Settings");
-const { createBoundedTtlCache } = require("../utils/boundedTtlCache");
+const NotificationDedup = require("../models/NotificationDedup");
 
-// In-memory dedup: prevents duplicate cap_breach pings within a 5-minute window.
-// The TTL is the dedup window, so a live entry means "already sent recently" and
-// entries prune themselves. Bounded because the dedup key falls back to a slice
-// of the payload, which is not guaranteed stable across callers.
-const DEDUP_WINDOW_MS = 5 * 60 * 1000;
-const recentlySent = createBoundedTtlCache({ ttlMs: DEDUP_WINDOW_MS, maxEntries: 1000 });
+// Cross-replica dedup: same event+key suppressed for the window (see
+// NotificationDedup's TTL index). Bounded because the dedup key falls back to
+// a slice of the payload, which is not guaranteed stable across callers.
+async function claimedByThisCall(dedupKey) {
+  try {
+    await NotificationDedup.create({ dedupKey });
+    return true;
+  } catch (err) {
+    if (err.code === 11000) return false; // another replica already sent this
+    throw err;
+  }
+}
 
 async function notify(event, payload) {
   try {
@@ -17,10 +23,8 @@ async function notify(event, payload) {
     const url = settings.webhookUrl;
     if (!url) return;
 
-    // Dedup: same event+key → suppress for the window.
     const dedupKey = `${event}:${payload.key || JSON.stringify(payload).slice(0, 80)}`;
-    if (recentlySent.has(dedupKey)) return;
-    recentlySent.set(dedupKey, Date.now());
+    if (!(await claimedByThisCall(dedupKey))) return;
 
     await fetch(url, {
       method: "POST",

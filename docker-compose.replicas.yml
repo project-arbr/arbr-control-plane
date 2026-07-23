@@ -1,0 +1,18 @@
+# Optional overlay enabling more than one `app` container behind nginx's
+# upstream — see docs/deployment-gcp.md's "Running more than one replica"
+# section for the full walkthrough (nginx config, when this is and isn't
+# safe, and a deploy-script gotcha to know about).
+#
+# Layer this on top of the base file(s) and scale explicitly:
+#   docker compose -f docker-compose.yml -f docker-compose.gcp.yml -f docker-compose.replicas.yml up -d --scale app=3
+#
+# Each replica claims the next host port in the range below (4100, 4101,
+# 4102); nginx's upstream block targets those ports directly. Add more
+# ports to the range if you need more than 3 replicas.
+services:
+  app:
+    # !override replaces the base file's port list instead of appending to
+    # it (Compose's default list-merge behavior would otherwise leave both
+    # the single fixed mapping and this range active at once).
+    ports: !override
+      - "4100-4102:4100"
