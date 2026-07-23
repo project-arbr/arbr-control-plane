@@ -1,6 +1,7 @@
 # Competitive Analysis: Portkey AI Gateway vs. Arbr
 
-> **Last updated:** July 2026  
+> **Last updated:** 2026-07-23 (refreshed against currently shipped code — rows 37/53/55/56 and
+> the sections referencing them were stale from the prior 2026-07-03 pass)  
 > **Purpose:** Product roadmap input — feature gap identification and prioritization
 
 ---
@@ -149,7 +150,7 @@
 | 34 | Feedback collection | ✅ | ❌ No user/app feedback on responses | Missing |
 | 35 | Response quality scoring | ✅ Weighted | ❌ | Missing |
 | 36 | Agent / workflow tracing | ✅ Step-by-step spans | ❌ No distributed trace spans | Missing |
-| 37 | OpenTelemetry export | ✅ | ❌ | Missing |
+| 37 | OpenTelemetry export | ✅ | ✅ OTLP trace spans per request, sample-ratio + content-capture controls | Partial — trace export shipped; no aggregate metrics endpoint yet ([#30](https://github.com/project-arbr/arbr-control-plane/issues/30)) |
 | 38 | Log export | ✅ | ✅ CSV export for requests + audit log | Partial |
 | 39 | Provider health monitoring | ✅ | ✅ Live table with 30s auto-refresh | Covered |
 | 40 | Admin audit log | ✅ | ✅ Full audit log + CSV export | Covered |
@@ -180,10 +181,10 @@
 
 | # | Feature | Portkey | Arbr | Gap |
 |---|---------|---------|------|-----|
-| 53 | Role-based access control | ✅ | ❌ Single admin role | Missing |
-| 54 | Multi-tenant workspaces | ✅ | ❌ Single-tenant only | Missing |
-| 55 | SSO / SAML | ✅ | ❌ | Missing |
-| 56 | Model/provider allowlist | ✅ Network-level | ❌ Kill switch only; no per-app model allowlist | Partial |
+| 53 | Role-based access control | ✅ | ✅ Viewer/operator/administrator roles, per-user identity | Partial — 3 fixed roles, not custom/granular permissions |
+| 54 | Multi-tenant workspaces | ✅ | ❌ Single-tenant only (RBAC is roles within one org, not org isolation) | Missing |
+| 55 | SSO / SAML | ✅ | ✅ OIDC (Okta, Auth0, Google Workspace, Keycloak, ...) | Partial — SAML specifically not supported |
+| 56 | Model/provider allowlist | ✅ Network-level | ✅ Per-app `modelOptOut` deny-list; kill switch | Partial — deny-list, not an explicit allowlist |
 | 57 | Alerts | ✅ | ✅ Error rate + budget cap webhooks | Covered |
 | 58 | HIPAA / SOC2 / GDPR | ✅ | ❌ No compliance certifications | Missing |
 | 59 | Self-hosted / on-premise | ✅ | ✅ Docker-based | Covered |
@@ -228,6 +229,15 @@ Separately, **traffic splitting / canary rollout** (previously listed under Prio
 also shipped: eval-gated canary experiments with configurable `rolloutPct`, guardrails
 (error rate, latency, cost saving, shadow worse-rate), and automatic rollback on breach.
 
+Three more have shipped since this doc's last pass (previously rows 37/53/55 read "Missing" —
+corrected above):
+
+| Feature | What landed |
+|---------|-------------|
+| **Per-user identity + RBAC** | `ARBR_AUTH_MODE=oidc` or `trusted-header` on top of the existing admin key, with viewer/operator/administrator roles and a per-user audit trail. |
+| **SSO (OIDC)** | Login against any OIDC provider (Okta, Auth0, Google Workspace, Keycloak, ...) — see [Accountable admin access](/auth). SAML specifically is still unsupported. |
+| **OpenTelemetry trace export** | OTLP spans per gateway request, off by default, with sample-ratio and content-capture controls adjustable at runtime. No Prometheus-style metrics endpoint yet — that's a different signal type and stays open ([#30](https://github.com/project-arbr/arbr-control-plane/issues/30)). |
+
 ### Priority 1 — Build Next
 
 Nothing carried over from the prior Priority 1 list — see Priority 2 below for the next
@@ -256,7 +266,7 @@ candidates.
 | Feature | Why | Effort |
 |---------|-----|--------|
 | **Agent / multi-step tracing** | Trace spans across multi-call LLM workflows. Growing need as agentic workloads increase. | Large (3–4 days) |
-| **RBAC / multi-tenant workspaces** | Multiple admin roles and org separation. Required for enterprise multi-team deployments. Significant auth refactor needed. | Large (5+ days) |
+| **Multi-tenant workspaces** | Org-level isolation on top of the RBAC that's already shipped (viewer/operator/administrator). Required for enterprise multi-team deployments where teams shouldn't see each other's data. | Large (5+ days) |
 | **Multimodal support** | Vision/audio requests growing rapidly. Adds significant provider-compatibility surface area. | Large (3–4 days) |
 
 ### Defer / Skip
@@ -265,7 +275,7 @@ candidates.
 |---------|----------|
 | Batching API | Not core gateway use case; offline workloads are separate infrastructure |
 | Fine-tuning pipeline | Arbr routes, doesn't train; out of scope |
-| SSO / SAML | Can be handled at reverse-proxy layer (Cloudflare Access, etc.) |
+| SAML specifically | OIDC (covering Okta, Auth0, Google Workspace, Keycloak) shipped; SAML can still be handled at the reverse-proxy layer (Cloudflare Access, etc.) if a prospect specifically needs it |
 | HIPAA / SOC2 certification | Legal/process work, not engineering; depends on company maturity stage |
 | Private cloud / VPC hosting | Already self-hostable via Docker; enterprise can run in their own infra |
 | Partner guardrail integrations (12+) | Build the hook framework first; partnerships come after adoption |
@@ -275,15 +285,17 @@ candidates.
 ## Strategic Summary
 
 **Where Portkey leads:**
-Portkey wins on breadth — 1600+ providers, 12+ guardrail partners, full prompt management, compliance certifications, and enterprise RBAC. It's a horizontal platform built for large teams with diverse compliance needs.
+Portkey wins on breadth — 1600+ providers, 12+ guardrail partners, full prompt management, and compliance certifications. RBAC and SSO are no longer clean wins for Portkey (Arbr has per-user roles and OIDC now), but Portkey's are more mature — multi-tenant workspaces and SAML specifically are still Arbr gaps. It's a horizontal platform built for large teams with diverse compliance needs.
 
 **Where Arbr leads:**
 Arbr's moat is **routing intelligence** — AI-generated policies, cost-aware downgrade, per-app overrides, shadow eval campaigns, realised savings tracking, and benchmark-integrated decision-making. Portkey has none of this. Portkey routes but doesn't optimize; Arbr routes and learns.
 
 **The gap that matters most:**
-Output guardrails, semantic caching, and canary rollouts have since shipped, closing
-Arbr's most visible gaps against Portkey. The next-clearest gap is prompt versioning +
-templates (see Priority 2) — that's where Arbr users would see the next measurable value.
+Output guardrails, semantic caching, canary rollouts, per-user RBAC/OIDC, and OpenTelemetry
+trace export have all shipped since this doc's prior pass, closing most of Arbr's visible gaps
+against Portkey. The next-clearest gaps are prompt versioning + templates (see Priority 2) and
+multi-tenant workspaces (Priority 4) — those are where Arbr users or enterprise buyers would
+see the next measurable value.
 
 **The positioning play:**
 Arbr shouldn't try to match Portkey's provider breadth (1600 vs. 15 is a losing race). The winning angle is: *intelligent, cost-optimizing, self-hosted gateway for teams that want their AI spend to be data-driven, not just routed.*
