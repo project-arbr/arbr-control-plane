@@ -1,0 +1,25 @@
+name: Base branch check
+
+# Guards against the stacked-PR-squash trap: PR B based on PR A's feature
+# branch instead of main. If A gets squash-merged and merged into as its
+# own PR, B's commits land on the (now-orphaned) branch A, never on main,
+# even though GitHub reports B as "merged: true". Recurred repeatedly in
+# this project before delete_branch_on_merge + this check were added.
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  check-base:
+    name: Base branch is main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify base branch is main
+        run: |
+          if [ "${{ github.event.pull_request.base.ref }}" != "main" ]; then
+            echo "::error::This PR's base branch is '${{ github.event.pull_request.base.ref }}', not 'main'."
+            echo "::error::Retarget it before merging: gh pr edit ${{ github.event.pull_request.number }} --base main"
+            echo "::error::A stacked base can silently strand your commits off main even after GitHub reports the PR as merged."
+            exit 1
+          fi
+          echo "Base branch is main. OK."
