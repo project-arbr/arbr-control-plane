@@ -1,6 +1,6 @@
 {
   "name": "arbr-audit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Audit a log of past LLM requests for premium-model overuse, or wrap a coding agent live to see what a session costs, with zero server, zero database, and zero signup.",
   "license": "MIT",
   "bin": {
@@ -10,6 +10,7 @@
   "files": [
     "bin",
     "src",
+    "assets",
     "fixtures",
     "README.md",
     "LICENSE"
