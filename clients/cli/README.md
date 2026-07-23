@@ -1,17 +1,17 @@
-# arbr-cli
+# arbr-audit
 
 Audit a log of past LLM requests for premium-model overuse, or wrap a coding agent
 live to see what a session costs — no server, no database, no signup.
 
 ```sh
-npx arbr-cli audit --demo
+npx arbr-audit audit --demo
 ```
 
 That runs against a bundled sample log and writes `arbr-audit-report.html` — open it
 in a browser. On your own data:
 
 ```sh
-npx arbr-cli audit my-usage.jsonl
+npx arbr-audit audit my-usage.jsonl
 ```
 
 ## What it does
