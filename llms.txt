@@ -1,0 +1,30 @@
+# Arbr Control Plane
+
+> Self-hosted model-optimisation and governance control plane for LLM traffic already in
+> production. One OpenAI-compatible gateway logs every call, discovers cheaper-model
+> opportunities from real traffic, evaluates candidates against evidence, and applies them
+> only after human approval — with realised savings measured after rollout, and rollback
+> always available.
+
+## Docs
+
+- [Quickstart](docs/quickstart.md): install, demo mode, first optimisation walkthrough
+- [Gateway overview](docs/gateway/overview.md): native and OpenAI-compatible endpoints
+- [Routing](docs/routing.md): rules, AI policy, guardrails, canaries
+- [Budgets](docs/budgets.md): spend caps, alerts, downgrades
+- [Models](docs/models.md): model registry, LiteLLM catalog sync, pricing
+- [API reference](docs/api-reference.md): full endpoint reference
+- [Configuration](docs/configuration.md): environment variables
+- [Deployment](docs/deployment.md): production deployment guide
+- [Authentication](docs/auth.md): admin key, OIDC/RBAC, gateway API keys
+
+## SDKs
+
+- [JavaScript client](docs/sdk/js.md): `arbr-client` for Node >= 18
+- [Python client](docs/sdk/python.md): `arbr-client` for Python >= 3.11
+
+## Optional
+
+- [Architecture](ARCHITECTURE.md): internals and design rationale
+- [Roadmap](ROADMAP.md): what's planned, and what's intentionally deferred
+- [Competitive analysis: Portkey](docs/competitive-analysis-portkey.md): feature-by-feature gap analysis

@@ -15,8 +15,14 @@
   <a href="assets/brand/BRAND.md"><img alt="Brand guidelines" src="https://img.shields.io/badge/brand-guidelines-2f37ff"></a>
 </p>
 
-> Find safer, cheaper model routes. Prove them against your workload. Roll them out with
-> human approval, then measure the savings actually realised.
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#where-arbr-fits">Why Arbr</a> ·
+  <a href="docs/quickstart.md">Docs</a> ·
+  <a href="ROADMAP.md">Roadmap</a>
+</p>
+
+<p align="center"><strong>Prove it. Approve it. Verify it held.</strong></p>
 
 Arbr is a self-hosted **model optimisation and governance control plane** for teams with
 AI traffic in production. It turns request-level cost and performance data into concrete
