@@ -44,14 +44,23 @@ Required per line: `taskType`, `model`, `promptTokens`, `completionTokens`, `tot
 `provider` is optional — if omitted, it's inferred from `model` via the bundled pricing
 table when the model is recognized.
 
-Already running Arbr, even solo? Export your `RequestRecord` collection into this same
-shape (e.g. `mongoexport --collection=request_records --fields=taskType,model,provider,promptTokens,completionTokens,totalCost` to JSONL) for a real audit instead of the demo.
+**Already running Arbr?** Point `audit` at it directly — no `mongoexport` needed:
+
+```sh
+arbr audit --url https://your-arbr-instance --admin-key "$ARBR_ADMIN_KEY"
+```
+
+This pulls straight from Arbr's own `GET /api/requests/export` endpoint (the same
+one the dashboard's export button uses) over HTTPS and runs the identical local
+analysis. Prefer the `ARBR_ADMIN_KEY` env var over `--admin-key` on the command
+line — it keeps the key out of shell history and process listings.
 
 ## Usage
 
 ```
 arbr audit <file.jsonl> [--out <report.html>] [--cheap-task-types a,b,c]
 arbr audit --demo [--out <report.html>]
+arbr audit --url <https://your-arbr-instance> [--admin-key <key>] [--from <date>] [--to <date>]
 ```
 
 | Flag | Default | Purpose |
@@ -59,9 +68,12 @@ arbr audit --demo [--out <report.html>]
 | `--out <path>` | `./arbr-audit-report.html` | where the HTML report is written |
 | `--cheap-task-types <csv>` | classification, extraction, summarisation, translation, faq, support response | override which task types count as "should be cheap" |
 | `--demo` | — | run against the bundled sample log instead of a file |
+| `--url <base-url>` | — | pull request history directly from a running Arbr instance instead of a file |
+| `--admin-key <key>` | `$ARBR_ADMIN_KEY` | admin key for `--url` |
+| `--from` / `--to <date>` | — | with `--url`, restrict to a date range (ISO) — useful on a long-running instance so you're not pulling its entire history every time |
 
 Every run prints a terminal summary immediately, then writes the fuller HTML report —
-the same pass over the data produces both.
+the same pass over the data produces both, regardless of input source.
 
 ## `arbr wrap` — live session spend, no log file needed
 

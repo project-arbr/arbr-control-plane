@@ -65,10 +65,10 @@ function aggregateGroups(records) {
   return { groups: [...byKey.values()], totalRequests, totalCost };
 }
 
-// Full pipeline: parse -> aggregate -> planRecommendations. opts.cheapTaskTypes overrides
-// the default set from the vendored pricing table.
-async function runAudit(path, opts = {}) {
-  const records = await parseJsonl(path);
+// Aggregate -> planRecommendations, shared by every input source (a local JSONL
+// file, or records fetched directly from a live Arbr instance's export API).
+// opts.cheapTaskTypes overrides the default set from the vendored pricing table.
+function runAuditFromRecords(records, opts = {}) {
   const { groups, totalRequests, totalCost } = aggregateGroups(records);
 
   const cheapTaskTypes = opts.cheapTaskTypes
@@ -96,4 +96,10 @@ async function runAudit(path, opts = {}) {
   };
 }
 
-module.exports = { parseJsonl, aggregateGroups, runAudit };
+// Full local-file pipeline: parse a JSONL file -> runAuditFromRecords.
+async function runAudit(path, opts = {}) {
+  const records = await parseJsonl(path);
+  return runAuditFromRecords(records, opts);
+}
+
+module.exports = { parseJsonl, aggregateGroups, runAudit, runAuditFromRecords };
