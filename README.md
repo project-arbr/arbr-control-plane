@@ -562,12 +562,16 @@ absent today:
   a human to accept, promote, or roll back. Arbr will never expand or promote a rollout by
   itself, even when every guardrail stays clean. This is permanent, by design, not a
   to-be-finished feature — see the [optimisation lifecycle](#the-optimisation-lifecycle).
-- **High availability / horizontal scale.** The service runs as a single standalone
-  instance today (like a LiteLLM proxy); Helm/Kubernetes is on the [roadmap](ROADMAP.md).
 
 Budgets, gateway API keys, and governance controls that earlier versions listed here as
 "deferred" have since shipped; see the **Controlled routing**, **Governance**, and
 **Authentication** sections above.
+
+Horizontal scale — running more than one instance behind a load balancer — has also since
+shipped; see [Running more than one replica](docs/deployment-gcp.md#running-more-than-one-replica).
+Budget/rate-limit enforcement is Mongo-backed and correct across replicas; the response caches
+and OpenTelemetry span queue are per-process, which the linked section explains. A Helm chart is
+still on the [roadmap](ROADMAP.md) — today's path is the docker-compose overlay linked above.
 
 ---
 
