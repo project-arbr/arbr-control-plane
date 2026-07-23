@@ -94,3 +94,21 @@ test("renderReport handles the zero-recommendations case", () => {
   }, { generatedAt: new Date("2026-07-23T00:00:00Z") });
   assert.match(html, /No premium-model overuse found/);
 });
+
+test("renderReport in wrap mode skips the overuse empty-state and shows a per-model breakdown", () => {
+  const html = renderReport({
+    totalRequests: 12, totalCost: 3.5,
+    groups: [
+      { taskType: "unknown", model: "claude-opus-4-8", requests: 8, currentCost: 3 },
+      { taskType: "unknown", model: "claude-haiku-4-5", requests: 4, currentCost: 0.5 },
+    ],
+    recommendations: [], flaggedCost: 0, flaggedSavings: 0, overusePct: 0,
+  }, { mode: "wrap", generatedAt: new Date("2026-07-23T00:00:00Z") });
+
+  assert.match(html, /Arbr Wrap Report/);
+  assert.doesNotMatch(html, /No premium-model overuse found/);
+  assert.match(html, /isn't task-classified/);
+  assert.match(html, /claude-opus-4-8/);
+  assert.match(html, /claude-haiku-4-5/);
+  assert.match(html, /2<\/div>\s*<div class="stat-label">models used this session/);
+});
