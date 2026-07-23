@@ -81,5 +81,10 @@
     "mongodb-memory-server": "^11.2.0",
     "supertest": "^7.2.2",
     "vitepress": "^1.6.4"
+  },
+  "overrides": {
+    "vite": "^6.4.3",
+    "esbuild": "^0.25.0",
+    "shell-quote": "^1.9.0"
   }
 }
