@@ -4,7 +4,7 @@
   "description": "Arbr CLI — audit a log of past LLM requests for premium-model overuse, or wrap a coding agent live to see what a session costs, with zero server, zero database, and zero signup.",
   "license": "MIT",
   "bin": {
-    "arbr": "./bin/arbr.js"
+    "arbr": "bin/arbr.js"
   },
   "main": "./src/audit.js",
   "files": [
