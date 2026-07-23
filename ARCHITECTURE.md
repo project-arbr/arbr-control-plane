@@ -62,7 +62,7 @@ verified against the code, not approximated:
 4. **Enforce budget** — `routing/capEngine.js` runs *after* routing, against the model
    routing just decided on. A breached enforcing cap outranks everything decided in step
    3, **including an explicit pin** — that's the point of enforcement (per the code's own
-   comment at `gateway/handler.js:372-374`): block returns 429; downgrade forces the
+   comment at `gateway/handler.js:382-384`): block returns 429; downgrade forces the
    provider's light-tier model regardless of how the served model was originally chosen.
 5. **Output-side clamp, then cache** — `pricing.clampMaxTokens` caps output to the *served*
    model's known ceiling, then the exact-match response cache
