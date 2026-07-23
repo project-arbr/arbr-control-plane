@@ -10,6 +10,7 @@
   "files": [
     "bin",
     "src",
+    "assets",
     "fixtures",
     "README.md",
     "LICENSE"

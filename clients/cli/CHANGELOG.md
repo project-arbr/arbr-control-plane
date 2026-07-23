@@ -8,6 +8,14 @@
   `mongoexport` + JSONL reshape. Same local analysis either way (`runAuditFromRecords`
   is now shared between the file and remote paths). Prefer `$ARBR_ADMIN_KEY` over
   `--admin-key` to keep the key out of shell history.
+- Reworked the HTML report to actually be shareable: real Arbr branding (the inlined
+  wordmark, and the `signal`/`ink`/`paper` palette from `assets/brand/BRAND.md`,
+  replacing an ad-hoc placeholder palette), Inter embedded as base64 woff2 (the same
+  typeface already used to render Arbr's own social-preview card — bundled under
+  `assets/fonts/`, added to the package's `files`), and a per-model spend bar chart
+  instead of a plain table. Previously the report used only system fonts to keep the
+  package smaller; in practice that made it look unfinished, which defeated the
+  point of a report meant to be screenshotted or sent to someone.
 
 ## 0.2.0
 
