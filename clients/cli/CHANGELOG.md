@@ -2,6 +2,12 @@
 
 ## 0.3.0
 
+- Added `arbr audit --url <base-url> [--admin-key <key>] [--from/--to <date>]` —
+  pulls request history directly from a running Arbr instance's own
+  `GET /api/requests/export` endpoint over HTTPS instead of requiring a manual
+  `mongoexport` + JSONL reshape. Same local analysis either way (`runAuditFromRecords`
+  is now shared between the file and remote paths). Prefer `$ARBR_ADMIN_KEY` over
+  `--admin-key` to keep the key out of shell history.
 - Reworked the HTML report to actually be shareable: real Arbr branding (the inlined
   wordmark, and the `signal`/`ink`/`paper` palette from `assets/brand/BRAND.md`,
   replacing an ad-hoc placeholder palette), Inter embedded as base64 woff2 (the same

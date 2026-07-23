@@ -3,15 +3,17 @@
 
 const path = require("path");
 const fs = require("fs");
-const { runAudit } = require("../src/audit");
+const { runAudit, runAuditFromRecords } = require("../src/audit");
 const { renderReport } = require("../src/report");
 const { runWrapSession } = require("../src/wrap");
+const { fetchRemoteRecords } = require("../src/remote");
 
 const HELP = `arbr — audit a log of past LLM requests, or wrap a coding agent live.
 
 Usage:
   arbr audit <file.jsonl> [--out <report.html>] [--cheap-task-types a,b,c]
   arbr audit --demo [--out <report.html>]
+  arbr audit --url <https://your-arbr-instance> [--admin-key <key>] [--from <date>] [--to <date>]
   arbr wrap <claude|codex|opencode|cursor> [--out <report.html>] [--codex-home <path>]
 
 Audit options:
@@ -20,6 +22,14 @@ Audit options:
                              (default: classification, extraction, summarisation,
                              translation, faq, support response)
   --demo                    run against the bundled sample log instead of a file
+  --url <base-url>          pull request history directly from a running Arbr instance
+                             (GET /api/requests/export) instead of a local file —
+                             no manual mongoexport needed
+  --admin-key <key>         admin key for --url (falls back to $ARBR_ADMIN_KEY;
+                             prefer the env var over the flag to keep it out of
+                             shell history / process listings)
+  --from <date>             with --url: only requests on/after this ISO date
+  --to <date>               with --url: only requests on/before this ISO date
 
 Wrap options:
   --out <path>       where to write the HTML report (default: ./arbr-wrap-report.html)
@@ -29,8 +39,7 @@ Wrap options:
 
 Audit input format: one JSON object per line (JSONL), reusing Arbr's own request-log
 field names — taskType, model, provider, promptTokens, completionTokens, totalCost.
-If you already run Arbr, export your RequestRecord collection into this shape for a
-real audit. See README.md for the full field list and an export example.
+With --url, the same fields are pulled directly over HTTPS instead. See README.md.
 
 Wrap reports spend and model mix only (no task classification yet, so no
 premium-overuse recommendations — use \`arbr audit\` on a classified log for those).
@@ -46,6 +55,10 @@ function parseArgs(argv) {
     if (a === "--out") args.out = argv[++i];
     else if (a === "--cheap-task-types") args.cheapTaskTypes = argv[++i];
     else if (a === "--codex-home") args.codexHome = argv[++i];
+    else if (a === "--url") args.url = argv[++i];
+    else if (a === "--admin-key") args.adminKey = argv[++i];
+    else if (a === "--from") args.from = argv[++i];
+    else if (a === "--to") args.to = argv[++i];
     else if (a === "--demo") args.demo = true;
     else if (a === "-h" || a === "--help") args.help = true;
     else args._.push(a);
@@ -88,29 +101,47 @@ async function runAuditCommand(rest) {
   const args = parseArgs(rest);
   if (args.help) { console.log(HELP); process.exit(0); }
 
-  const inputPath = args.demo
-    ? path.join(__dirname, "..", "fixtures", "sample.jsonl")
-    : args._[0];
-
-  if (!inputPath) {
-    console.error("Error: provide a log file, e.g. `arbr audit my-export.jsonl`, or use --demo.\n");
-    console.log(HELP);
-    process.exit(1);
-  }
-  if (!args.demo && !fs.existsSync(inputPath)) {
-    console.error(`Error: file not found: ${inputPath}`);
-    process.exit(1);
-  }
-
   const opts = {};
   if (args.cheapTaskTypes) opts.cheapTaskTypes = args.cheapTaskTypes.split(",").map((s) => s.trim());
 
   let result;
-  try {
-    result = await runAudit(inputPath, opts);
-  } catch (err) {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
+
+  if (args.url) {
+    const adminKey = args.adminKey || process.env.ARBR_ADMIN_KEY;
+    if (!adminKey) {
+      console.error("Error: --url needs an admin key — pass --admin-key or set $ARBR_ADMIN_KEY.");
+      process.exit(1);
+    }
+    console.log(`Fetching request history from ${args.url} ...`);
+    let records;
+    try {
+      records = await fetchRemoteRecords(args.url, adminKey, { from: args.from, to: args.to });
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    result = runAuditFromRecords(records, opts);
+  } else {
+    const inputPath = args.demo
+      ? path.join(__dirname, "..", "fixtures", "sample.jsonl")
+      : args._[0];
+
+    if (!inputPath) {
+      console.error("Error: provide a log file, use --demo, or point at a live instance with --url.\n");
+      console.log(HELP);
+      process.exit(1);
+    }
+    if (!args.demo && !fs.existsSync(inputPath)) {
+      console.error(`Error: file not found: ${inputPath}`);
+      process.exit(1);
+    }
+
+    try {
+      result = await runAudit(inputPath, opts);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   printSummary(result);
