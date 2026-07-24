@@ -5,7 +5,10 @@
 // one round trip (a restart mid-login just means the user retries).
 const crypto = require("crypto");
 const express = require("express");
-const { Issuer, generators } = require("openid-client");
+// v6 dropped the v5 Issuer/Client class API for a functional one — discovery()
+// replaces Issuer.discover()+new issuer.Client(), buildAuthorizationUrl()/
+// authorizationCodeGrant() replace client.authorizationUrl()/client.callback().
+const { discovery, randomPKCECodeVerifier, calculatePKCECodeChallenge, randomState, buildAuthorizationUrl, authorizationCodeGrant } = require("openid-client");
 const { SignJWT, jwtVerify } = require("jose");
 const { config } = require("../../config");
 const User = require("../../models/User");
@@ -26,20 +29,14 @@ function isAllowedEmailDomain(email, allowedDomains) {
   return allowedDomains.includes(domain);
 }
 
-let clientPromise = null;
-function getClient() {
-  if (!clientPromise) {
-    clientPromise = Issuer.discover(config.oidc.issuer).then(
-      (issuer) =>
-        new issuer.Client({
-          client_id: config.oidc.clientId,
-          client_secret: config.oidc.clientSecret,
-          redirect_uris: [config.oidc.redirectUri],
-          response_types: ["code"],
-        })
-    );
+// Discovery result (a Configuration) replaces v5's Client instance — every call
+// site below takes it as the first argument instead of calling methods on it.
+let configPromise = null;
+function getOidcConfig() {
+  if (!configPromise) {
+    configPromise = discovery(new URL(config.oidc.issuer), config.oidc.clientId, config.oidc.clientSecret);
   }
-  return clientPromise;
+  return configPromise;
 }
 
 function requireOidcMode(req, res, next) {
@@ -49,10 +46,10 @@ function requireOidcMode(req, res, next) {
 
 router.get("/login", requireOidcMode, async (req, res, next) => {
   try {
-    const client = await getClient();
-    const code_verifier = generators.codeVerifier();
-    const code_challenge = generators.codeChallenge(code_verifier);
-    const state = generators.state();
+    const oidcConfig = await getOidcConfig();
+    const code_verifier = randomPKCECodeVerifier();
+    const code_challenge = await calculatePKCECodeChallenge(code_verifier);
+    const state = randomState();
     const pending = await new SignJWT({ state, code_verifier })
       .setProtectedHeader({ alg: "HS256" })
       .setExpirationTime("10m")
@@ -63,14 +60,14 @@ router.get("/login", requireOidcMode, async (req, res, next) => {
       sameSite: "lax",
       maxAge: 10 * 60 * 1000,
     });
-    res.redirect(
-      client.authorizationUrl({
-        scope: "openid email profile",
-        state,
-        code_challenge,
-        code_challenge_method: "S256",
-      })
-    );
+    const authUrl = buildAuthorizationUrl(oidcConfig, {
+      redirect_uri: config.oidc.redirectUri,
+      scope: "openid email profile",
+      state,
+      code_challenge,
+      code_challenge_method: "S256",
+    });
+    res.redirect(authUrl.href);
   } catch (err) {
     next(err);
   }
@@ -83,17 +80,23 @@ router.get("/callback", requireOidcMode, async (req, res, next) => {
     res.clearCookie(PENDING_COOKIE);
     const { payload } = await jwtVerify(raw, pendingSecret);
 
-    const client = await getClient();
-    const params = client.callbackParams(req);
-    if (params.state !== payload.state) {
+    // Checked explicitly (not just via authorizationCodeGrant's own expectedState
+    // check below) so a mismatch gets this specific message rather than whatever
+    // generic error the library throws for it.
+    if (req.query.state !== payload.state) {
       return res.status(400).send("Login state mismatch — please try signing in again.");
     }
-    const tokenSet = await client.callback(config.oidc.redirectUri, params, {
-      code_verifier: payload.code_verifier,
-      state: payload.state,
+
+    const oidcConfig = await getOidcConfig();
+    const currentUrl = new URL(req.originalUrl, `${req.protocol}://${req.get("host")}`);
+    const tokens = await authorizationCodeGrant(oidcConfig, currentUrl, {
+      pkceCodeVerifier: payload.code_verifier,
+      expectedState: payload.state,
+    }, {
+      redirect_uri: config.oidc.redirectUri,
     });
-    const claims = tokenSet.claims();
-    if (!claims.email) {
+    const claims = tokens.claims();
+    if (!claims || !claims.email) {
       return res.status(400).send("Your identity provider did not return an email claim.");
     }
     const email = String(claims.email).toLowerCase();
