@@ -21,6 +21,48 @@ const TTL_MS = 3000;
 let _cache = { value: null, at: 0 };
 function invalidate() { _cache.at = 0; }
 
+// effective() recomputes every few seconds, so warn at most once a minute per
+// distinct problem. Silence here is what made the fallback so hard to diagnose.
+const WARN_EVERY_MS = 60_000;
+const _warned = new Map(); // signature → last logged at
+function warnDiscardedDefault(issue) {
+  const sig = `${issue.configured}|${issue.defaultProvider}|${issue.reason}`;
+  const last = _warned.get(sig) || 0;
+  if (Date.now() - last < WARN_EVERY_MS) return;
+  _warned.set(sig, Date.now());
+  const detail = issue.reason === "provider-mismatch"
+    ? `it belongs to provider "${issue.modelProvider}", not the default provider "${issue.defaultProvider}"`
+    : `it is not in this instance's model registry (disabled, never synced, or the registry cache is stale)`;
+  console.warn(
+    `[connections] default model "${issue.configured}" is being ignored because ${detail}. ` +
+    `Serving "${issue.serving}" instead. Fix it in Settings, or run Sync Models.`
+  );
+}
+
+// Decide which model the default provider actually serves, and report when the
+// operator's configured choice cannot be honored. The fallback itself is not the
+// bug — serving the provider's built-in default is reasonable — but doing it
+// silently is, so the caller gets an `issue` to log and surface. Pure; exported
+// for tests.
+function decideDefaultModel({ configured, defaultProvider, lookup, providerDefaults }) {
+  const fallback = defaultProvider ? providerDefaults[defaultProvider] || null : null;
+  if (!configured) return { defaultModel: fallback, issue: null };
+  const m = lookup(configured);
+  if (m && m.provider === defaultProvider) return { defaultModel: configured, issue: null };
+  return {
+    defaultModel: fallback,
+    issue: {
+      configured,
+      serving: fallback,
+      defaultProvider,
+      // not-in-registry usually means the model is disabled, was never synced, or
+      // this replica's registry cache predates the import.
+      reason: m ? "provider-mismatch" : "not-in-registry",
+      modelProvider: m ? m.provider : null,
+    },
+  };
+}
+
 // Decrypt a stored credential doc into a credential object. Handles the legacy
 // shape where the ciphertext was a bare API-key string.
 function decodeStored(doc) {
@@ -85,13 +127,23 @@ async function compute() {
 
   // The chosen default model applies to the default provider; otherwise that
   // provider's built-in default. Falls back if the stored choice no longer fits.
-  let defaultModel = defaultProvider ? DEFAULT_MODELS[defaultProvider] : null;
-  if (settings.defaultModel) {
-    const m = pricing.getModel(settings.defaultModel);
-    if (m && m.provider === defaultProvider) defaultModel = settings.defaultModel;
-  }
+  //
+  // A fallback used to happen silently: the operator saw their model in Settings
+  // while the gateway served the provider's hardcoded default, with nothing
+  // anywhere saying so. The mismatch is now reported (defaultModelIssue) and
+  // logged, so it is visible instead of being inferred from odd routing.
+  const { defaultModel, issue: defaultModelIssue } = decideDefaultModel({
+    configured: settings.defaultModel,
+    defaultProvider,
+    lookup: (id) => pricing.getModel(id),
+    providerDefaults: DEFAULT_MODELS,
+  });
+  if (defaultModelIssue) warnDiscardedDefault(defaultModelIssue);
 
-  return { providers, liveIds, demoMode: liveIds.length === 0, defaultProvider, defaultModel };
+  return {
+    providers, liveIds, demoMode: liveIds.length === 0,
+    defaultProvider, defaultModel, defaultModelIssue,
+  };
 }
 
 async function effective() {
@@ -142,7 +194,10 @@ async function statuses() {
   return {
     providers: list,
     defaultProvider: eff.defaultProvider,
+    // The model actually served. When it differs from what was configured,
+    // defaultModelIssue explains why so the dashboard can say so out loud.
     defaultModel: eff.defaultModel,
+    defaultModelIssue: eff.defaultModelIssue || null,
     settingsDefault: settings.defaultProvider || null,
     demoMode: eff.demoMode,
   };
@@ -189,7 +244,23 @@ async function setDefaultProvider(provider) {
 }
 
 async function setDefaultModel(model) {
-  if (model != null && !pricing.getModel(model)) throw new Error(`unknown model "${model}"`);
+  if (model != null) {
+    const m = pricing.getModel(model);
+    if (!m) throw new Error(`unknown model "${model}"`);
+    // Reject a model the gateway would then refuse to use. Without this the save
+    // succeeds, Settings shows the model, and requests quietly get the provider's
+    // built-in default instead.
+    const { defaultProvider } = await effective();
+    if (defaultProvider && m.provider !== defaultProvider) {
+      throw Object.assign(
+        new Error(
+          `Model "${model}" belongs to provider "${m.provider}", but the default provider is ` +
+          `"${defaultProvider}". Change the default provider first, or pick a model from "${defaultProvider}".`
+        ),
+        { code: "default_model_provider_mismatch", status: 400 }
+      );
+    }
+  }
   const s = await Settings.get();
   s.defaultModel = model || null;
   await s.save();
@@ -199,4 +270,5 @@ async function setDefaultModel(model) {
 module.exports = {
   effective, statuses, setCredential, removeCredential, setDefaultProvider, setDefaultModel, invalidate,
   KNOWN: KNOWN_PROVIDERS,
+  decideDefaultModel, // pure, exported for tests
 };

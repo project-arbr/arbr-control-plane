@@ -365,6 +365,24 @@ export default function Settings({ onChange }) {
                 </select>
               </div>
             </div>
+            {/* The saved model is not always the served one. Saying so here is the
+                difference between a five-minute fix and hunting through routing. */}
+            {data.defaultModelIssue && (
+              <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-medium">Your saved default model is not being used.</div>
+                <div className="mt-1">
+                  <span className="font-mono">{data.defaultModelIssue.configured}</span>{" "}
+                  {data.defaultModelIssue.reason === "provider-mismatch" ? (
+                    <>belongs to provider <span className="font-mono">{data.defaultModelIssue.modelProvider}</span>, not the
+                    default provider <span className="font-mono">{data.defaultModelIssue.defaultProvider}</span>.</>
+                  ) : (
+                    <>is not in this instance&apos;s model registry. It may be disabled, never synced, or imported after this
+                    server last refreshed. Try <span className="font-medium">Sync Models</span> on the Models page.</>
+                  )}{" "}
+                  Requests are being served <span className="font-mono">{data.defaultModelIssue.serving}</span> instead.
+                </div>
+              </div>
+            )}
           </Card>
 
           <Card title="Security">
