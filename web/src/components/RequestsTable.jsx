@@ -61,17 +61,28 @@ function explainRouting(r) {
       : `No model was pinned and no rule or policy matched, so Arbr served the default model, ${r.model}.`);
   }
 
-  const ov = x.override;
-  if (ov?.type === "budget" && ov.action === "downgrade") {
-    lines.push(`Budget override: cap "${ov.cap?.scope}" (${ov.cap?.period}, $${ov.cap?.limit}) was over limit, so ${ov.from} was downgraded to ${ov.to}.`);
-  } else if (ov?.type === "budget" && ov.action === "block") {
-    lines.push(`Budget cap "${ov.cap?.scope}" (${ov.cap?.period}, $${ov.cap?.limit}) was over limit; the request was blocked.`);
-  } else if (ov?.type === "fallback") {
-    lines.push(`Fallback: ${ov.from} failed, so Arbr retried on ${ov.to}.`);
-  } else if (ov?.type === "allowed") {
-    lines.push(`${ov.from} is not in this API key's allowed-model set, so Arbr served the key's default, ${ov.to}.`);
-  } else if (ov?.type === "optout") {
-    lines.push(`${ov.from} is opted out for this application, so Arbr served ${ov.to} instead.`);
+  // Overrides chain. Older records carry only the single `override`; newer ones
+  // carry the whole ordered `overrides`. Narrating every step is what makes a
+  // model the caller never asked for traceable back to the rule that picked it.
+  const chain = x.overrides?.length ? x.overrides : (x.override ? [x.override] : []);
+  for (const ov of chain) {
+    if (ov?.type === "budget" && ov.action === "downgrade") {
+      lines.push(`Budget override: cap "${ov.cap?.scope}" (${ov.cap?.period}, $${ov.cap?.limit}) was over limit, so ${ov.from} was downgraded to ${ov.to}.`);
+    } else if (ov?.type === "budget" && ov.action === "block") {
+      lines.push(`Budget cap "${ov.cap?.scope}" (${ov.cap?.period}, $${ov.cap?.limit}) was over limit; the request was blocked.`);
+    } else if (ov?.type === "fallback") {
+      lines.push(`Fallback: ${ov.from} failed, so Arbr retried on ${ov.to}.`);
+    } else if (ov?.type === "allowed") {
+      lines.push(`${ov.from} is not in this API key's allowed-model set, so Arbr served the key's default, ${ov.to}.`);
+    } else if (ov?.type === "optout") {
+      lines.push(`${ov.from} is opted out for this application, so Arbr served ${ov.to} instead.`);
+    } else if (ov?.type === "canary") {
+      lines.push(`A canary experiment routed this from ${ov.from} to ${ov.to}.`);
+    }
+  }
+
+  if (x.allowedViolation) {
+    lines.push(`Warning: ${x.allowedViolation.model} was served even though it is not in this key's allowed-model set (${(x.allowedViolation.allowed || []).join(", ")}). The opt-out fallback resolves from the global default, which does not know about the key's allowed set. Narrow the opt-out list or set an allowed key default so the two cannot disagree.`);
   }
 
   if (x.classificationUsed === false && r.taskType && (d === "explicit" || d === "passthrough" || d === "cache")) {

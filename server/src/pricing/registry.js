@@ -59,6 +59,25 @@ async function init() {
   }
   await _load();
   console.log(`[registry] ${Object.keys(_cache).length} models loaded`);
+  startAutoRefresh();
+}
+
+// reload() only refreshes the process that served the write. On a multi-replica
+// deploy every other replica kept a cache from boot forever, so a model imported
+// or enabled elsewhere stayed invisible to getModel() until restart — which then
+// silently downgraded anything resolved through it, like the default model. The
+// accessors are synchronous (hot path), so the refresh runs on a timer instead.
+const REFRESH_MS = Number(process.env.ARBR_REGISTRY_REFRESH_MS) || 60_000;
+let _timer = null;
+function startAutoRefresh(ms = REFRESH_MS) {
+  if (_timer || !(ms > 0)) return;
+  _timer = setInterval(() => {
+    _load().catch((e) => console.warn("[registry] background refresh failed:", e.message));
+  }, ms);
+  if (_timer.unref) _timer.unref();
+}
+function stopAutoRefresh() {
+  if (_timer) { clearInterval(_timer); _timer = null; }
 }
 
 // Call after any write to /api/models to keep cache current.
@@ -125,6 +144,8 @@ module.exports = {
   // Lifecycle
   init,
   reload,
+  startAutoRefresh,
+  stopAutoRefresh,
   // Sync accessors
   getModel,
   listModels,

@@ -16,6 +16,7 @@ const { PROVIDERS } = require("../config");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
+const { pushOverride } = require("./explain");
 
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
@@ -395,8 +396,8 @@ async function handleOpenAICompat(req, res) {
     }
     const target = pricing.suggestLightTarget(served.model);
     if (target) {
-      if (explain) explain.override = { type: "budget", action: "downgrade", from: served.model, to: target.model,
-        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
+      pushOverride(explain, { type: "budget", action: "downgrade", from: served.model, to: target.model,
+        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
       served = { provider: target.provider, model: target.model }; routingDecision = "budget";
       qualityGate = null;
     }
@@ -675,7 +676,7 @@ async function handleOpenAICompat(req, res) {
     }
 
     const { result, usedFallback } = invocation;
-    if (usedFallback) { routingDecision = "fallback"; qualityGate = null; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
+    if (usedFallback) { routingDecision = "fallback"; qualityGate = null; pushOverride(explain, { type: "fallback", from: served.model, to: result.modelId }); }
 
     const promptTokens = result.usage?.inputTokens || 0;
     const completionTokens = result.usage?.outputTokens || 0;
@@ -773,7 +774,7 @@ async function handleOpenAICompat(req, res) {
   }
 
   const { result, usedFallback } = invocation;
-  if (usedFallback) { routingDecision = "fallback"; qualityGate = null; if (explain) explain.override = { type: "fallback", from: served.model, to: result.modelId }; }
+  if (usedFallback) { routingDecision = "fallback"; qualityGate = null; pushOverride(explain, { type: "fallback", from: served.model, to: result.modelId }); }
 
   if (settings.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
     const { blocked, ruleName } = outputGuardrail.check(result.text, settings.outputGuardrailRules, meta.application);

@@ -26,6 +26,7 @@ const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
 const ApplicationConfig = require("../models/ApplicationConfig");
 const { createBoundedTtlCache } = require("../utils/boundedTtlCache");
+const { pushOverride } = require("./explain");
 
 // Short-lived cache to avoid a DB hit per request for app configs.
 //
@@ -234,7 +235,7 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
           evalRunId: canary.experiment.evalRunId ? String(canary.experiment.evalRunId) : null,
           fromModel: served.model, toModel: canary.toModel, rolloutPct: canary.experiment.rolloutPct,
         };
-        explain.override = { type: "canary", from: served.model, to: canary.toModel };
+        pushOverride(explain, { type: "canary", from: served.model, to: canary.toModel });
         served = { provider, model: canary.toModel };
         routingDecision = "canary";
       }
@@ -250,7 +251,7 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
   if (appConfig.allowedModels?.length > 0 && !appConfig.allowedModels.includes(served.model)) {
     const fallbackKnown = appConfig.defaultModel ? pricing.getModel(appConfig.defaultModel) : null;
     if (fallbackKnown && eff.liveIds.includes(fallbackKnown.provider)) {
-      explain.override = { type: "allowed", from: served.model, to: appConfig.defaultModel };
+      pushOverride(explain, { type: "allowed", from: served.model, to: appConfig.defaultModel });
       served = { provider: fallbackKnown.provider, model: appConfig.defaultModel, knownPricing: true };
       routingDecision = "passthrough";
     } else {
@@ -266,10 +267,20 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
   if (appDbConfig?.modelOptOut?.length > 0 && appDbConfig.modelOptOut.includes(served.model)) {
     const fallback = resolveDefault(body, eff);
     if (!appDbConfig.modelOptOut.includes(fallback.model)) {
-      explain.override = { type: "optout", from: served.model, to: fallback.model };
+      pushOverride(explain, { type: "optout", from: served.model, to: fallback.model });
       served = fallback;
       routingDecision = "passthrough";
     }
+  }
+
+  // The opt-out fallback resolves from the GLOBAL defaults, which know nothing about
+  // this key's allowed set, so it can land back on the very model the allowed-check
+  // just rejected (allowed → key default → opted out → global default). That used to
+  // pass silently, so a key restricted to one model could still be served another.
+  // Serving is preserved deliberately, so a policy conflict never breaks live traffic,
+  // but the violation is recorded and the dashboard flags it.
+  if (appConfig.allowedModels?.length > 0 && !appConfig.allowedModels.includes(served.model)) {
+    explain.allowedViolation = { model: served.model, allowed: appConfig.allowedModels };
   }
 
   // qualityGate: only set when a human-approved rule (or canary promote path) chose the model.
@@ -385,8 +396,8 @@ async function handleChat(req, res) {
   const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
   if (enf) {
     if (enf.action === "block") {
-      explain.override = { type: "budget", action: "block",
-        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
+      pushOverride(explain, { type: "budget", action: "block",
+        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
@@ -403,8 +414,8 @@ async function handleChat(req, res) {
     // downgrade
     const target = pricing.suggestLightTarget(served.model);
     if (target) {
-      explain.override = { type: "budget", action: "downgrade", from: served.model, to: target.model,
-        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } };
+      pushOverride(explain, { type: "budget", action: "downgrade", from: served.model, to: target.model,
+        cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
       served = { provider: target.provider, model: target.model };
       routingDecision = "budget";
       qualityGate = null; // budget override is not eval-gated
@@ -550,7 +561,7 @@ async function handleChat(req, res) {
   const { result, usedFallback } = invocation;
   if (usedFallback) {
     routingDecision = "fallback";
-    explain.override = { type: "fallback", from: served.model, to: result.modelId };
+    pushOverride(explain, { type: "fallback", from: served.model, to: result.modelId });
     qualityGate = null;
   }
 
