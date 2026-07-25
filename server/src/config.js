@@ -78,6 +78,14 @@ const PROVIDERS = {
     defaultModel: "llama-3.3-70b-versatile",
     baseURL: "https://api.groq.com/openai/v1",
   },
+  mistral: {
+    label: "Mistral AI",
+    authType: "apiKey",
+    fields: ["apiKey"],
+    env: { apiKey: "MISTRAL_API_KEY" },
+    defaultModel: "mistral-small-latest",
+    baseURL: "https://api.mistral.ai/v1",
+  },
   // LiteLLM Proxy — only registered when LITELLM_BASE_URL is set. Absent from
   // KNOWN_PROVIDERS entirely when unconfigured, so it never enters the fallback
   // chain or the Connections page. Operators register models against it via

@@ -3,7 +3,7 @@
 
 const pricing = require("../pricing/registry");
 
-const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
+const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm", "mistral"]);
 
 // Bedrock models that support tool use via the Converse API.
 // Source: AWS Bedrock model cards (https://docs.aws.amazon.com/bedrock/latest/userguide/).

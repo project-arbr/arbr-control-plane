@@ -2,7 +2,7 @@
 //
 // Standalone module for the Arbr Control Plane: a direct "anthropic" (Claude)
 // adapter alongside gemini / bedrock-nova / openai, plus a generic OpenAI-compat
-// handler for deepseek / moonshot / xai / groq (any provider with a baseURL).
+// handler for deepseek / moonshot / xai / groq / mistral (any provider with a baseURL).
 //
 // Design notes:
 // - Provider SDKs are loaded lazily — the router only requires a provider's
@@ -12,7 +12,7 @@
 // - Messages accept BOTH plain { role, content } objects AND LangChain
 //   BaseMessage instances. We normalize internally.
 
-const SUPPORTED_PROVIDERS = ["gemini", "bedrock-nova", "openai", "anthropic", "deepseek", "moonshot", "xai", "groq", "litellm"];
+const SUPPORTED_PROVIDERS = ["gemini", "bedrock-nova", "openai", "anthropic", "deepseek", "moonshot", "xai", "groq", "litellm", "mistral"];
 
 // Output cap applied ONLY when neither the caller nor the provider config specifies
 // max_tokens. The old default of 1024 silently truncated normal completions mid-sentence
@@ -164,7 +164,7 @@ function loadProviderModel(providerId, cfg, { temperature, maxTokens }) {
     }
     return new ChatAnthropic(params);
   }
-  // Generic OpenAI-compatible handler (deepseek, moonshot, xai, groq, …).
+  // Generic OpenAI-compatible handler (deepseek, moonshot, xai, groq, mistral, …).
   // Any provider whose config carries a baseURL routes here.
   if (cfg.baseURL) {
     const { ChatOpenAI } = require("@langchain/openai");

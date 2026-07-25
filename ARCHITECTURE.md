@@ -70,7 +70,7 @@ verified against the code, not approximated:
    (`routing/semanticCache.js`) are checked — both keyed on the model budget enforcement
    just settled on, not the originally-resolved one. Output guardrails apply to a cache hit
    too.
-6. **Dispatch** — OpenAI-compatible providers (openai/deepseek/moonshot/xai/groq/litellm)
+6. **Dispatch** — OpenAI-compatible providers (openai/deepseek/moonshot/xai/groq/mistral/litellm)
    are reverse-proxied raw, preserving tools/vision/streaming; native providers
    (anthropic/gemini/bedrock-nova) go through the LangChain factory.
 7. **Respond, then log** — the response is returned first; `logging/logger.js` writes one

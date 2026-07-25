@@ -23,7 +23,7 @@ const { governanceFor, checkModel } = require("../routing/guards");
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
 // streaming) instead of round-tripping through LangChain, which drops everything but text.
-const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
+const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm", "mistral"]);
 
 // Amazon Nova models on Bedrock support tools via ChatBedrockConverse.bindTools().
 // Other Bedrock models (Mistral 7B, Mixtral 8x7B, DeepSeek R1) do not — they share the
@@ -452,7 +452,7 @@ async function handleOpenAICompat(req, res) {
         error: {
           message:
             `Model "${served.model}" does not support ${features} on /v1/chat/completions. ` +
-            `Route to an OpenAI-compatible provider (openai, deepseek, moonshot, xai, groq), or ` +
+            `Route to an OpenAI-compatible provider (openai, deepseek, moonshot, xai, groq, mistral), or ` +
             `front this provider with a LiteLLM proxy.`,
           type: "not_implemented_error",
           code: "capability_not_supported",

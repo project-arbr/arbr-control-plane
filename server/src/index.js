@@ -160,7 +160,7 @@ async function start() {
   // whether to enable the Search / function-calling UI for each model.
   //
   // Tool call support rules (mirrors openaiCompat.js):
-  //   • OpenAI-compat providers (openai/deepseek/moonshot/xai/groq/litellm): yes — raw proxy
+  //   • OpenAI-compat providers (openai/deepseek/moonshot/xai/groq/mistral/litellm): yes — raw proxy
   //   • bedrock-nova + Amazon Nova model IDs: yes — via ChatBedrockConverse.bindTools()
   //   • Everything else (gemini/anthropic/non-Nova bedrock): no — returns 501 today
   app.get("/v1/models", auth.middleware, async (_req, res) => {

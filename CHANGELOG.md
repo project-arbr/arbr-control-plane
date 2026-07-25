@@ -7,6 +7,12 @@ changelogs under `clients/`.
 
 ## [Unreleased]
 
+### Added
+- Mistral AI provider (`mistral`): OpenAI-compatible adapter routed at
+  `https://api.mistral.ai/v1`, configured via `MISTRAL_API_KEY`, defaulting to
+  `mistral-small-latest`. Streaming, tools, and `response_format` proxy raw like the other
+  compat providers. Ships with a `docs/providers/mistral.md` page.
+
 ## [0.3.0] - 2026-07-22
 
 ### Added

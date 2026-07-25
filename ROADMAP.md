@@ -18,7 +18,7 @@ A metrics endpoint (Prometheus / OpenTelemetry) for request counts, latency, cos
 routing decisions; richer per-request error surfacing in the dashboard.
 
 ### More providers
-Additional provider adapters (e.g. Cohere, Mistral, Vertex AI) via the existing
+Additional provider adapters (e.g. Cohere, Vertex AI) via the existing
 `providers/llm-router/` pattern, each with a `docs/providers/` page.
 
 ### Deployment options
