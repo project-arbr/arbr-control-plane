@@ -169,14 +169,26 @@ function resolveModel({ map, taskType, difficulty, eff }) {
   if (difficulty === catalogTier) return base;
   try {
     const liveIdSet = new Set(eff.liveIds);
-    const liveModels = pricing.listModels()
-      .filter((m) => liveIdSet.has(m.provider) && m.chatCapable !== false)
+    const liveModels = pricedPool(pricing.listModels()
+      .filter((m) => liveIdSet.has(m.provider) && m.chatCapable !== false))
       .sort((a, b) => (b.inputPer1M || 0) - (a.inputPer1M || 0));
     if (!liveModels.length) return base;
     const catalogMap = Object.fromEntries(TASK_CATALOG.map((t) => [t.id, t]));
     const id = _scoringFallback(tt, liveModels, catalogMap, eff, difficulty);
     const m = pricing.getModel(id);
-    if (m && liveIdSet.has(m.provider)) return { provider: m.provider, model: id };
+    if (!m || !liveIdSet.has(m.provider)) return base;
+
+    // Honor the operator's explicit assignment. The difficulty re-pick may stand in
+    // for the base ONLY when it is a genuinely CHEAPER real model — a cost downgrade
+    // for an easier-than-usual instance. A lateral or pricier pick keeps the explicit
+    // choice, so "document analysis" stays on the assigned model instead of being
+    // swapped for something unrelated. The base is the operator's ceiling; difficulty
+    // can save cost, not override the pick upward.
+    const basePrice = pricing.getModel(base.model)?.inputPer1M ?? null;
+    const newPrice  = m.inputPer1M ?? null;
+    if (basePrice != null && newPrice != null && newPrice < basePrice) {
+      return { provider: m.provider, model: id };
+    }
     return base;
   } catch { return base; }
 }
@@ -257,6 +269,18 @@ function scoreModel(taskCaps, model, cheapestCost) {
   return { capScore, costScore };
 }
 
+// Models with a known, positive input price. An unpriced model (absent from the
+// pricing catalog) otherwise scores as if free — scoreModel treats a null price as
+// $0.001, so cheapestCost/price → the maximum cost score — and wins any
+// cost-weighted pick despite being unpriced and often unsuited (a 4B content-safety
+// model beating "document analysis"). Excluding them from auto-selection also keeps
+// cost tracking honest. Falls back to the full list only if nothing is priced, so
+// the pool is never emptied.
+function pricedPool(models) {
+  const priced = models.filter((m) => (m.inputPer1M || 0) > 0);
+  return priced.length ? priced : models;
+}
+
 // Core scoring engine — shared by regenerate() and computeAssignments().
 // excludeModels: array of model IDs to exclude from consideration.
 async function _computeAssignments({ router, eff, excludeModels = [], goal = "balanced" }) {
@@ -264,8 +288,8 @@ async function _computeAssignments({ router, eff, excludeModels = [], goal = "ba
 
   const excludeSet = new Set(excludeModels);
   const liveIdSet  = new Set(eff.liveIds);
-  const liveModels = pricing.listModels()
-    .filter((m) => liveIdSet.has(m.provider) && !excludeSet.has(m.id) && m.chatCapable !== false)
+  const liveModels = pricedPool(pricing.listModels()
+    .filter((m) => liveIdSet.has(m.provider) && !excludeSet.has(m.id) && m.chatCapable !== false))
     .sort((a, b) => (b.inputPer1M || 0) - (a.inputPer1M || 0));
 
   if (!liveModels.length) throw new Error("no live models available after exclusions");
@@ -443,4 +467,4 @@ async function describe() {
   };
 }
 
-module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION, _goalWeight: goalWeight };
+module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION, _goalWeight: goalWeight, _pricedPool: pricedPool };
