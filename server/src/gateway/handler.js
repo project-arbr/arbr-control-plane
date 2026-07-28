@@ -27,6 +27,7 @@ const Settings = require("../models/Settings");
 const ApplicationConfig = require("../models/ApplicationConfig");
 const { createBoundedTtlCache } = require("../utils/boundedTtlCache");
 const { pushOverride } = require("./explain");
+const { hasVisionContent, isVisionCapable, governanceFor, checkModel } = require("../routing/guards");
 
 // Short-lived cache to avoid a DB hit per request for app configs.
 //
@@ -104,14 +105,23 @@ function buildFallbackOrder(provider, model, liveIds, defaultModels, scope = "sa
 
 // Try the chosen provider; on failure, retry per config.fallbackScope.
 // Returns { result, usedFallback }.
-async function invokeWithFallback(router, eff, { provider, model, messages, temperature, maxTokens }) {
-  const order = buildFallbackOrder(
+//
+// `governance` (optional) validates each FALLBACK candidate against the app's
+// allowed-models / opt-out / vision needs, and requires a priced target, so a retry
+// can never serve a model the app is restricted from, a text model for an image
+// request, or an unpriced model. The primary (index 0) is kept as-is — it was already
+// validated by resolveRoute.
+async function invokeWithFallback(router, eff, { provider, model, messages, temperature, maxTokens }, governance = null) {
+  const full = buildFallbackOrder(
     provider,
     model,
     eff.liveIds,
     config.defaultModels,
     config.fallbackScope
   );
+  const order = governance
+    ? [full[0], ...full.slice(1).filter((c) => checkModel(c.model, { ...governance, requirePriced: true }).ok)]
+    : full;
   let lastErr;
   for (let i = 0; i < order.length; i++) {
     const { provider: p, model: m } = order[i];
@@ -129,22 +139,6 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
     }
   }
   throw lastErr || new Error("all providers failed");
-}
-
-// True when any message carries image content (OpenAI multimodal shape). Same
-// detection the OpenAI-compatible gateway uses before forwarding.
-function hasVisionContent(messages) {
-  return Array.isArray(messages) && messages.some(
-    (m) => Array.isArray(m.content) && m.content.some((c) => c && c.type === "image_url")
-  );
-}
-
-// Vision support is asserted only when the registry says so. A model absent from
-// the registry, or present with a null flag (unknown), counts as NOT known-capable:
-// the reported failure was exactly such a model. Explicit client pins bypass this.
-function isVisionCapable(modelId) {
-  const m = pricing.getModel(modelId);
-  return !!m && m.supportsVision === true;
 }
 
 function visionUnsupportedError(model, eff) {
@@ -451,9 +445,14 @@ async function handleChat(req, res) {
         message: `Budget exceeded: ${capEngine.describeScope(enf.cap)} is over its ${enf.cap.period === "day" ? "daily" : "monthly"} limit ($${enf.cap.limit}).`,
       });
     }
-    // downgrade
+    // downgrade — but only to a target the app is actually allowed to receive. The
+    // light target is a global per-provider default that knows nothing about this
+    // key's allowed-models / opt-out or the request's vision needs; downgrading
+    // blindly could serve a restricted or text-only model. If the target fails the
+    // guard, skip the downgrade and serve the original (the cap still warns/records).
     const target = pricing.suggestLightTarget(served.model);
-    if (target) {
+    const gov = governanceFor({ appConfig, appDbConfig: appCfg, messages: body.messages });
+    if (target && checkModel(target.model, gov).ok) {
       pushOverride(explain, { type: "budget", action: "downgrade", from: served.model, to: target.model,
         cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
       served = { provider: target.provider, model: target.model };
@@ -584,7 +583,7 @@ async function handleChat(req, res) {
       messages: body.messages,
       temperature: body.temperature,
       maxTokens: body.maxTokens,
-    });
+    }, governanceFor({ appConfig, appDbConfig: appCfg, messages: body.messages }));
   } catch (err) {
     const errorMessage = String(err.message || err);
     setImmediate(() =>
@@ -685,6 +684,6 @@ module.exports = {
   invokeWithFallback,
   buildFallbackOrder,
   getAppConfig,
-  hasVisionContent, // pure, exported for tests
+  hasVisionContent, // re-exported from routing/guards for existing tests
   isVisionCapable,
 };
