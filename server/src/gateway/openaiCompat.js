@@ -374,6 +374,9 @@ async function handleOpenAICompat(req, res) {
     if (err.code === "model_not_allowed") {
       return res.status(403).json({ error: { message: err.message, type: "invalid_request_error", code: "model_not_allowed" } });
     }
+    if (err.code === "vision_not_supported") {
+      return res.status(400).json({ error: { message: err.message, type: "invalid_request_error", code: err.code, vision_models: err.visionModels || [] } });
+    }
     throw err;
   }
 
