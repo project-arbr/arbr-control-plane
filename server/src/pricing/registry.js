@@ -95,6 +95,17 @@ function listModels() {
   return Object.values(_cache);
 }
 
+// Vision-capable model IDs, optionally restricted to live providers. Used to tell
+// a caller which models can actually take an image when routing landed on one that
+// cannot. Only affirmatively-flagged models qualify (null = unknown = excluded).
+function listVisionModels(liveIds = null) {
+  const live = liveIds ? new Set(liveIds) : null;
+  return Object.values(_cache)
+    .filter((m) => m.supportsVision === true && (!live || live.has(m.provider)))
+    .map((m) => m.id)
+    .sort();
+}
+
 function isPremium(id) {
   const m = _cache[id];
   return !!m && m.tier === "premium";
@@ -149,6 +160,7 @@ module.exports = {
   // Sync accessors
   getModel,
   listModels,
+  listVisionModels,
   isPremium,
   isCheapTask,
   costFor,

@@ -131,6 +131,33 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
   throw lastErr || new Error("all providers failed");
 }
 
+// True when any message carries image content (OpenAI multimodal shape). Same
+// detection the OpenAI-compatible gateway uses before forwarding.
+function hasVisionContent(messages) {
+  return Array.isArray(messages) && messages.some(
+    (m) => Array.isArray(m.content) && m.content.some((c) => c && c.type === "image_url")
+  );
+}
+
+// Vision support is asserted only when the registry says so. A model absent from
+// the registry, or present with a null flag (unknown), counts as NOT known-capable:
+// the reported failure was exactly such a model. Explicit client pins bypass this.
+function isVisionCapable(modelId) {
+  const m = pricing.getModel(modelId);
+  return !!m && m.supportsVision === true;
+}
+
+function visionUnsupportedError(model, eff) {
+  const options = pricing.listVisionModels(eff.liveIds).slice(0, 8);
+  const hint = options.length
+    ? ` Pin a vision-capable model, for example: ${options.join(", ")}.`
+    : " No vision-capable model is currently connected; add one on the Models page.";
+  return Object.assign(
+    new Error(`The request includes an image, but "${model}" is not known to support vision.${hint}`),
+    { code: "vision_not_supported", status: 400, visionModels: options }
+  );
+}
+
 // Shared routing resolution: classify task + decide served {provider, model}.
 // Returns { served, routingDecision, taskType, classifiedBy }. The classifier's own
 // spend is accounted inside classify/classifier.js, so callers don't have to remember
@@ -283,6 +310,16 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
     explain.allowedViolation = { model: served.model, allowed: appConfig.allowedModels };
   }
 
+  // Vision guard: when Arbr CHOSE the model (not an explicit client pin) and the
+  // request carries an image, a model not known to support vision fails opaquely
+  // downstream — a 502 from an OpenAI-compatible provider, or the image silently
+  // stripped on the native path. Reject early with a 400 that names live
+  // vision-capable models to pin, turning the confusing provider error into an
+  // actionable one. Explicit client pins are left alone: that choice is theirs.
+  if (!explicit && hasVisionContent(body.messages) && !isVisionCapable(served.model)) {
+    throw visionUnsupportedError(served.model, eff);
+  }
+
   // qualityGate: only set when a human-approved rule (or canary promote path) chose the model.
   let qualityGate = null;
   if (routingDecision === "rule" && explain.qualityGate) {
@@ -382,6 +419,9 @@ async function handleChat(req, res) {
   } catch (err) {
     if (err.code === "model_not_allowed") {
       return res.status(403).json({ error: err.message, code: "model_not_allowed" });
+    }
+    if (err.code === "vision_not_supported") {
+      return res.status(400).json({ error: err.message, code: err.code, vision_models: err.visionModels || [] });
     }
     throw err;
   }
@@ -645,4 +685,6 @@ module.exports = {
   invokeWithFallback,
   buildFallbackOrder,
   getAppConfig,
+  hasVisionContent, // pure, exported for tests
+  isVisionCapable,
 };
