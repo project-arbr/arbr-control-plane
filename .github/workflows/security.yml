@@ -40,16 +40,20 @@ jobs:
         with:
           node-version: 20
 
+      # audit-gate.mjs is `npm audit --omit=dev --audit-level=high` plus a small,
+      # documented allowlist (raw npm audit cannot exempt a single advisory). Any
+      # high/critical finding NOT in the allowlist still fails. See the script for
+      # the current entries and their review dates.
       - name: Audit server
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/audit-gate.mjs
 
       - name: Audit web
-        run: npm audit --omit=dev --audit-level=high
+        run: node ../scripts/audit-gate.mjs
         working-directory: web
 
       - name: Audit JS SDK
         # the SDK ships without a lockfile; generate one transiently so audit can resolve the tree
-        run: npm i --package-lock-only --ignore-scripts && npm audit --omit=dev --audit-level=high
+        run: npm i --package-lock-only --ignore-scripts && node ../../scripts/audit-gate.mjs
         working-directory: clients/js
 
   image-scan:
