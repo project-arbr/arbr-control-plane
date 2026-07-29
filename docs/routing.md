@@ -2,6 +2,8 @@
 
 Arbr's routing layer sits between the request and the provider. It works on a clear precedence — **the developer's pin wins**, and automation only applies when the app defers.
 
+> For the exhaustive, code-accurate reference — the full precedence pipeline, a worked example per routing case, the override chain, fallback scopes, and every error code — see [routing-spec.md](routing-spec.md). That file is the source of truth; this page is the overview.
+
 ## Routing modes
 
 Set in **Settings → Routing → Automated routing**:
