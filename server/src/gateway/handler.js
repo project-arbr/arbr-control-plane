@@ -200,7 +200,7 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
         explain.defaultScope = "app";
       }
     }
-    const route = await ruleEngine.findRoute({ taskType, application, workflow });
+    const route = await ruleEngine.findRoute({ taskType, application, workflow, eff });
     if (route) {
       served = { provider: route.provider, model: route.model };
       routingDecision = "rule";
