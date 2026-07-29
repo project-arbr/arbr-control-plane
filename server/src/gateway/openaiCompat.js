@@ -17,6 +17,7 @@ const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
 const { pushOverride } = require("./explain");
+const { governanceFor, checkModel } = require("../routing/guards");
 
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
@@ -397,8 +398,9 @@ async function handleOpenAICompat(req, res) {
       }
       return res.status(429).json(errBody);
     }
+    // Downgrade only to a target the app may actually receive (see handler.js).
     const target = pricing.suggestLightTarget(served.model);
-    if (target) {
+    if (target && checkModel(target.model, governanceFor({ appConfig, appDbConfig: appCfg, messages: body.messages })).ok) {
       pushOverride(explain, { type: "budget", action: "downgrade", from: served.model, to: target.model,
         cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
       served = { provider: target.provider, model: target.model }; routingDecision = "budget";
@@ -662,7 +664,7 @@ async function handleOpenAICompat(req, res) {
         messages: body.messages,
         temperature: body.temperature,
         maxTokens: body.max_tokens,
-      });
+      }, governanceFor({ appConfig, appDbConfig: appCfg, messages: body.messages }));
     } catch (err) {
       const errorMessage = String(err.message || err);
       res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
@@ -760,7 +762,7 @@ async function handleOpenAICompat(req, res) {
       messages: body.messages,
       temperature: body.temperature,
       maxTokens: body.max_tokens,
-    });
+    }, governanceFor({ appConfig, appDbConfig: appCfg, messages: body.messages }));
   } catch (err) {
     const errorMessage = String(err.message || err);
     setImmediate(() =>
