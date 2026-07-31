@@ -200,11 +200,13 @@ reflects both today's behavior and the intended end state.
    *Target:* validate every fallback candidate; skip a violating one.
 2. **Budget-downgrade** (`suggestLightTarget`) skips the same re-validation.
    *Target:* validate the downgrade target too.
-3. **Rule targets are served unvalidated** — no `eff.liveIds`/registry check; a
-   rule pointing at an offline/unknown model routes blindly. *Target:* validate at
-   match time; skip and surface an invalid rule.
-4. **No rule precedence** — `Rule.find({enabled:true})` has no priority; overlapping
-   rules resolve in DB order. *Target:* explicit priority + specificity ordering.
+3. ~~**Rule targets are served unvalidated**~~ — **closed (#2b).** `findRoute` now
+   skips a rule whose target provider is offline (routing falls through instead of
+   dead-ending on a 502) and warns. An unknown model on a *live* provider is left
+   servable as a legitimate pass-through, matching explicit-pin behavior.
+4. ~~**No rule precedence**~~ — **closed (#2b).** Rules are ordered by priority desc,
+   then specificity (condition fields set) desc, then `_id`, so overlapping rules
+   resolve deterministically.
 5. **Hardcoded, unpriced-prone targets** — `config.defaultModels` isn't
    admin-configurable or registry-validated; an unpriced target logs $0. *Target:*
    Settings-backed, registry-validated per-provider targets.

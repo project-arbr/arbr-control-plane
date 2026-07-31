@@ -16,6 +16,10 @@ const ruleSchema = new mongoose.Schema(
       model: { type: String, required: true },
     },
     enabled: { type: Boolean, default: false, index: true },
+    // Higher priority wins when more than one enabled rule matches a request. Ties
+    // break by specificity (more condition fields set) then by _id, so ordering is
+    // always deterministic. Existing rules default to 0 (unchanged relative order).
+    priority: { type: Number, default: 0, index: true },
     createdBy: { type: String, default: "console" },
     // Link back to the recommendation that produced it, if any.
     sourceRecommendation: { type: mongoose.Schema.Types.ObjectId, ref: "Recommendation", default: null },

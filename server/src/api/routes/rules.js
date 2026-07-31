@@ -16,7 +16,7 @@ router.get("/rules", async (_req, res, next) => {
 
 router.post("/rules", requireRole("operator"), async (req, res, next) => {
   try {
-    const { condition = {}, target, enabled = false, note = "" } = req.body || {};
+    const { condition = {}, target, enabled = false, note = "", priority = 0 } = req.body || {};
     if (!target || !target.provider || !target.model) {
       return res.status(400).json({ error: "target { provider, model } is required" });
     }
@@ -27,6 +27,7 @@ router.post("/rules", requireRole("operator"), async (req, res, next) => {
         workflow: condition.workflow || null,
       },
       target, enabled: !!enabled, note,
+      priority: Number.isFinite(+priority) ? Math.trunc(+priority) : 0,
       qualityGate: "ungated", // manual rules have no eval proof
     });
     ruleEngine.invalidate();
@@ -41,6 +42,7 @@ router.patch("/rules/:id", requireRole("operator"), async (req, res, next) => {
     const update = {};
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
     if (req.body.note != null) update.note = req.body.note;
+    if (req.body.priority != null && Number.isFinite(+req.body.priority)) update.priority = Math.trunc(+req.body.priority);
     const rule = await Rule.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!rule) return res.status(404).json({ error: "not found" });
     ruleEngine.invalidate();

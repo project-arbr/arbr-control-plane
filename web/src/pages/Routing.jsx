@@ -23,6 +23,7 @@ function CreateRuleForm({ models, onCreated }) {
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
   const [enabled, setEnabled] = useState(true);
+  const [priority, setPriority] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -42,6 +43,7 @@ function CreateRuleForm({ models, onCreated }) {
         condition: { [field]: value.trim() },
         target: { provider, model },
         enabled,
+        priority: Number(priority) || 0,
         note: `${field}=${value.trim()} → ${model}`,
       });
       setValue("");
@@ -77,6 +79,10 @@ function CreateRuleForm({ models, onCreated }) {
           <select className="input w-56" value={model} onChange={(e) => setModel(e.target.value)}>
             {providerModels.map((m) => <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>)}
           </select>
+        </div>
+        <div>
+          <div className="label mb-1" title="Higher wins when multiple rules match. Ties break by how specific the rule is.">Priority</div>
+          <input className="input w-20" type="number" step="1" value={priority} onChange={(e) => setPriority(e.target.value)} />
         </div>
         <label className="flex h-9 cursor-pointer items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
@@ -521,6 +527,9 @@ export default function Routing({ onChange }) {
                 columns={[
                   { key: "enabled", header: "On", render: (r) => (
                     <Toggle checked={r.enabled} onChange={(v) => toggleRule(r._id, v)} label="enable rule" />
+                  ) },
+                  { key: "priority", header: "Priority", render: (r) => (
+                    <span className="font-mono text-gray-500" title="Higher wins when multiple rules match">{r.priority ?? 0}</span>
                   ) },
                   { key: "condition", header: "When", render: (r) => cond(r.condition) },
                   { key: "target", header: "Route to", render: (r) => (
