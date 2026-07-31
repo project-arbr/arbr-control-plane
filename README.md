@@ -190,8 +190,9 @@ curl -X POST http://localhost:4100/v1/chat \
 ```
 
 Response fields: `model` (served), `modelRequested`, `routingDecision`
-(`explicit` | `passthrough` | `rule` | `auto` | `ai` | `cache` | `fallback` | `budget` |
-`canary` | `external`), `classifiedBy`, `cacheHit`, and token `usage` (including
+(`explicit` | `passthrough` | `rule` | `auto` | `ai` | `cache` | `semantic_cache` |
+`fallback` | `budget` | `canary` | `external`), `classifiedBy`, `cacheHit`, and token
+`usage` (including
 `cachedReadTokens` / `cacheWriteTokens` when the provider reported prompt-cache usage).
 Every call is logged to MongoDB as a **RequestRecord**.
 
