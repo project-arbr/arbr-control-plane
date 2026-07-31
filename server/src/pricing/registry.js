@@ -106,6 +106,38 @@ function listVisionModels(liveIds = null) {
     .sort();
 }
 
+// Suggest registry IDs close to an unresolved one, for a "did you mean" hint.
+// The common miss is a client sending a bare ID for a model the registry stores
+// region-scoped, e.g. "deepseek.v3.2" when the ID is "ap-southeast-3/deepseek.v3.2".
+function suggestModels(query, opts = {}) {
+  return rankSuggestions(query, Object.values(_cache), opts);
+}
+
+// Pure ranker over an explicit model list, so the scoring is testable without a DB.
+// Ranking: exact tail after a "/" or "." first (the region-prefix case), then
+// substring either way. `liveIds` (optional) floats connected providers up, since
+// a suggestion the caller cannot actually reach is not much of a suggestion.
+function rankSuggestions(query, models, { limit = 5, liveIds = null } = {}) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return [];
+  const live = liveIds ? new Set(liveIds) : null;
+  const scored = [];
+  for (const m of models || []) {
+    const id = m.id;
+    const lid = id.toLowerCase();
+    let score = 0;
+    if (lid === q) score = 100;
+    else if (lid.endsWith("/" + q) || lid.endsWith("." + q)) score = 80; // region/prefix variant
+    else if (lid.includes(q)) score = 50;
+    else if (q.includes(lid)) score = 30;
+    if (!score) continue;
+    if (live && live.has(m.provider)) score += 10; // reachable beats unreachable
+    scored.push({ id, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  return scored.slice(0, limit).map((s) => s.id);
+}
+
 function isPremium(id) {
   const m = _cache[id];
   return !!m && m.tier === "premium";
@@ -161,6 +193,8 @@ module.exports = {
   getModel,
   listModels,
   listVisionModels,
+  suggestModels,
+  rankSuggestions, // pure, exported for tests
   isPremium,
   isCheapTask,
   costFor,

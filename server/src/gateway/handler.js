@@ -49,20 +49,38 @@ async function getAppConfig(appName) {
   return cfg;
 }
 
-// An explicit, honorable model pin → { provider, model, knownPricing } to use
-// as-is, or null to defer to the router. Defers when the model is "auto"/absent
-// or the resolved provider is not connected (live).
-// Pass-through: an explicit provider + any non-empty model ID is accepted even
-// when the model is not in the registry — costs are logged as $0 until it's added.
+// Interpret the client's model field. Returns one of:
+//   { kind: "defer" }                            no pin ("auto"/absent) → let the router decide
+//   { kind: "pin", served: {...} }               a usable explicit model
+//   { kind: "unresolved", model, reason, provider? }
+//                                                a concrete model that cannot be honored
+//
+// A pin that cannot be resolved used to collapse to the same null as "no pin", so
+// the request was quietly served the default and the UI claimed "no model was
+// pinned". The two are now distinct: the caller rejects an unresolved pin.
+//
+// Pass-through still holds: an explicit LIVE provider plus any non-empty model ID
+// is accepted even when the model is unknown to the registry (costs log as $0
+// until it is added). Only a pin with no reachable provider is unresolved.
 function resolveExplicit(body, eff) {
   const rawModel = (body.model || "").trim();
   const rawProvider = (body.provider || "").trim();
-  if (!rawModel || rawModel.toLowerCase() === "auto") return null;
+  if (!rawModel || rawModel.toLowerCase() === "auto") return { kind: "defer" };
+
   const known = pricing.getModel(rawModel);
-  const provider = (rawProvider && rawProvider.toLowerCase() !== "auto" ? rawProvider : null)
-    || (known ? known.provider : null);
-  if (!provider || !eff.liveIds.includes(provider)) return null;
-  return { provider, model: rawModel, knownPricing: !!known };
+  const hintedProvider = rawProvider && rawProvider.toLowerCase() !== "auto" ? rawProvider : null;
+  const provider = hintedProvider || (known ? known.provider : null);
+
+  if (!provider) {
+    // Unknown model and no provider hint: nothing tells us where to route it.
+    // This is the bare-ID-for-a-region-scoped-model case.
+    return { kind: "unresolved", model: rawModel, reason: "unknown-model" };
+  }
+  if (!eff.liveIds.includes(provider)) {
+    // We know (or were told) the provider, but it is not connected.
+    return { kind: "unresolved", model: rawModel, reason: "provider-not-connected", provider };
+  }
+  return { kind: "pin", served: { provider, model: rawModel, knownPricing: !!known } };
 }
 
 // The router's base model for auto mode: honor a live provider hint if given,
@@ -152,6 +170,24 @@ function visionUnsupportedError(model, eff) {
   );
 }
 
+// Build the 400 for a pin Arbr cannot honor. Includes "did you mean" IDs so the
+// bare-vs-region-scoped mistake ("deepseek.v3.2" → "ap-southeast-3/deepseek.v3.2")
+// is self-correcting, and mirrors OpenAI's model_not_found shape.
+function unresolvedModelError(pin, eff) {
+  if (pin.reason === "provider-not-connected") {
+    return Object.assign(
+      new Error(`Model "${pin.model}" routes to provider "${pin.provider}", which is not connected. Connect it, or pin a model from a live provider.`),
+      { code: "provider_not_connected", status: 400 }
+    );
+  }
+  const suggestions = pricing.suggestModels(pin.model, { liveIds: eff.liveIds, limit: 5 });
+  const hint = suggestions.length ? ` Did you mean: ${suggestions.join(", ")}?` : "";
+  return Object.assign(
+    new Error(`Unknown model "${pin.model}". It is not in this instance's registry, and no provider was specified.${hint}`),
+    { code: "model_not_found", status: 400, suggestions }
+  );
+}
+
 // Shared routing resolution: classify task + decide served {provider, model}.
 // Returns { served, routingDecision, taskType, classifiedBy }. The classifier's own
 // spend is accounted inside classify/classifier.js, so callers don't have to remember
@@ -159,7 +195,12 @@ function visionUnsupportedError(model, eff) {
 // Callers are responsible for budget enforcement (it may short-circuit the response).
 async function resolveRoute(body, { router, eff, application, workflow, userId = null, appConfig = {}, appDbConfig = null }) {
   const routingMode = await ruleEngine.getRoutingMode();
-  const explicit = resolveExplicit(body, eff);
+  const pin = resolveExplicit(body, eff);
+  // A model the client pinned but Arbr cannot honor is rejected, not silently
+  // swapped for the default. Serving something else behind a 200 corrupts cost
+  // attribution and evals, and is exactly what made "no model was pinned" a lie.
+  if (pin.kind === "unresolved") throw unresolvedModelError(pin, eff);
+  const explicit = pin.kind === "pin" ? pin.served : null;
   const autoMode = !explicit;
   const providedTaskType = !!(body.taskType && String(body.taskType).trim());
 
@@ -416,6 +457,9 @@ async function handleChat(req, res) {
     }
     if (err.code === "vision_not_supported") {
       return res.status(400).json({ error: err.message, code: err.code, vision_models: err.visionModels || [] });
+    }
+    if (err.status === 400 && (err.code === "model_not_found" || err.code === "provider_not_connected")) {
+      return res.status(400).json({ error: err.message, code: err.code, ...(err.suggestions ? { did_you_mean: err.suggestions } : {}) });
     }
     throw err;
   }
@@ -681,6 +725,7 @@ async function handleChat(req, res) {
 module.exports = {
   handleChat,
   resolveRoute,
+  resolveExplicit, // pure, exported for tests
   invokeWithFallback,
   buildFallbackOrder,
   getAppConfig,

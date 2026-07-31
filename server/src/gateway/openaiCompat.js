@@ -378,6 +378,18 @@ async function handleOpenAICompat(req, res) {
     if (err.code === "vision_not_supported") {
       return res.status(400).json({ error: { message: err.message, type: "invalid_request_error", code: err.code, vision_models: err.visionModels || [] } });
     }
+    if (err.status === 400 && (err.code === "model_not_found" || err.code === "provider_not_connected")) {
+      // OpenAI-compatible shape: unknown model is invalid_request_error / model_not_found,
+      // which OpenAI SDK clients already surface. did_you_mean is an Arbr extension.
+      return res.status(400).json({
+        error: {
+          message: err.message,
+          type: "invalid_request_error",
+          code: err.code,
+          ...(err.suggestions ? { did_you_mean: err.suggestions } : {}),
+        },
+      });
+    }
     throw err;
   }
 
