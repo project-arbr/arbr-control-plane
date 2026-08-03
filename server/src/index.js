@@ -12,6 +12,8 @@ const registry = require("./pricing/registry");
 const { TASK_CATALOG } = require("./classify/classifier");
 const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
+const readTokenAuth = require("./gateway/readTokenAuth");
+const usageRoutes = require("./api/routes/usage");
 const { handleEmbeddings } = require("./gateway/embeddings");
 const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
@@ -123,6 +125,11 @@ async function start() {
 
   // OpenAI-compatible endpoint — any client that speaks the OpenAI spec can use Arbr.
   app.post("/v1/chat/completions", auth.middleware, handleOpenAICompat);
+
+  // Scoped, read-only usage API — a "read" token sees ONLY its own application
+  // (+ optional user) analytics. Guarded by readTokenAuth (not the admin key), so a
+  // partner app can expose per-end-user usage without proxying through ARBR_ADMIN_KEY.
+  app.use("/v1/usage", adminRateLimit.middleware, readTokenAuth.middleware, usageRoutes);
 
   // OpenAI-compatible embeddings endpoint — routes to the appropriate provider
   // (Gemini or OpenAI-compat) based on the model ID, with full observability.

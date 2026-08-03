@@ -71,6 +71,11 @@ async function resolveKey(authHeader) {
     err.statusCode = 401;
     throw err;
   }
+  if (doc.kind === "read") {
+    const err = new Error("This is a read-only usage token; it cannot run inference. Use a gateway key.");
+    err.statusCode = 401;
+    throw err;
+  }
   if (doc.expiresAt && doc.expiresAt < new Date()) {
     const err = new Error(`API key "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.`);
     err.statusCode = 401;
@@ -110,6 +115,9 @@ async function middleware(req, res, next) {
       if (!doc) {
         return res.status(401).json({ error: "invalid_api_key", message: "Unknown, disabled, or revoked API key." });
       }
+      if (doc.kind === "read") {
+        return res.status(401).json({ error: "read_token_on_data_plane", message: "This is a read-only usage token; it cannot run inference. Use a gateway key for /v1/chat." });
+      }
       if (doc.expiresAt && doc.expiresAt < new Date()) {
         return res.status(401).json({ error: "expired_api_key", message: `API key "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.` });
       }
@@ -136,4 +144,33 @@ async function middleware(req, res, next) {
   }
 }
 
-module.exports = { middleware, resolveKey, hashKey, invalidate, requireApiKeyOn, setRequireApiKey };
+// Validate a READ token (the scoped usage credential). Mirrors resolveKey but
+// requires kind === "read" and applies no rpm limit (reads are cheap). Returns the
+// key doc (whose application + userId are the forced analytics scope), or throws
+// with .statusCode. Used by gateway/readTokenAuth.js.
+async function resolveReadToken(authHeader) {
+  const raw = authHeader && authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+  if (!raw) {
+    const err = new Error("A read token is required (Authorization: Bearer ab_read_…).");
+    err.statusCode = 401;
+    throw err;
+  }
+  const keys = await _keysByHash();
+  const doc = keys.get(hashKey(raw));
+  if (!doc || doc.kind !== "read") {
+    const err = new Error("Unknown, revoked, or non-read token.");
+    err.statusCode = 401;
+    throw err;
+  }
+  if (doc.expiresAt && doc.expiresAt < new Date()) {
+    const err = new Error(`Read token "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.`);
+    err.statusCode = 401;
+    throw err;
+  }
+  stampLastUsed(doc);
+  return doc;
+}
+
+module.exports = { middleware, resolveKey, resolveReadToken, hashKey, invalidate, requireApiKeyOn, setRequireApiKey };
