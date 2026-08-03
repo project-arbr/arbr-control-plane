@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, fmt } from "../api.js";
 import { Card, Table, Stat, Toggle, Badge, Spinner, Tabs, useTabParam, ConfirmDialog } from "../components/ui.jsx";
+import { explainRouting } from "../lib/routingNarration.js";
 
 // Recommendations moved to its own top-level page (/recommendations).
 const TABS = [
@@ -15,6 +16,87 @@ function cond(c) {
   if (c.application) parts.push(`app = ${c.application}`);
   if (c.workflow) parts.push(`workflow = ${c.workflow}`);
   return parts.length ? parts.join(" · ") : "—";
+}
+
+// Dry-run: "given this hypothetical request, which model would Arbr serve, and why?"
+// Runs through the real routing path server-side (no provider call, no billable
+// classification) so what it shows is exactly what a live request would get.
+const DECISION_TONE = { passthrough: "gray", explicit: "teal", rule: "green", auto: "indigo", ai: "violet", budget: "red", canary: "amber", fallback: "amber" };
+
+function RouteTester() {
+  const [model, setModel] = useState("auto");
+  const [taskType, setTaskType] = useState("");
+  const [application, setApplication] = useState("");
+  const [workflow, setWorkflow] = useState("");
+  const [hasImage, setHasImage] = useState(false);
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const run = async () => {
+    setBusy(true); setErr(null); setRes(null);
+    try {
+      const out = await api.explainRoute({
+        model: model.trim() || "auto",
+        taskType: taskType.trim() || undefined,
+        application: application.trim() || undefined,
+        workflow: workflow.trim() || undefined,
+        hasImage,
+      });
+      setRes(out);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const narration = res && !res.rejected ? explainRouting(res) : [];
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-600">
+        Preview what routing would do for a hypothetical request, without sending real traffic. Leave{" "}
+        <span className="font-mono">model</span> as <span className="font-mono">auto</span> to see how rules and the policy decide.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <div><div className="label mb-1">Model</div><input className="input w-40" value={model} onChange={(e) => setModel(e.target.value)} placeholder="auto" /></div>
+        <div><div className="label mb-1">Task type</div><input className="input w-40" value={taskType} onChange={(e) => setTaskType(e.target.value)} placeholder="(classify)" /></div>
+        <div><div className="label mb-1">Application</div><input className="input w-40" value={application} onChange={(e) => setApplication(e.target.value)} placeholder="(any)" /></div>
+        <div><div className="label mb-1">Workflow</div><input className="input w-36" value={workflow} onChange={(e) => setWorkflow(e.target.value)} placeholder="(any)" /></div>
+        <label className="flex h-9 cursor-pointer items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={hasImage} onChange={(e) => setHasImage(e.target.checked)} /> Has image
+        </label>
+        <button className="btn-secondary h-9 px-5" disabled={busy} onClick={run}>{busy ? "Previewing…" : "Preview route"}</button>
+      </div>
+      {err && <div className="text-xs text-red-600">{err}</div>}
+
+      {res?.rejected && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+          <div className="font-medium text-red-800">Rejected · {res.rejected.status} {res.rejected.code}</div>
+          <div className="mt-1 text-red-700">{res.rejected.message}</div>
+        </div>
+      )}
+
+      {res && !res.rejected && (
+        <div className="rounded-lg border border-arbr-accent-200 bg-arbr-accent-50 p-4">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-gray-400">Would serve</span>
+            <Badge tone="charcoal">{res.provider} · {res.model}</Badge>
+            <Badge tone={DECISION_TONE[res.routingDecision] || "gray"}>{res.routingDecision}</Badge>
+            {res.classifiedBy && <span className="text-xs text-gray-400">classified: {res.classifiedBy}</span>}
+          </div>
+          <ul className="space-y-1 text-sm text-gray-700">
+            {narration.map((line, i) => <li key={i}>· {line}</li>)}
+          </ul>
+          {res.budget && (
+            <div className="mt-2 text-sm text-red-700">
+              {res.budget.action === "block"
+                ? `Budget: cap "${res.budget.scope}" (${res.budget.period}, $${res.budget.limit}) is over limit — the request would be blocked (429).`
+                : `Budget: cap "${res.budget.scope}" (${res.budget.period}, $${res.budget.limit}) is over limit — would downgrade to ${res.budget.to || "a lighter model"}.`}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CreateRuleForm({ models, onCreated }) {
@@ -508,6 +590,10 @@ export default function Routing({ onChange }) {
 
       {tab === "rules" && (
         <>
+          <Card title="Test a route">
+            <RouteTester />
+          </Card>
+
           <Card title="Create a rule">
             <p className="mb-3 text-sm text-gray-600">
               Map a condition to a target model. The gateway applies it deterministically — no quality guess.

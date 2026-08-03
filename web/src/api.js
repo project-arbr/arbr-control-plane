@@ -168,6 +168,7 @@ export const api = {
   testModel: (id, message) => req(`/models/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify({ message }) }),
 
   rules: () => req("/rules"),
+  explainRoute: (body) => req("/routing/explain", { method: "POST", body: JSON.stringify(body) }),
   createRule: (body) => req("/rules", { method: "POST", body: JSON.stringify(body) }),
   updateRule: (id, body) => req(`/rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteRule: (id) => req(`/rules/${id}`, { method: "DELETE" }),

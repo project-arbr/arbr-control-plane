@@ -84,11 +84,11 @@ async function start() {
     exposedHeaders: ["X-Arbr-Request-ID", "X-Arbr-Model", "X-Arbr-Provider", "X-Arbr-Routing", "X-Arbr-Task-Type"],
   }));
   app.use(express.json({ limit: "2mb" }));
-  // CSRF protection IS applied — see csrf.protection two lines below
-  // (double-submit cookie via csrf-csrf, tested in
-  // server/test/integration/csrf.test.js). CodeQL's model doesn't recognize
-  // this library the way it recognizes csurf, so it still flags this line.
-  // codeql[js/missing-token-validation]
+  // CSRF protection IS applied — see csrf.protection two lines below (double-submit
+  // cookie via csrf-csrf, tested in server/test/integration/csrf.test.js). CodeQL
+  // does not model csrf-csrf the way it models csurf, so js/missing-token-validation
+  // flags this cookie middleware. It is a false positive and is dismissed as such in
+  // code scanning (inline // codeql[...] comments are not honored by this setup).
   app.use(cookieParser());
   // Mounted globally so every route is structurally CSRF-protected; only
   // requests carrying a session cookie are actually validated (see csrf.js).

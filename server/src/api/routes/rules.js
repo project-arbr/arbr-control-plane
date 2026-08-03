@@ -6,6 +6,9 @@ const { requireRole } = require("../rbac");
 const ruleEngine = require("../../routing/ruleEngine");
 const responseCache = require("../../routing/responseCache");
 const semanticCache = require("../../routing/semanticCache");
+const connections = require("../../providers/connections");
+const { explainRoute } = require("../../routing/explainRoute");
+const { getAppConfig } = require("../../gateway/handler");
 
 const router = express.Router();
 
@@ -76,6 +79,44 @@ router.post("/cache/semantic/clear", requireRole("operator"), (_req, res) => {
 // Current semantic cache entry count (for the UI status display).
 router.get("/cache/semantic/stats", (_req, res) => {
   res.json({ size: semanticCache.size() });
+});
+
+// Dry-run route preview: "given this hypothetical request, which model would Arbr
+// serve, and why?" — computed through the real routing path with no provider call,
+// no billable classification, and no logging. Routing rejections (unresolvable pin,
+// vision, not-allowed) are returned as a preview OUTCOME, not an error.
+router.post("/routing/explain", requireRole("operator"), async (req, res, next) => {
+  try {
+    const eff = await connections.effective();
+    const b = req.body || {};
+    // Coerce every free-text field to a string so a JSON object can't become a
+    // query operator or a template-injection surprise downstream.
+    const str = (v) => (v == null ? undefined : String(v));
+    const model = str(b.model), provider = str(b.provider), taskType = str(b.taskType);
+    const application = str(b.application), workflow = str(b.workflow);
+    const hasImage = !!b.hasImage;
+    const appDbConfig = application ? await getAppConfig(application) : null;
+    const appConfig = {
+      allowedModels: Array.isArray(b.allowedModels) ? b.allowedModels.map(String) : [],
+      defaultModel: str(b.defaultModel) || null,
+    };
+    const result = await explainRoute(
+      { model, provider, taskType, application, workflow, hasImage },
+      { eff, appConfig, appDbConfig }
+    );
+    res.json(result);
+  } catch (err) {
+    if (err.status && err.code) {
+      return res.json({
+        rejected: {
+          code: err.code, message: err.message, status: err.status,
+          ...(err.suggestions ? { did_you_mean: err.suggestions } : {}),
+          ...(err.visionModels ? { vision_models: err.visionModels } : {}),
+        },
+      });
+    }
+    next(err);
+  }
 });
 
 // Auto-mode routing engine: "off" | "guardrail" | "ai".
