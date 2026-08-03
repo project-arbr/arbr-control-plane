@@ -4,6 +4,7 @@ const ApiKey = require("../../models/ApiKey");
 const auth = require("../../gateway/auth");
 const { logAction } = require("../auditLogger");
 const { requireRole } = require("../rbac");
+const { rotateKey } = require("../keyRotation");
 const crypto = require("crypto");
 
 const router = express.Router();
@@ -94,21 +95,7 @@ router.post("/keys/:id/rotate", requireRole("operator"), async (req, res, next) 
   try {
     const old = await ApiKey.findById(req.params.id).lean();
     if (!old || old.revokedAt) return res.status(404).json({ error: "Key not found or already revoked." });
-    await ApiKey.findByIdAndUpdate(req.params.id, { enabled: false, revokedAt: new Date() });
-    const secret = "ab_" + crypto.randomBytes(16).toString("hex");
-    const doc = await ApiKey.create({
-      name: old.name,
-      application: old.application,
-      keyHash: auth.hashKey(secret),
-      prefix: `ab_…${secret.slice(-4)}`,
-      rpm: old.rpm,
-      userId: old.userId || null,
-      department: old.department || null,
-      allowedModels: old.allowedModels || [],
-      defaultModel: old.defaultModel || null,
-      expiresAt: old.expiresAt || null,
-    });
-    auth.invalidate();
+    const { doc, secret } = await rotateKey(old); // preserves kind + scope
     setImmediate(() => logAction("key.rotate", "key", doc._id, { replacedId: old._id, name: doc.name, application: doc.application }, req.user));
     res.json({ ...keyView(doc.toObject()), key: secret });
   } catch (e) { next(e); }
