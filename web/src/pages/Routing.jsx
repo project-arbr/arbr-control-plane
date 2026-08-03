@@ -56,6 +56,10 @@ function RouteTester() {
         Preview what routing would do for a hypothetical request, without sending real traffic. Leave{" "}
         <span className="font-mono">model</span> as <span className="font-mono">auto</span> to see how rules and the policy decide.
       </p>
+      <p className="text-xs text-gray-400">
+        Tip for developers: pass <span className="font-mono">taskType</span> in the request body to skip the AI
+        classifier entirely — it is free, deterministic, and avoids a per-request LLM call.
+      </p>
       <div className="flex flex-wrap items-end gap-3">
         <div><div className="label mb-1">Model</div><input className="input w-40" value={model} onChange={(e) => setModel(e.target.value)} placeholder="auto" /></div>
         <div><div className="label mb-1">Task type</div><input className="input w-40" value={taskType} onChange={(e) => setTaskType(e.target.value)} placeholder="(classify)" /></div>
@@ -108,6 +112,7 @@ function CreateRuleForm({ models, onCreated }) {
   const [priority, setPriority] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [warn, setWarn] = useState(null);
 
   const providers = [...new Set(models.map((m) => m.provider))];
   const providerModels = models.filter((m) => m.provider === provider);
@@ -116,18 +121,20 @@ function CreateRuleForm({ models, onCreated }) {
   useEffect(() => { if (providerModels.length) setModel(providerModels[0].id); }, [provider]);
 
   const submit = async () => {
-    setErr(null);
+    setErr(null); setWarn(null);
     if (!value.trim()) return setErr("Enter a condition value.");
     if (!provider || !model) return setErr("Pick a target provider and model.");
     setBusy(true);
     try {
-      await api.createRule({
+      const created = await api.createRule({
         condition: { [field]: value.trim() },
         target: { provider, model },
         enabled,
         priority: Number(priority) || 0,
         note: `${field}=${value.trim()} → ${model}`,
       });
+      // Surface a target-health warning immediately (offline / unknown / unpriced).
+      if (created?.health && created.health.level !== "ok") setWarn(created.health.detail);
       setValue("");
       await onCreated();
     } catch (e) { setErr(e.message); }
@@ -173,6 +180,7 @@ function CreateRuleForm({ models, onCreated }) {
         <button className="btn-secondary h-9 px-5" disabled={busy} onClick={submit}>{busy ? "Adding…" : "Add rule"}</button>
       </div>
       {err && <div className="text-xs text-red-600">{err}</div>}
+      {warn && <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">Rule created, but heads up: {warn}</div>}
     </div>
   );
 }
@@ -619,7 +627,15 @@ export default function Routing({ onChange }) {
                   ) },
                   { key: "condition", header: "When", render: (r) => cond(r.condition) },
                   { key: "target", header: "Route to", render: (r) => (
-                    <Badge tone="charcoal">{r.target.provider} · {r.target.model}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone="charcoal">{r.target.provider} · {r.target.model}</Badge>
+                      {r.health && r.health.level === "error" && (
+                        <span title={r.health.detail}><Badge tone="red">offline</Badge></span>
+                      )}
+                      {r.health && r.health.level === "warn" && (
+                        <span title={r.health.detail}><Badge tone="amber">{r.health.reason === "unpriced" ? "unpriced" : "unknown"}</Badge></span>
+                      )}
+                    </div>
                   ) },
                   { key: "note", header: "Note", render: (r) => <span className="text-gray-500">{r.note || "—"}</span> },
                   { key: "actions", header: "", render: (r) => (

@@ -60,3 +60,29 @@ test("targetServable allows an unknown model on a LIVE provider (pass-through)",
 test("targetServable preserves old behavior when no eff is supplied", () => {
   assert.equal(_targetServable(rule({ target: { provider: "anything", model: "x" } }), null), true);
 });
+
+// Config-time rule health (Phase 3c): surface a misconfigured target before it bites.
+const { ruleTargetHealth } = require("../../src/routing/ruleEngine");
+
+test("ruleTargetHealth: offline provider is an error (rule would be skipped)", () => {
+  const h = ruleTargetHealth({ provider: "cohere", model: "command-r" }, { liveIds: ["openai"], modelEntry: null });
+  assert.equal(h.level, "error");
+  assert.equal(h.reason, "provider-offline");
+});
+
+test("ruleTargetHealth: unknown model on a live provider is a warning (pass-through)", () => {
+  const h = ruleTargetHealth({ provider: "openai", model: "brand-new" }, { liveIds: ["openai"], modelEntry: null });
+  assert.equal(h.level, "warn");
+  assert.equal(h.reason, "model-unknown");
+});
+
+test("ruleTargetHealth: unpriced model is a warning", () => {
+  const h = ruleTargetHealth({ provider: "openai", model: "free-junk" }, { liveIds: ["openai"], modelEntry: { id: "free-junk", inputPer1M: 0 } });
+  assert.equal(h.level, "warn");
+  assert.equal(h.reason, "unpriced");
+});
+
+test("ruleTargetHealth: live + priced target is ok", () => {
+  const h = ruleTargetHealth({ provider: "openai", model: "gpt-4o" }, { liveIds: ["openai"], modelEntry: { id: "gpt-4o", inputPer1M: 2.5 } });
+  assert.equal(h.level, "ok");
+});
