@@ -12,6 +12,7 @@ const router = express.Router();
 function keyView(d) {
   return {
     _id: d._id, name: d.name, application: d.application, prefix: d.prefix,
+    kind: d.kind || "gateway",
     enabled: d.enabled, rpm: d.rpm, createdAt: d.createdAt, lastUsedAt: d.lastUsedAt,
     userId: d.userId || null, department: d.department || null,
     expiresAt: d.expiresAt || null,
@@ -31,22 +32,27 @@ router.post("/keys", requireRole("operator"), async (req, res, next) => {
     const { name, application, rpm, allowedModels, defaultModel, userId, department, expiresAt } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: "name is required" });
     if (!application || !String(application).trim()) return res.status(400).json({ error: "application is required" });
-    const secret = "ab_" + crypto.randomBytes(16).toString("hex");
+    // A "read" token is a scoped, read-only usage token (see ApiKey.kind); anything
+    // else is a normal data-plane gateway key. The prefix advertises which it is.
+    const kind = req.body?.kind === "read" ? "read" : "gateway";
+    const secret = (kind === "read" ? "ab_read_" : "ab_") + crypto.randomBytes(16).toString("hex");
     const parsedExpiry = expiresAt ? new Date(expiresAt) : null;
     const doc = await ApiKey.create({
       name: String(name).trim(),
       application: String(application).trim(),
+      kind,
       keyHash: auth.hashKey(secret),
-      prefix: `ab_…${secret.slice(-4)}`,
-      rpm: Number(rpm) > 0 ? Number(rpm) : null,
+      prefix: `${kind === "read" ? "ab_read_…" : "ab_…"}${secret.slice(-4)}`,
+      // Data-plane knobs are meaningless for a read token; leave them at defaults.
+      rpm: kind === "gateway" && Number(rpm) > 0 ? Number(rpm) : null,
       userId: userId ? String(userId).trim() || null : null,
       department: department ? String(department).trim() || null : null,
-      allowedModels: Array.isArray(allowedModels) ? allowedModels.filter(Boolean) : [],
-      defaultModel: defaultModel ? String(defaultModel).trim() || null : null,
+      allowedModels: kind === "gateway" && Array.isArray(allowedModels) ? allowedModels.filter(Boolean) : [],
+      defaultModel: kind === "gateway" && defaultModel ? String(defaultModel).trim() || null : null,
       expiresAt: parsedExpiry && !isNaN(parsedExpiry) ? parsedExpiry : null,
     });
     auth.invalidate();
-    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application, userId: doc.userId }, req.user));
+    setImmediate(() => logAction("key.create", "key", doc._id, { name: doc.name, application: doc.application, userId: doc.userId, kind }, req.user));
     // The ONLY time the full secret is ever returned.
     res.json({ ...keyView(doc.toObject()), key: secret });
   } catch (e) { next(e); }

@@ -42,7 +42,12 @@ function KeyRow({ k, onToggle, onRevoke, onSave, onRotate }) {
 
   return (
     <tr className="border-t border-gray-100">
-      <td className="py-2 font-mono text-xs text-gray-600">{k.prefix}</td>
+      <td className="py-2 font-mono text-xs text-gray-600">
+        <div className="flex items-center gap-2">
+          {k.prefix}
+          {k.kind === "read" && <Badge tone="charcoal">read</Badge>}
+        </div>
+      </td>
       <td className="py-2">
         {editing ? (
           <div className="space-y-1">
@@ -102,6 +107,7 @@ function KeyRow({ k, onToggle, onRevoke, onSave, onRotate }) {
 function ApiKeys({ onChange }) {
   const [keys, setKeys]               = useState(null);
   const [name, setName]               = useState("");
+  const [kind, setKind]               = useState("gateway");
   const [application, setApplication] = useState("");
   const [userId, setUserId]           = useState("");
   const [department, setDepartment]   = useState("");
@@ -125,6 +131,7 @@ function ApiKeys({ onChange }) {
       const parsedAllowed = allowedModels.split(",").map((s) => s.trim()).filter(Boolean);
       const res = await api.createKey({
         name: name.trim(),
+        kind,
         application: application.trim(),
         userId: userId.trim() || null,
         department: department.trim() || null,
@@ -206,6 +213,13 @@ function ApiKeys({ onChange }) {
 
       <div className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-5">
         <div>
+          <div className="label mb-1">Type</div>
+          <select className="input w-48" value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="gateway">Gateway key (runs inference)</option>
+            <option value="read">Read token (usage only)</option>
+          </select>
+        </div>
+        <div>
           <div className="label mb-1">Name</div>
           <input className="input w-44" placeholder="e.g. tester-laptop" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
@@ -237,8 +251,15 @@ function ApiKeys({ onChange }) {
           <div className="label mb-1">Expires at (optional)</div>
           <input className="input w-40" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
         </div>
-        <button className="btn-secondary" disabled={busy} onClick={create}>Create key</button>
+        <button className="btn-secondary" disabled={busy} onClick={create}>Create {kind === "read" ? "token" : "key"}</button>
         {err && <div className="w-full text-xs text-red-600">{err}</div>}
+        {kind === "read" && (
+          <div className="w-full text-xs text-gray-500">
+            A read token reads only this application {userId.trim() ? `and user "${userId.trim()}"` : "(all users)"}
+            's usage via <code className="rounded bg-gray-100 px-1">GET /v1/usage/overview</code>. It cannot run
+            inference, and rate limit / default model / allowed models do not apply.
+          </div>
+        )}
       </div>
 
       {keys === null ? <Spinner /> : keys.length === 0 ? (

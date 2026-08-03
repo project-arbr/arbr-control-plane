@@ -7,6 +7,12 @@ const apiKeySchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     application: { type: String, required: true, index: true },
+    // "gateway" (default) — a data-plane key that runs inference at /v1/chat, bound
+    // to this application for trusted attribution. "read" — a scoped, read-only usage
+    // token: it can read ONLY this application's (+ optional userId's) analytics via
+    // /v1/usage, and is rejected on the data plane. Lets a partner app expose
+    // self-serve per-user usage without proxying through the admin key.
+    kind: { type: String, enum: ["gateway", "read"], default: "gateway", index: true },
     keyHash: { type: String, required: true, unique: true },
     // Display-only identifier, e.g. "ka_…a1b2" (never enough to reconstruct).
     prefix: { type: String, required: true },
