@@ -14,6 +14,8 @@ const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const readTokenAuth = require("./gateway/readTokenAuth");
 const usageRoutes = require("./api/routes/usage");
+const selfKeyAuth = require("./gateway/selfKeyAuth");
+const selfKeyRoutes = require("./api/routes/selfKey");
 const { handleEmbeddings } = require("./gateway/embeddings");
 const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
@@ -130,6 +132,11 @@ async function start() {
   // (+ optional user) analytics. Guarded by readTokenAuth (not the admin key), so a
   // partner app can expose per-end-user usage without proxying through ARBR_ADMIN_KEY.
   app.use("/v1/usage", adminRateLimit.middleware, readTokenAuth.middleware, usageRoutes);
+
+  // Self-service key management — the caller authenticates with the key itself and can
+  // view / rotate / revoke ONLY that key, no admin role. Lets a key's own holder rotate
+  // a compromised key without an operator.
+  app.use("/v1/key", adminRateLimit.middleware, selfKeyAuth.middleware, selfKeyRoutes);
 
   // OpenAI-compatible embeddings endpoint — routes to the appropriate provider
   // (Gemini or OpenAI-compat) based on the model ID, with full observability.
