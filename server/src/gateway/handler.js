@@ -193,7 +193,10 @@ function unresolvedModelError(pin, eff) {
 // spend is accounted inside classify/classifier.js, so callers don't have to remember
 // to log it — the OpenAI-compatible gateway used to forget, and its cost vanished.
 // Callers are responsible for budget enforcement (it may short-circuit the response).
-async function resolveRoute(body, { router, eff, application, workflow, userId = null, appConfig = {}, appDbConfig = null }) {
+// dryRun (default false) makes this a pure preview: the classifier never makes a
+// billable LLM call (keyword-only), so the decision can be computed for a
+// hypothetical request without touching a provider. Real traffic is unaffected.
+async function resolveRoute(body, { router, eff, application, workflow, userId = null, appConfig = {}, appDbConfig = null, dryRun = false }) {
   const routingMode = await ruleEngine.getRoutingMode();
   const pin = resolveExplicit(body, eff);
   // A model the client pinned but Arbr cannot honor is rejected, not silently
@@ -208,7 +211,7 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
     taskType: body.taskType,
     messages: body.messages,
     router, eff,
-    useLLM: routingMode === "ai" && autoMode && !providedTaskType,
+    useLLM: !dryRun && routingMode === "ai" && autoMode && !providedTaskType,
     // Provenance only — recorded on internalContext so the overhead view can show
     // which app's traffic triggered a classification. Never a queryable dimension.
     application,
