@@ -52,3 +52,23 @@ overhead is excluded).
 - The scope is server-forced; passing `?application=…&userId=…` does not change what a
   token can see.
 - Revoke or rotate a read token exactly like a gateway key (Settings → API keys).
+
+## Embeddable usage chart
+
+Drop a live per-user usage chart into your own app with an `<iframe>` — no rebuild,
+no admin key:
+
+```html
+<iframe src="https://models.example.com/embed/usage#token=ab_read_…&metric=cost&bucket=day"
+        style="width:100%;height:220px;border:0"></iframe>
+```
+
+- The read token goes in the URL **fragment** (`#token=…`), which the browser never
+  sends to the server or leaks via `Referer` — so it stays out of access logs.
+- The page is served by Arbr and fetches `/v1/usage/*` **same-origin**, so there is no
+  CORS setup. It renders an inline SVG (no external scripts), scoped to the token.
+- Options in the fragment: `metric` (`cost` | `requests`), `bucket`
+  (`hour` | `day` | `month`).
+
+Because a read token only ever exposes its own scope, embedding one is as safe as the
+token itself.

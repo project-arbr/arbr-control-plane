@@ -14,6 +14,7 @@ const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const readTokenAuth = require("./gateway/readTokenAuth");
 const usageRoutes = require("./api/routes/usage");
+const embedRoutes = require("./api/routes/embed");
 const { handleEmbeddings } = require("./gateway/embeddings");
 const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
@@ -130,6 +131,11 @@ async function start() {
   // (+ optional user) analytics. Guarded by readTokenAuth (not the admin key), so a
   // partner app can expose per-end-user usage without proxying through ARBR_ADMIN_KEY.
   app.use("/v1/usage", adminRateLimit.middleware, readTokenAuth.middleware, usageRoutes);
+
+  // Embeddable widgets — a partner iframes /embed/usage#token=ab_read_… to show an end
+  // user their own usage chart. Public page; the read token (in the URL fragment, never
+  // sent to the server) gates the data, and the page fetches /v1/usage same-origin.
+  app.use("/embed", embedRoutes);
 
   // OpenAI-compatible embeddings endpoint — routes to the appropriate provider
   // (Gemini or OpenAI-compat) based on the model ID, with full observability.
