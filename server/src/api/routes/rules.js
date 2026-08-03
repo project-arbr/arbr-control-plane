@@ -7,14 +7,28 @@ const ruleEngine = require("../../routing/ruleEngine");
 const responseCache = require("../../routing/responseCache");
 const semanticCache = require("../../routing/semanticCache");
 const connections = require("../../providers/connections");
+const pricing = require("../../pricing/registry");
 const { explainRoute } = require("../../routing/explainRoute");
 const { getAppConfig } = require("../../gateway/handler");
 
 const router = express.Router();
 
+// Annotate each rule with the config-time health of its target, so the console can
+// flag a rule that points at an offline / unknown / unpriced model before it bites.
+async function withHealth(rules) {
+  const eff = await connections.effective();
+  return rules.map((r) => ({
+    ...r,
+    health: ruleEngine.ruleTargetHealth(r.target, {
+      liveIds: eff.liveIds,
+      modelEntry: pricing.getModel(r.target?.model),
+    }),
+  }));
+}
+
 // ── rules ──
 router.get("/rules", async (_req, res, next) => {
-  try { res.json(await Rule.find().sort({ createdAt: -1 }).lean()); } catch (e) { next(e); }
+  try { res.json(await withHealth(await Rule.find().sort({ createdAt: -1 }).lean())); } catch (e) { next(e); }
 });
 
 router.post("/rules", requireRole("operator"), async (req, res, next) => {
@@ -35,7 +49,7 @@ router.post("/rules", requireRole("operator"), async (req, res, next) => {
     });
     ruleEngine.invalidate();
     setImmediate(() => logAction("rule.create", "rule", rule._id, { condition: rule.condition, target, enabled: !!enabled }, req.user));
-    res.json(rule);
+    res.json((await withHealth([rule.toObject()]))[0]);
   } catch (e) { next(e); }
 });
 

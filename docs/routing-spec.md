@@ -200,10 +200,12 @@ reflects both today's behavior and the intended end state.
    *Target:* validate every fallback candidate; skip a violating one.
 2. **Budget-downgrade** (`suggestLightTarget`) skips the same re-validation.
    *Target:* validate the downgrade target too.
-3. ~~**Rule targets are served unvalidated**~~ — **closed (#2b).** `findRoute` now
+3. ~~**Rule targets are served unvalidated**~~ — **closed (#2b, #3c).** `findRoute`
    skips a rule whose target provider is offline (routing falls through instead of
    dead-ending on a 502) and warns. An unknown model on a *live* provider is left
-   servable as a legitimate pass-through, matching explicit-pin behavior.
+   servable as a legitimate pass-through, matching explicit-pin behavior. The rules
+   API and console also surface each rule's target health (offline / unknown /
+   unpriced) so a misconfiguration is visible before it bites.
 4. ~~**No rule precedence**~~ — **closed (#2b).** Rules are ordered by priority desc,
    then specificity (condition fields set) desc, then `_id`, so overlapping rules
    resolve deterministically.

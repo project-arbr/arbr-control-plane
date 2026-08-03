@@ -58,6 +58,27 @@ function targetServable(rule, eff) {
   return eff.liveIds.includes(rule.target.provider);
 }
 
+// Config-time health of a rule's target, for surfacing misconfiguration in the UI
+// before it bites at request time. Pure — the caller passes the registry entry for
+// the model (or null). Levels:
+//   error — provider offline: the rule will be SKIPPED at runtime (won't route).
+//   warn  — model unknown to the registry (served as pass-through, cost logs $0) or
+//           unpriced (same); works, but attribution/enforcement is blind.
+//   ok    — target is live and priced.
+function ruleTargetHealth(target, { liveIds = [], modelEntry = null } = {}) {
+  const { provider, model } = target || {};
+  if (!liveIds.includes(provider)) {
+    return { level: "error", reason: "provider-offline", detail: `Provider "${provider}" is not connected; this rule is skipped at request time.` };
+  }
+  if (!modelEntry) {
+    return { level: "warn", reason: "model-unknown", detail: `Model "${model}" is not in the registry; it is served as a pass-through and its cost logs as $0.` };
+  }
+  if (!(modelEntry.inputPer1M > 0)) {
+    return { level: "warn", reason: "unpriced", detail: `Model "${model}" has no price; its cost logs as $0 and cannot be enforced by budgets.` };
+  }
+  return { level: "ok" };
+}
+
 function invalidate() {
   _rulesCache.loadedAt = 0;
 }
@@ -125,6 +146,7 @@ module.exports = {
   setRoutingMode,
   invalidate,
   refreshRules,
+  ruleTargetHealth,
   _specificity: specificity, // pure, exported for tests
   _sortRules: sortRules,
   _targetServable: targetServable,
