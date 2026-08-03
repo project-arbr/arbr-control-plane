@@ -23,6 +23,44 @@ function cond(c) {
 // classification) so what it shows is exactly what a live request would get.
 const DECISION_TONE = { passthrough: "gray", explicit: "teal", rule: "green", auto: "indigo", ai: "violet", budget: "red", canary: "amber", fallback: "amber" };
 
+// "How routing decides" — the precedence pipeline in plain English, with the steps
+// that are active under the CURRENT routing mode highlighted. Read-only; uses data
+// the page already loads. Mirrors docs/routing-spec.md §1 (the source of truth).
+function PrecedencePanel({ mode, rules }) {
+  const enabled = (rules || []).filter((r) => r.enabled).length;
+  const broken = (rules || []).filter((r) => r.enabled && r.health?.level === "error").length;
+  // active(true/false) drives styling; note explains the current state.
+  const steps = [
+    { n: 1, label: "Explicit pin", active: true, note: "A model the client names (and Arbr can reach) is served as-is, skipping every policy." },
+    { n: 2, label: "Default", active: true, note: "Base pick for auto requests: the key's default, else the global default." },
+    { n: 3, label: "Rules", active: enabled > 0, note: enabled > 0 ? `${enabled} enabled rule${enabled === 1 ? "" : "s"}${broken ? ` (${broken} pointing at an offline provider — skipped)` : ""}. Highest priority, then most specific, wins.` : "No enabled rules." },
+    { n: 4, label: "AI policy", active: mode === "ai", note: mode === "ai" ? "Active: the policy maps the classified task (with a difficulty adjustment) to a model." : "Inactive (routing mode is not “ai”)." },
+    { n: 5, label: "Cost guardrail", active: mode === "guardrail", note: mode === "guardrail" ? "Active: cheap task types are downgraded to a lighter model." : "Inactive (routing mode is not “guardrail”)." },
+    { n: 6, label: "Canary", active: true, note: "Auto-routed traffic may be diverted a set % to an eval-approved candidate." },
+    { n: 7, label: "Governance", active: true, note: "The chosen model is re-checked against the key's allowed-models, the app's opt-out list, and (for image requests) vision support." },
+    { n: 8, label: "Budget", active: true, note: "A breached enforcing cap blocks (429) or downgrades the request." },
+    { n: 9, label: "Fallback", active: true, note: "On a provider error, Arbr retries per the configured fallback scope — validated the same way as the primary." },
+  ];
+  return (
+    <details className="rounded-lg border border-gray-200 bg-gray-50 p-1">
+      <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-arbr-charcoal">
+        How routing decides · mode: <span className="font-mono">{mode}</span>
+      </summary>
+      <ol className="space-y-2 px-4 py-3">
+        {steps.map((s) => (
+          <li key={s.n} className={`flex gap-3 text-sm ${s.active ? "text-gray-700" : "text-gray-400"}`}>
+            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${s.active ? "bg-arbr-accent-100 text-arbr-accent-700" : "bg-gray-100 text-gray-400"}`}>{s.n}</span>
+            <span><span className="font-medium">{s.label}</span> — {s.note}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="px-4 pb-3 text-xs text-gray-400">
+        Steps run top to bottom; the first that resolves a model wins (7–9 then adjust it). Full reference: docs/routing-spec.md.
+      </p>
+    </details>
+  );
+}
+
 function RouteTester() {
   const [model, setModel] = useState("auto");
   const [taskType, setTaskType] = useState("");
@@ -598,6 +636,8 @@ export default function Routing({ onChange }) {
 
       {tab === "rules" && (
         <>
+          <PrecedencePanel mode={mode} rules={rules} />
+
           <Card title="Test a route">
             <RouteTester />
           </Card>
