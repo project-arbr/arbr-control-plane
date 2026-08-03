@@ -88,11 +88,17 @@ router.get("/cache/semantic/stats", (_req, res) => {
 router.post("/routing/explain", requireRole("operator"), async (req, res, next) => {
   try {
     const eff = await connections.effective();
-    const { model, provider, taskType, application, workflow, hasImage, allowedModels, defaultModel } = req.body || {};
+    const b = req.body || {};
+    // Coerce every free-text field to a string so a JSON object can't become a
+    // query operator or a template-injection surprise downstream.
+    const str = (v) => (v == null ? undefined : String(v));
+    const model = str(b.model), provider = str(b.provider), taskType = str(b.taskType);
+    const application = str(b.application), workflow = str(b.workflow);
+    const hasImage = !!b.hasImage;
     const appDbConfig = application ? await getAppConfig(application) : null;
     const appConfig = {
-      allowedModels: Array.isArray(allowedModels) ? allowedModels : [],
-      defaultModel: defaultModel || null,
+      allowedModels: Array.isArray(b.allowedModels) ? b.allowedModels.map(String) : [],
+      defaultModel: str(b.defaultModel) || null,
     };
     const result = await explainRoute(
       { model, provider, taskType, application, workflow, hasImage },

@@ -39,6 +39,10 @@ const _appConfigCache = createBoundedTtlCache({ ttlMs: 30_000, maxEntries: 1000 
 
 async function getAppConfig(appName) {
   if (!appName || appName === "unknown") return null;
+  // Coerce to a string before it reaches the query. An application name can arrive
+  // from a request body (data plane, and now the /routing/explain preview), so a
+  // non-string like { $ne: null } must never become a NoSQL operator in findOne.
+  appName = String(appName);
   const hit = _appConfigCache.getEntry(appName);
   if (hit) return hit.value;
   const cfg = await ApplicationConfig.findOne({ applicationName: appName }).lean().catch(() => null);
