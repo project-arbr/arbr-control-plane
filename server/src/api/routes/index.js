@@ -10,6 +10,7 @@ router.use(require("./connections.js"));
 router.use(require("./customProviders.js"));
 router.use(require("./models.js"));
 router.use(require("./analytics.js"));
+router.use(require("./currency.js"));
 router.use(require("./requests.js"));
 router.use(require("./recommendations.js"));
 router.use(require("./evalBenchmarks.js"));

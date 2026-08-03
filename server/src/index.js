@@ -61,6 +61,7 @@ async function start() {
   await registry.init(); // seed ModelEntry if empty + warm in-memory cache
   await backfillInternalKind(); // idempotent; no-op after the first run
   telemetry.init(); // OTLP trace export — a no-op unless ARBR_OTEL_ENABLED is set
+  require("./currency/fx").startAutoRefresh(); // live USD→display-currency rate (no-op for USD)
 
   // Production: force data-plane API keys on so anonymous /v1 calls are rejected.
   if (config.isProduction) {

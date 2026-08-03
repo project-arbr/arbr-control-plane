@@ -61,6 +61,12 @@ const settingsSchema = new mongoose.Schema(
     maxTokensGuardrail: { type: Number, default: null },
     // Webhook URL for real-time alerts (cap breach, provider errors, new unknown applications).
     webhookUrl: { type: String, default: null },
+    // Display currency. Costs are always STORED in USD (LiteLLM-native); this only
+    // converts them for display. fxRate is USD→currency, refreshed live from an FX
+    // source; fxUpdatedAt lets the UI show how fresh the rate is. USD keeps rate 1.
+    currency: { type: String, default: "USD" },
+    fxRate: { type: Number, default: 1 },
+    fxUpdatedAt: { type: Date, default: null },
     // Request record retention in days. Records older than this are auto-purged daily.
     retentionDays: { type: Number, default: PRIVACY_DEFAULTS.retentionDays },
     // PII masking: when enabled, PII patterns are redacted from prompts before logging.
