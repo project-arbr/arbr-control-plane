@@ -87,9 +87,11 @@ async function start() {
   // CSRF protection IS applied — see csrf.protection two lines below
   // (double-submit cookie via csrf-csrf, tested in
   // server/test/integration/csrf.test.js). CodeQL's model doesn't recognize
-  // this library the way it recognizes csurf, so it still flags this line.
-  // codeql[js/missing-token-validation]
-  app.use(cookieParser());
+  // this library the way it recognizes csurf, so it still flags this call. The
+  // suppression must sit on the SAME line as the flagged cookie middleware — a
+  // comment on the line above (where it used to be) is not honored, which is why
+  // adding any new POST route re-fired this as a "new" alert.
+  app.use(cookieParser()); // codeql[js/missing-token-validation]
   // Mounted globally so every route is structurally CSRF-protected; only
   // requests carrying a session cookie are actually validated (see csrf.js).
   app.use(csrf.protection);
