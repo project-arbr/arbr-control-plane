@@ -160,11 +160,12 @@ function CreateForm({ providers, applications, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  // Suggest sensible default action when scope type changes.
+  // Suggest sensible default action when scope type changes. A per-user budget defaults
+  // to "alert" — the common case is notifying an end user near their quota, not blocking.
   const changeDim = (d) => {
     setDim(d);
     setValue("");
-    setAction(d === "provider" ? "downgrade" : "block");
+    setAction(d === "provider" ? "downgrade" : d === "user" ? "alert" : "block");
   };
 
   const submit = async () => {
@@ -190,12 +191,17 @@ function CreateForm({ providers, applications, onCreated }) {
           <select className="input" value={dim} onChange={(e) => changeDim(e.target.value)}>
             <option value="application">Application</option>
             <option value="provider">Provider</option>
+            <option value="user">End user</option>
           </select>
         </div>
 
         <div>
-          <div className="label mb-1">{dim === "application" ? "Application" : "Provider"}</div>
-          {dim === "provider" ? (
+          <div className="label mb-1">{dim === "application" ? "Application" : dim === "provider" ? "Provider" : "End user ID"}</div>
+          {dim === "user" ? (
+            <input className="input w-44" placeholder="e.g. user_1a2b3c" value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()} />
+          ) : dim === "provider" ? (
             <select className="input" value={value} onChange={(e) => setValue(e.target.value)}>
               <option value="">— pick provider —</option>
               {providers.map((p) => (
@@ -240,14 +246,12 @@ function CreateForm({ providers, applications, onCreated }) {
           </select>
         </div>
 
-        {action !== "alert" && (
-          <div>
-            <div className="label mb-1">Warn at (%)</div>
-            <input className="input w-20" type="number" min="0" max="99" step="5" value={warningThreshold}
-              onChange={(e) => setWarningThreshold(e.target.value)}
-              title="Fire a webhook warning before the cap is reached (0 = disabled)" />
-          </div>
-        )}
+        <div>
+          <div className="label mb-1">Warn at (%)</div>
+          <input className="input w-20" type="number" min="0" max="99" step="5" value={warningThreshold}
+            onChange={(e) => setWarningThreshold(e.target.value)}
+            title="Fire a webhook warning before the cap is reached (0 = disabled)" />
+        </div>
 
         <button className="btn-primary" onClick={submit} disabled={busy}>
           {busy ? "Adding…" : "Add constraint"}
@@ -266,7 +270,9 @@ function CreateForm({ providers, applications, onCreated }) {
       )}
       {action === "alert" && (
         <p className="text-xs text-gray-500">
-          No enforcement — the breach appears in the dashboard and the "budgets over" header badge only.
+          No enforcement — requests continue. The breach appears in the dashboard and the "budgets over"
+          header badge, and fires the configured webhook (cap_warning at the warn threshold, cap_breach at
+          the limit) so a downstream app can notify the {dim === "user" ? "end user" : "owner"}.
         </p>
       )}
 

@@ -22,7 +22,7 @@ router.post("/caps", requireRole("operator"), async (req, res, next) => {
   try {
     const { dimension, value, period, limit, action, warningThreshold } = req.body || {};
     if (!(Number(limit) > 0)) return res.status(400).json({ error: "limit must be a positive number" });
-    const allowed = ["application", "provider", "department", "workflow", "model"];
+    const allowed = ["application", "provider", "department", "workflow", "model", "user"];
     const dim = dimension && allowed.includes(dimension) ? dimension : null;
     if (dim && !value) return res.status(400).json({ error: `value is required for a ${dim} cap` });
     const cap = await Cap.create({

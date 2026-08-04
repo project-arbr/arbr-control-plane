@@ -50,17 +50,27 @@ function windowKey(period, now = new Date()) {
 // over that scope's traffic, and overhead belongs to no customer scope. Internal
 // records carry no application, so the application branch already excludes them; the
 // provider branch needs an explicit guard because they do carry a real provider.
-function _matches(cap, { application, provider, internalKind = null }) {
+function _matches(cap, ctx = {}) {
   if (!cap.dimension) return true; // global — includes internal spend
-  if (internalKind) return false;  // scoped caps never see Arbr's own overhead
-  if (cap.dimension === "application") return cap.value === application;
-  if (cap.dimension === "provider") return cap.value === provider;
-  return false; // other dimensions not enforced at the gateway (yet)
+  if (ctx.internalKind) return false;  // scoped caps never see Arbr's own overhead
+  switch (cap.dimension) {
+    case "application": return cap.value === ctx.application;
+    case "provider":    return cap.value === ctx.provider;
+    case "user":        return cap.value === ctx.userId;
+    case "department":  return cap.value === ctx.department;
+    case "workflow":    return cap.value === ctx.workflow;
+    case "model":       return cap.value === ctx.model;
+    default: return false;
+  }
 }
 
-async function _enforcingCaps() {
+// ALL enabled caps, any action. "alert" caps do not enforce (no block/downgrade) but
+// still accumulate spend and fire warning/breach webhooks — that is how a per-user
+// usage alert works. Previously only block/downgrade caps were loaded, so an alert
+// cap never notified.
+async function _activeCaps() {
   if (Date.now() - _capsCache.at < CAPS_TTL_MS) return _capsCache.caps;
-  const caps = await Cap.find({ enabled: true, action: { $in: ["block", "downgrade"] } }).lean();
+  const caps = await Cap.find({ enabled: true }).lean();
   _capsCache = { caps, at: Date.now() };
   return caps;
 }
@@ -71,15 +81,17 @@ async function getSpend(cap, now = new Date()) {
   return doc ? Number(doc.spent) || 0 : 0;
 }
 
-// Atomic $inc after a priced request. No-ops for zero/negative cost.
-async function recordSpend(totalCost, { application, provider, internalKind = null } = {}) {
+// Atomic $inc after a priced request. No-ops for zero/negative cost. ctx carries the
+// request's scope fields (application/provider/user/department/workflow/model) so a
+// cap on any of those dimensions accumulates.
+async function recordSpend(totalCost, ctx = {}) {
   const cost = Number(totalCost) || 0;
   if (cost <= 0) return;
-  const caps = await _enforcingCaps();
+  const caps = await _activeCaps();
   const now = new Date();
   const ops = [];
   for (const cap of caps) {
-    if (!_matches(cap, { application, provider, internalKind })) continue;
+    if (!_matches(cap, ctx)) continue;
     const key = windowKey(cap.period, now);
     ops.push(
       CapSpend.findOneAndUpdate(
@@ -95,12 +107,14 @@ async function recordSpend(totalCost, { application, provider, internalKind = nu
 }
 
 // The strictest enforcement for this request's scope: block > downgrade > null.
-// Returns { action, cap, spent } or null.
-async function enforcement({ application, provider }) {
-  const caps = await _enforcingCaps();
+// Returns { action, cap, spent } or null. Alert-action caps fire webhooks but never
+// enforce (they contribute no block/downgrade), so a per-user alert notifies without
+// changing routing. ctx carries the full request scope.
+async function enforcement(ctx = {}) {
+  const caps = await _activeCaps();
   let hit = null;
   for (const cap of caps) {
-    if (!_matches(cap, { application, provider })) continue;
+    if (!_matches(cap, ctx)) continue;
     const spent = await getSpend(cap);
     if (spent >= cap.limit) {
       setImmediate(() =>
@@ -149,12 +163,13 @@ function shouldWarn(spent, limit, warnAt) {
 // Realign CapSpend from analytics aggregation (rolling window). Call from admin
 // or a periodic job; not on the hot path.
 async function reconcileFromAnalytics() {
-  const caps = await Cap.find({ enabled: true, action: { $in: ["block", "downgrade"] } }).lean();
+  const caps = await Cap.find({ enabled: true }).lean();
   const now = new Date();
   let updated = 0;
   for (const cap of caps) {
     const spent = await analytics.spend({
-      dimension: cap.dimension,
+      // The friendly "user" dimension maps to the analytics/record field "userId".
+      dimension: cap.dimension === "user" ? "userId" : cap.dimension,
       value: cap.value,
       from: windowStart(cap.period, now.getTime()),
       // Must mirror _matches, or reconciliation would overwrite the counters with a

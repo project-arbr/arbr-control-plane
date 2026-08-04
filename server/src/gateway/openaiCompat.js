@@ -395,7 +395,10 @@ async function handleOpenAICompat(req, res) {
 
   // Budget enforcement — mirrors handleChat. SSE clients (LibreChat) need the error in stream
   // format, otherwise the client spins forever waiting for the first data chunk.
-  const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
+  const enf = await capEngine.enforcement({
+    application: meta.application, provider: served.provider, userId: meta.userId,
+    department: meta.department, workflow: meta.workflow, model: served.model,
+  });
   if (enf) {
     if (enf.action === "block") {
       const msg = `Budget exceeded: ${capEngine.describeScope(enf.cap)} is over its `
