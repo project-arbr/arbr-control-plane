@@ -15,6 +15,8 @@ const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const readTokenAuth = require("./gateway/readTokenAuth");
 const usageRoutes = require("./api/routes/usage");
 const embedRoutes = require("./api/routes/embed");
+const selfKeyAuth = require("./gateway/selfKeyAuth");
+const selfKeyRoutes = require("./api/routes/selfKey");
 const { handleEmbeddings } = require("./gateway/embeddings");
 const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
@@ -136,6 +138,11 @@ async function start() {
   // user their own usage chart. Public page; the read token (in the URL fragment, never
   // sent to the server) gates the data, and the page fetches /v1/usage same-origin.
   app.use("/embed", embedRoutes);
+
+  // Self-service key management — the caller authenticates with the key itself and can
+  // view / rotate / revoke ONLY that key, no admin role. Lets a key's own holder rotate
+  // a compromised key without an operator.
+  app.use("/v1/key", adminRateLimit.middleware, selfKeyAuth.middleware, selfKeyRoutes);
 
   // OpenAI-compatible embeddings endpoint — routes to the appropriate provider
   // (Gemini or OpenAI-compat) based on the model ID, with full observability.
