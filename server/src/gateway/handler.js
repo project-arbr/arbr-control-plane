@@ -19,6 +19,7 @@ const canaryEngine = require("../routing/canaryEngine");
 const capEngine = require("../routing/capEngine");
 const responseCache = require("../routing/responseCache");
 const outputGuardrail = require("./outputGuardrail");
+const { normalizeMessages } = require("./normalizeMessages");
 const promptInjection = require("./promptInjection");
 const semanticCache = require("../routing/semanticCache");
 const { maybeShadowEval } = require("../eval/shadow");
@@ -381,6 +382,8 @@ async function handleChat(req, res) {
   const body = req.body || {};
 
   // 1 · INGRESS — validate, capture metadata, stamp id + time.
+  // Accept the documented bare-string shorthand (SDKs normalize it client-side).
+  body.messages = normalizeMessages(body.messages);
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return res.status(400).json({ error: "messages array is required" });
   }

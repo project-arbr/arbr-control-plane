@@ -5,6 +5,7 @@
 const { v4: uuidv4 } = require("uuid");
 const { getRouter } = require("../providers/router");
 const { extractFinishReason } = require("../providers/llm-router");
+const { normalizeMessages } = require("./normalizeMessages");
 const {
   resolveRoute, invokeWithFallback, getAppConfig, setGatewayHeaders,
 } = require("./core");
@@ -295,6 +296,8 @@ async function handleOpenAICompat(req, res) {
   const _reqStart = Date.now();
   const body = req.body || {};
 
+  // Accept the documented bare-string shorthand (SDKs normalize it client-side).
+  body.messages = normalizeMessages(body.messages);
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return res.status(400).json({
       error: { message: "messages array is required", type: "invalid_request_error" },
