@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
-import { api, clearAdminToken, resetCsrfToken } from "./api.js";
+import { api, clearAdminToken, resetCsrfToken, loadCurrency } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Overview from "./pages/Overview.jsx";
 import Routing from "./pages/Routing.jsx";
@@ -46,7 +46,7 @@ export default function App() {
         if (e.status !== 401) return;
         return goToLogin();
       });
-  useEffect(() => { refreshStatus(); }, []);
+  useEffect(() => { refreshStatus(); loadCurrency(); }, []);
 
   const signOut = async () => {
     try { await api.logout(); } catch { /* ignore — still clear local state */ }

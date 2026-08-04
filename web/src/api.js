@@ -216,6 +216,9 @@ export const api = {
   removeProviderKey: (provider) => req(`/connections/${provider}`, { method: "DELETE" }),
   setDefaultProvider: (provider) => req("/default-provider", { method: "PUT", body: JSON.stringify({ provider }) }),
   setDefaultModel: (model) => req("/default-model", { method: "PUT", body: JSON.stringify({ model }) }),
+  getCurrency: () => req("/currency"),
+  setCurrencyCode: (currency) => req("/currency", { method: "PUT", body: JSON.stringify({ currency }) }),
+  refreshCurrency: () => req("/currency/refresh", { method: "POST" }),
   testProvider: (provider) => req(`/connections/${provider}/test`, { method: "POST" }),
 
   customProviders: () => req("/custom-providers"),
@@ -256,8 +259,48 @@ export const api = {
   evalCampaignPairs: (id) => req(`/eval/campaigns/${id}/pairs`),
 };
 
+// Display currency, loaded once at app start via loadCurrency(). Costs from the API
+// are always USD; fmt converts at display using the live rate. Defaults to USD so
+// nothing renders wrong before the rate loads or if the fetch fails.
+//   available:false — no rate has ever been fetched for this currency, so we display
+//     USD instead of applying a bogus 1:1 rate under a foreign label (which would
+//     badly understate cost). stale — a rate exists but is old (still used).
+let _fx = { currency: "USD", rate: 1, available: true, stale: false };
+export function setCurrency(fx) {
+  if (fx && fx.currency) {
+    _fx = {
+      currency: String(fx.currency).toUpperCase(),
+      rate: Number(fx.rate) > 0 ? Number(fx.rate) : 1,
+      available: fx.available !== false,
+      stale: !!fx.stale,
+    };
+  }
+}
+export async function loadCurrency() {
+  try { setCurrency(await req("/currency")); } catch { /* keep USD */ }
+  return _fx;
+}
+export function currency() { return { ..._fx }; }
+
+// Format a USD amount in the configured display currency. If no rate is available for
+// a non-USD currency, fall back to USD so the number is right (just labeled USD)
+// rather than a misleading foreign-labeled USD magnitude.
+function money(n) {
+  const useCurrency = _fx.available ? _fx.currency : "USD";
+  const rate = _fx.available ? _fx.rate : 1;
+  const v = (Number(n) || 0) * (rate > 0 ? rate : 1);
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: useCurrency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  } catch {
+    return `${useCurrency} ${v.toFixed(2)}`;
+  }
+}
+
 export const fmt = {
-  usd: (n) => `$${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  // Kept as `usd` for call-site compatibility, but it now renders the configured
+  // display currency. `money` is the clearer alias for new code.
+  usd: money,
+  money,
   num: (n) => (Number(n) || 0).toLocaleString(),
   ms: (n) => `${Math.round(Number(n) || 0)} ms`,
   date: (d) => new Date(d).toLocaleString(),

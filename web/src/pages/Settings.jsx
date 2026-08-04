@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Card, Badge, Spinner, Toggle, Tabs, useTabParam } from "../components/ui.jsx";
+import { loadCurrency } from "../api.js";
 
 // ── Key row — inline edit of name + application ───────────────────────────────
 
@@ -301,6 +302,59 @@ const SUBTABS = [
 
 // ── Settings page ─────────────────────────────────────────────────────────────
 
+// Display currency (live FX). Costs are stored in USD; this converts them for display.
+const CURRENCIES = ["USD", "INR", "EUR", "GBP", "AUD", "CAD", "SGD", "AED", "JPY", "BRL"];
+function CurrencyCard() {
+  const [cur, setCur] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.getCurrency().then(setCur).catch(() => setCur({ currency: "USD", rate: 1, updatedAt: null })); }, []);
+  if (!cur) return <Card title="Display currency"><Spinner /></Card>;
+  const options = CURRENCIES.includes(cur.currency) ? CURRENCIES : [cur.currency, ...CURRENCIES];
+
+  const change = async (code) => {
+    setBusy(true);
+    try {
+      const next = await api.setCurrencyCode(code);
+      setCur(next);
+      await loadCurrency();            // update the shared formatter
+      window.location.reload();        // re-render every cost figure in the new currency
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Card title="Display currency">
+      <p className="mb-3 text-sm text-gray-600">
+        Costs are stored in USD and shown here in your currency using a live exchange rate.
+        Only the display changes; nothing stored is converted.
+      </p>
+      <div className="flex flex-wrap items-end gap-4">
+        <div>
+          <div className="label mb-1">Currency</div>
+          <select className="input w-40" value={cur.currency} disabled={busy} onChange={(e) => change(e.target.value)}>
+            {options.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="text-xs text-gray-500">
+          {cur.currency === "USD"
+            ? "Base currency (rate 1.00)."
+            : `1 USD = ${Number(cur.rate).toFixed(4)} ${cur.currency}${cur.updatedAt ? ` · updated ${new Date(cur.updatedAt).toLocaleString()}` : ""}`}
+        </div>
+        {cur.currency !== "USD" && !cur.available && (
+          <div className="w-full text-xs text-amber-700">
+            No exchange rate could be fetched yet, so costs are shown in USD for now. It will
+            switch to {cur.currency} once a rate is available (retried on a schedule).
+          </div>
+        )}
+        {cur.currency !== "USD" && cur.available && cur.stale && (
+          <div className="w-full text-xs text-amber-700">
+            Using the last known rate — a fresh one could not be fetched. Costs may be slightly off until it updates.
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export default function Settings({ onChange }) {
   const [data, setData]           = useState(null);
   const [customProvs, setCustomProvs] = useState([]);
@@ -405,6 +459,8 @@ export default function Settings({ onChange }) {
               </div>
             )}
           </Card>
+
+          <CurrencyCard />
 
           <Card title="Security">
             <div className="flex items-center justify-between">
