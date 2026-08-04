@@ -13,7 +13,7 @@ const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
 const { maybeShadowEval } = require("../eval/shadow");
-const { PROVIDERS } = require("../config");
+const { resolveBaseURL } = require("../providers/connections");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
@@ -52,11 +52,13 @@ function isNativeToolModel(providerId, modelId) {
 
 // Resolved chat-completions base URL for an OpenAI-compatible provider, or null if the provider
 // is native (anthropic/gemini/bedrock) and must use the LangChain path.
-// `eff` is passed so custom providers (whose baseURL lives in MongoDB) are recognized.
+// `eff` is passed so custom providers (whose baseURL lives in MongoDB) are recognized — including
+// one that shadows a built-in id, where connections.resolveBaseURL gives the custom row priority
+// so the endpoint matches the credential resolved alongside it.
 function openAICompatBaseURL(providerId, eff) {
   if (OPENAI_COMPAT_PROVIDERS.has(providerId)) {
-    const base = PROVIDERS[providerId]?.baseURL || (providerId === "openai" ? "https://api.openai.com/v1" : null);
-    return base ? base.replace(/\/+$/, "") : null;
+    return resolveBaseURL(providerId, eff?.providers?.[providerId])
+        || (providerId === "openai" ? "https://api.openai.com/v1" : null);
   }
   // Custom (user-added) providers: eff carries their baseURL; they're never native.
   if (!NATIVE_TOOL_PROVIDERS.has(providerId)) {
@@ -853,4 +855,7 @@ async function handleOpenAICompat(req, res) {
   });
 }
 
-module.exports = { handleOpenAICompat };
+module.exports = {
+  handleOpenAICompat,
+  openAICompatBaseURL, // pure, exported for tests
+};

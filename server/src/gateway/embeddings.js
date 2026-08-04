@@ -10,7 +10,6 @@
 
 const { v4: uuidv4 } = require("uuid");
 const connections = require("../providers/connections");
-const { PROVIDERS } = require("../config");
 const logger = require("../logging/logger");
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -180,11 +179,10 @@ async function handleEmbeddings(req, res) {
     if (provider === "gemini") {
       ({ embeddings, promptTokens } = await embedWithGemini(model, inputs, dims, cred.apiKey));
     } else {
-      // OpenAI-compat: get baseURL from static config (known providers) or
-      // from the custom-provider record stored alongside the credential.
+      // OpenAI-compat: the custom-provider record stored alongside the credential wins,
+      // then static config for a known provider (see connections.resolveBaseURL).
       const baseURL =
-        PROVIDERS[provider]?.baseURL ||
-        eff.providers[provider].baseURL ||
+        connections.resolveBaseURL(provider, eff.providers[provider]) ||
         "https://api.openai.com/v1";
       ({ embeddings, promptTokens } = await embedWithOpenAICompat(
         model, inputs, dims, baseURL, cred.apiKey
