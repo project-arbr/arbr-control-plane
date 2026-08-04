@@ -173,4 +173,33 @@ async function resolveReadToken(authHeader) {
   return doc;
 }
 
-module.exports = { middleware, resolveKey, resolveReadToken, hashKey, invalidate, requireApiKeyOn, setRequireApiKey };
+// Validate ANY valid key (gateway or read) for self-management (rotate/revoke a key
+// using the key itself as proof of possession). No kind restriction and no rpm limit
+// — the caller is only touching its own credential, not the data plane. Returns the
+// key doc, or throws with .statusCode. Used by gateway/selfKeyAuth.js.
+async function resolveAnyKey(authHeader) {
+  const raw = authHeader && authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+  if (!raw) {
+    const err = new Error("A key is required (Authorization: Bearer ab_… or ab_read_…).");
+    err.statusCode = 401;
+    throw err;
+  }
+  const keys = await _keysByHash();
+  const doc = keys.get(hashKey(raw));
+  if (!doc) {
+    const err = new Error("Unknown, disabled, or revoked key.");
+    err.statusCode = 401;
+    throw err;
+  }
+  if (doc.expiresAt && doc.expiresAt < new Date()) {
+    const err = new Error(`Key "${doc.name}" expired on ${doc.expiresAt.toISOString().slice(0, 10)}.`);
+    err.statusCode = 401;
+    throw err;
+  }
+  stampLastUsed(doc);
+  return doc;
+}
+
+module.exports = { middleware, resolveKey, resolveReadToken, resolveAnyKey, hashKey, invalidate, requireApiKeyOn, setRequireApiKey };

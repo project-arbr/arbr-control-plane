@@ -52,3 +52,25 @@ overhead is excluded).
 - The scope is server-forced; passing `?application=…&userId=…` does not change what a
   token can see.
 - Revoke or rotate a read token exactly like a gateway key (Settings → API keys).
+
+## Self-service rotate / revoke
+
+A key's own holder can manage it with the key itself as proof of possession — no admin
+role. Works for both read tokens and gateway keys. Useful when a key may be
+compromised and the holder is not an operator.
+
+```sh
+# What am I holding?
+curl https://models.example.com/v1/key -H "Authorization: Bearer $KEY"
+
+# Rotate: the old key stops working immediately; the new secret is returned once,
+# with identical settings (kind, application, userId, limits).
+curl -X POST https://models.example.com/v1/key/rotate -H "Authorization: Bearer $KEY"
+# → { ..., "key": "ab_… (or ab_read_…)" }
+
+# Revoke: disable this key immediately (irreversible).
+curl -X POST https://models.example.com/v1/key/revoke -H "Authorization: Bearer $KEY"
+```
+
+Note: whoever holds the key can rotate or revoke it, so treat rotation as the
+response to a suspected compromise — rotate first, from a trusted copy.
