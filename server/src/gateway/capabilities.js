@@ -21,18 +21,24 @@ const BEDROCK_TOOL_PATTERNS = [
   /writer\.palmyra-x5/i,      // Palmyra X5 (agentic capabilities)
 ];
 
-// Returns true when Arbr can route tool/function calls to this model.
-// Checks DB flag first (populated by LiteLLM sync), falls back to pattern matching.
+// Returns true when Arbr's /v1/chat/completions endpoint can actually route tool/function
+// calls for this model — i.e. what a client selecting a model by `toolCallSupported` will
+// get. This is a PROVIDER-first check on purpose: the endpoint only has a tool path for an
+// OpenAI-compatible provider (proxied) or a native-tool model (bedrock-nova via Converse).
+// Any other provider — notably gemini — returns 501 for tools even when the model itself is
+// function-calling capable, so the flag must be false there or it lies about the endpoint.
+// Keep this in lockstep with the endpoint gate in openaiCompat.js (openAICompatBaseURL +
+// isNativeToolModel); trusting the raw model capability flag was the bug it replaced.
 function supportsTools(provider, modelId) {
-  const entry = pricing.getModel(modelId);
-  if (entry?.supportsFunctionCalling != null) return entry.supportsFunctionCalling;
-
-  if (OPENAI_COMPAT_PROVIDERS.has(provider)) return true;
   if (provider === "bedrock-nova") {
-    const id = modelId || "";
-    return BEDROCK_TOOL_PATTERNS.some((re) => re.test(id));
+    return BEDROCK_TOOL_PATTERNS.some((re) => re.test(modelId || ""));
   }
-  return false;
+  // No endpoint tool path for any non-compat provider (gemini, native anthropic, etc.).
+  if (!OPENAI_COMPAT_PROVIDERS.has(provider)) return false;
+  // Provider can proxy tools; respect an explicit "not capable" from the LiteLLM sync when
+  // known, otherwise assume yes (the compat endpoint forwards tools to the upstream as-is).
+  const entry = pricing.getModel(modelId);
+  return entry?.supportsFunctionCalling !== false;
 }
 
 module.exports = { supportsTools };
