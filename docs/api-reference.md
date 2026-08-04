@@ -64,11 +64,11 @@ Reports metadata for calls that already happened elsewhere (a partner's own gate
 
 ### `POST /v1/embeddings`
 
-OpenAI-compatible embeddings endpoint — routes to Gemini or an OpenAI-compat provider based on the model ID, with the same observability as the chat endpoints.
+OpenAI-compatible embeddings endpoint — routes to Gemini or an OpenAI-compat provider based on the model ID, with the same observability as the chat endpoints. Supported models are discoverable via `GET /v1/models` (the `type: "embedding"` entries); currently `text-embedding-3-small` / `-3-large` / `-ada-002` (openai) and `gemini-embedding-001` (gemini).
 
 ### `GET /v1/models`
 
-Lists models whose provider is currently connected (live), in the OpenAI model-list shape, with a `toolCallSupported` flag per model.
+Lists models whose provider is currently connected (live), in the OpenAI model-list shape. Each entry has a `type` (`"chat"` or `"embedding"`) and, for chat models, a `toolCallSupported` flag that reflects what `/v1/chat/completions` will actually accept (an OpenAI-compat provider or `bedrock-nova`) — not just the model's raw capability. Embedding entries also carry their default `dimensions`. Only chat-capable models appear under `type: "chat"`; embedding/media models are not listed as chat.
 
 ### `GET /v1/task-types`
 
