@@ -158,6 +158,46 @@ test("recordSpend increments CapSpend atomically", async (t) => {
   capEngine.invalidate();
 });
 
+test("per-user cap accumulates only its own user's spend and blocks that user", async (t) => {
+  if (maybeSkip(t)) return;
+  const { Cap, CapSpend, capEngine } = global.__hot;
+  const cap = await Cap.create({
+    dimension: "user", value: "user_A", period: "day", limit: 1.0, action: "block", enabled: true,
+  });
+  capEngine.invalidate();
+  // Spend by a different user must not count against user_A's cap.
+  await capEngine.recordSpend(5.0, { userId: "user_B", application: "chat", provider: "openai" });
+  let enf = await capEngine.enforcement({ userId: "user_A", application: "chat", provider: "openai" });
+  assert.equal(enf, null, "user_A not yet over — user_B's spend must not leak in");
+  // user_A's own spend does count and, once over, blocks user_A.
+  await capEngine.recordSpend(1.5, { userId: "user_A", application: "chat", provider: "openai" });
+  enf = await capEngine.enforcement({ userId: "user_A", application: "chat", provider: "openai" });
+  assert.ok(enf);
+  assert.equal(enf.action, "block");
+  // A different user in the same app is unaffected by user_A's cap.
+  assert.equal(await capEngine.enforcement({ userId: "user_C", application: "chat", provider: "openai" }), null);
+  await Cap.deleteMany({});
+  await CapSpend.deleteMany({});
+  capEngine.invalidate();
+});
+
+test("alert-action cap notifies but never enforces", async (t) => {
+  if (maybeSkip(t)) return;
+  const { Cap, CapSpend, capEngine } = global.__hot;
+  const cap = await Cap.create({
+    dimension: "user", value: "user_alert", period: "day", limit: 1.0, action: "alert", enabled: true,
+  });
+  capEngine.invalidate();
+  const key = capEngine.windowKey("day");
+  await CapSpend.create({ capId: cap._id, windowKey: key, spent: 2.0 }); // over the limit
+  // Over-limit alert cap: returns no enforcement (routing unchanged) even though breached.
+  const enf = await capEngine.enforcement({ userId: "user_alert", application: "chat", provider: "openai" });
+  assert.equal(enf, null, "alert caps must not block or downgrade");
+  await Cap.deleteMany({});
+  await CapSpend.deleteMany({});
+  capEngine.invalidate();
+});
+
 test("shared rate limit overRpmLimit trips after rpm", async (t) => {
   if (maybeSkip(t)) return;
   const { overRpmLimit } = global.__hot;

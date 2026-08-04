@@ -436,7 +436,10 @@ async function handleChat(req, res) {
     // A gateway API key binds attribution — it overrides what the body claims.
     application: req.apiKey?.application || body.application || "unknown",
     workflow: body.workflow || "unknown",
-    userId: body.userId || null,
+    // A per-user key binds the end user, overriding a self-reported body.userId — same
+    // trust model as `application`. Only falls back to the body when the key is not
+    // user-scoped. Per-user budgets rely on this being the trusted identity.
+    userId: req.apiKey?.userId || body.userId || null,
     department: body.department || "unknown",
     // W3C trace context, so the OTel span nests inside the caller's trace. Stripped
     // before the record is stored (see logging/logger.js). Spread into every log
@@ -478,7 +481,10 @@ async function handleChat(req, res) {
   // Budget enforcement — a breached enforcing cap outranks everything, including
   // explicit pins (that is the point of enforcement). block → 429; downgrade →
   // force the provider's light model while the window is breached.
-  const enf = await capEngine.enforcement({ application: meta.application, provider: served.provider });
+  const enf = await capEngine.enforcement({
+    application: meta.application, provider: served.provider, userId: meta.userId,
+    department: meta.department, workflow: meta.workflow, model: served.model,
+  });
   if (enf) {
     if (enf.action === "block") {
       pushOverride(explain, { type: "budget", action: "block",

@@ -1,6 +1,6 @@
 # Budgets & governance
 
-Budgets (caps) enforce spend limits per application, provider, team, or model. A breached cap can alert, downgrade the model, or block the request — with no code changes to any application.
+Budgets (caps) enforce spend limits per application, provider, department, workflow, model, or **end user**. A breached cap can alert, downgrade the model, or block the request — with no code changes to any application.
 
 ## How budgets work
 
@@ -8,11 +8,11 @@ Each budget tracks rolling spend over a **day** or **month** window. When `spent
 
 | Action | What happens |
 |---|---|
-| **Alert** | Cap appears as "breached" in the dashboard and `/api/status` — no request is affected |
+| **Alert** | No request is affected. The breach shows in the dashboard and `/api/status`, and a `cap_breach` webhook fires (plus `cap_warning` at the warn threshold). Use this for per-user usage notifications. |
 | **Downgrade** | Every request in the capped scope is forced to the provider's light-tier model (overrides even developer pins) |
 | **Block** | Requests in the capped scope are rejected with HTTP 429 `budget_exceeded` |
 
-Downgrade and Block are enforced **before** routing — they outrank explicit model pins.
+Downgrade and Block are enforced **before** routing — they outrank explicit model pins. Every action, including `alert`, fires `cap_warning` / `cap_breach` webhooks (see [Alert webhooks](#alert-webhooks)).
 
 ## Creating a budget
 
@@ -34,16 +34,14 @@ curl -X POST http://localhost:4100/api/caps \
 Fields:
 | Field | Values | Description |
 |---|---|---|
-| `dimension` | `application` \| `provider` \| `department` \| `workflow` \| `model` \| (omit for global) | What to scope the cap to |
-| `value` | string | The specific application/provider/… to cap |
+| `dimension` | `application` \| `provider` \| `department` \| `workflow` \| `model` \| `user` \| (omit for global) | What to scope the cap to |
+| `value` | string | The specific application/provider/department/workflow/model, or the end-user id, to cap |
 | `period` | `day` \| `month` | Rolling window |
 | `limit` | number (USD) | Spend threshold |
 | `action` | `alert` \| `downgrade` \| `block` | What to do when breached |
-| `warningThreshold` | number, 0–1 (default `0.8`) | Fraction of `limit` at which a `cap_warning` webhook fires, ahead of the hard action. Only meaningful for `downgrade`/`block` caps. |
+| `warningThreshold` | number, 0–1 (default `0.8`) | Fraction of `limit` at which a `cap_warning` webhook fires, ahead of the breach. Applies to every action, including `alert`. |
 
-::: warning Only `application` and `provider` caps enforce today
-`downgrade`/`block` only actually change routing when `dimension` is `application` or `provider`. `department`, `workflow`, and `model` dimension caps are tracked and can still alert (breaches show in the dashboard and `/api/status`), but the gateway does not yet downgrade or block traffic on them.
-:::
+The `user` dimension caps an individual end user's spend. Attribution comes from the request's trusted `userId` — a per-user gateway key binds it, otherwise it falls back to the caller-supplied `user` / `x-arbr-user-id`. For hard `block` enforcement, use per-user keys so the identity cannot be spoofed; for `alert` (the common per-user case) the self-reported id is fine.
 
 ## Examples
 
@@ -61,6 +59,45 @@ Fields:
 ```json
 { "period": "day", "limit": 20, "action": "block" }
 ```
+
+**Alert an end user near their monthly quota (self-serve usage notification):**
+```json
+{ "dimension": "user", "value": "user_1a2b3c", "period": "month", "limit": 10, "action": "alert", "warningThreshold": 0.8 }
+```
+This fires `cap_warning` at $8 and `cap_breach` at $10 without changing routing — a downstream app turns those webhooks into an in-product "80% of your monthly usage" notice.
+
+## Alert webhooks
+
+Set a **Webhook URL** in Settings. When a cap crosses its warn threshold or its limit, Arbr POSTs a JSON event to that URL. This is how per-user usage alerts reach a downstream app — there is no built-in email.
+
+`cap_warning` (fired once per warn threshold crossing, deduped ~5 min):
+```json
+{
+  "event": "cap_warning",
+  "dimension": "user",
+  "value": "user_1a2b3c",
+  "period": "month",
+  "limit": 10,
+  "spent": 8.12,
+  "ratio": 0.812,
+  "action": "alert"
+}
+```
+
+`cap_breach` (fired when `spent ≥ limit`):
+```json
+{
+  "event": "cap_breach",
+  "dimension": "user",
+  "value": "user_1a2b3c",
+  "period": "month",
+  "limit": 10,
+  "spent": 10.40,
+  "action": "alert"
+}
+```
+
+Every event body also carries a `timestamp` (ISO 8601) and an internal `key` used for cross-replica dedup (the same event is suppressed for ~5 minutes). For a per-user cap, `dimension` is `"user"` and `value` is the end-user id — map that to your own user record to notify the right person.
 
 ## Gateway API keys
 

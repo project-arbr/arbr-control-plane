@@ -92,6 +92,10 @@ async function writeOrThrow(record) {
       capEngine.recordSpend(totalCost, {
         application: rec.application,
         provider: rec.provider,
+        userId: rec.userId || null,
+        department: rec.department || null,
+        workflow: rec.workflow || null,
+        model: rec.model || null,
         // Arbr's own overhead counts against a global cap but not a scoped one.
         internalKind: rec.internalKind || null,
       }).catch(() => {})
