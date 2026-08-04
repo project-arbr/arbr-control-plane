@@ -17,7 +17,7 @@ const usageRoutes = require("./api/routes/usage");
 const embedRoutes = require("./api/routes/embed");
 const selfKeyAuth = require("./gateway/selfKeyAuth");
 const selfKeyRoutes = require("./api/routes/selfKey");
-const { handleEmbeddings } = require("./gateway/embeddings");
+const { handleEmbeddings, listEmbeddingModels } = require("./gateway/embeddings");
 const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
 const { purgeOldRecords } = require("./maintenance/purge");
@@ -167,22 +167,38 @@ async function start() {
     try {
       const eff = await connections.effective();
       const liveSet = new Set(eff.liveIds);
-      const models = registry.listModels().filter((m) => liveSet.has(m.provider));
-      res.json({
-        object: "list",
-        data: models.map((m) => ({
-          id: m.id,
-          object: "model",
-          created: m.createdAt ? Math.floor(new Date(m.createdAt).getTime() / 1000) : 0,
-          owned_by: m.provider,
-          provider: m.provider,
-          label: m.label || m.id,
-          tier: m.tier,
-          inputPer1M: m.inputPer1M,
-          outputPer1M: m.outputPer1M,
-          toolCallSupported: supportsTools(m.provider, m.id),
-        })),
-      });
+      // Chat models only. Embedding / media rows (chatCapable === false) are not usable on
+      // /v1/chat/completions, and listing them here made clients pick models the endpoint
+      // rejects — e.g. nvidia/* embeddings that /v1/embeddings can't resolve either.
+      const chatModels = registry.listModels()
+        .filter((m) => liveSet.has(m.provider) && m.chatCapable !== false);
+      const chatData = chatModels.map((m) => ({
+        id: m.id,
+        object: "model",
+        type: "chat",
+        created: m.createdAt ? Math.floor(new Date(m.createdAt).getTime() / 1000) : 0,
+        owned_by: m.provider,
+        provider: m.provider,
+        label: m.label || m.id,
+        tier: m.tier,
+        inputPer1M: m.inputPer1M,
+        outputPer1M: m.outputPer1M,
+        toolCallSupported: supportsTools(m.provider, m.id),
+      }));
+      // Embedding models the /v1/embeddings resolver actually accepts, so embeddings are
+      // discoverable (they are not in the ModelEntry registry). Tagged type:"embedding".
+      const embeddingData = listEmbeddingModels(eff.liveIds).map((m) => ({
+        id: m.id,
+        object: "model",
+        type: "embedding",
+        created: 0,
+        owned_by: m.provider,
+        provider: m.provider,
+        label: m.id,
+        dimensions: m.dimensions,
+        toolCallSupported: false,
+      }));
+      res.json({ object: "list", data: [...chatData, ...embeddingData] });
     } catch (err) {
       res.status(500).json({ error: "internal_error", message: String(err.message || err) });
     }

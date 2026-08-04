@@ -27,6 +27,24 @@ function inferProvider(modelId) {
   return null;
 }
 
+// The embedding models this endpoint actually accepts, with their default output
+// dimensions. Embedding models are not in the ModelEntry registry (chat-only sync), so
+// discovery (/v1/models) has no other way to surface them — without this list a caller
+// could only configure embeddings by out-of-band knowledge. Keep in sync with PROVIDER_RE:
+// every id here must resolve via inferProvider().
+const EMBEDDING_MODELS = [
+  { id: "text-embedding-3-small", provider: "openai", dimensions: 1536 },
+  { id: "text-embedding-3-large", provider: "openai", dimensions: 3072 },
+  { id: "text-embedding-ada-002", provider: "openai", dimensions: 1536 },
+  { id: "gemini-embedding-001",   provider: "gemini", dimensions: 3072 },
+];
+
+// Supported embedding models restricted to currently-connected providers, for discovery.
+function listEmbeddingModels(liveIds = null) {
+  const live = liveIds ? new Set(liveIds) : null;
+  return EMBEDDING_MODELS.filter((m) => !live || live.has(m.provider));
+}
+
 // ── Gemini embedding via REST ─────────────────────────────────────────────────
 
 async function embedWithGemini(model, inputs, dims, apiKey) {
@@ -212,4 +230,4 @@ async function handleEmbeddings(req, res) {
   }));
 }
 
-module.exports = { handleEmbeddings };
+module.exports = { handleEmbeddings, listEmbeddingModels, inferProvider, EMBEDDING_MODELS };
