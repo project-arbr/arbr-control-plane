@@ -14,6 +14,7 @@ const { handleChat } = require("./gateway/handler");
 const { handleOpenAICompat } = require("./gateway/openaiCompat");
 const readTokenAuth = require("./gateway/readTokenAuth");
 const usageRoutes = require("./api/routes/usage");
+const embedRoutes = require("./api/routes/embed");
 const selfKeyAuth = require("./gateway/selfKeyAuth");
 const selfKeyRoutes = require("./api/routes/selfKey");
 const { handleEmbeddings } = require("./gateway/embeddings");
@@ -132,6 +133,11 @@ async function start() {
   // (+ optional user) analytics. Guarded by readTokenAuth (not the admin key), so a
   // partner app can expose per-end-user usage without proxying through ARBR_ADMIN_KEY.
   app.use("/v1/usage", adminRateLimit.middleware, readTokenAuth.middleware, usageRoutes);
+
+  // Embeddable widgets — a partner iframes /embed/usage#token=ab_read_… to show an end
+  // user their own usage chart. Public page; the read token (in the URL fragment, never
+  // sent to the server) gates the data, and the page fetches /v1/usage same-origin.
+  app.use("/embed", embedRoutes);
 
   // Self-service key management — the caller authenticates with the key itself and can
   // view / rotate / revoke ONLY that key, no admin role. Lets a key's own holder rotate
