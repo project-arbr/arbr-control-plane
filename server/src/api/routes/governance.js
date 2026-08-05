@@ -20,6 +20,7 @@ function governanceView(s) {
     piiMaskingEnabled:       s.piiMaskingEnabled ?? defaults.piiMaskingEnabled,
     customPiiPatterns:       s.customPiiPatterns || [],
     requireApiKey:           s.requireApiKey ?? false,
+    aiDifficultyAdjust:      s.aiDifficultyAdjust ?? false,
     webhookUrl:              s.webhookUrl || null,
     retentionDays:           s.retentionDays ?? defaults.retentionDays,
     alertErrorRateEnabled:   s.alertErrorRateEnabled ?? false,
@@ -71,6 +72,8 @@ router.patch("/governance", requireRole("administrator"), async (req, res, next)
       update.customPiiPatterns = body.customPiiPatterns.filter(p => p.name && p.pattern);
     if ("requireApiKey" in body)
       update.requireApiKey = !!body.requireApiKey;
+    if ("aiDifficultyAdjust" in body)
+      update.aiDifficultyAdjust = !!body.aiDifficultyAdjust;
     if ("webhookUrl" in body)
       update.webhookUrl = body.webhookUrl ? String(body.webhookUrl).trim() : null;
     if ("retentionDays" in body)

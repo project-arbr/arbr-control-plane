@@ -34,7 +34,7 @@ In order. Steps 1–6 pick the model (`explain.basis`); 7–9 can override or re
 | 1 | **Explicit pin** | `resolveExplicit` | A client model resolvable to a live provider is served as-is, skipping every policy. An unresolvable pin is rejected `400` (see §5). |
 | 2 | **Default** | `resolveDefault` | Base pick for auto mode: the API key's `defaultModel` if set and live, else the global default (`connections.effective`). Basis `passthrough`. |
 | 3 | **Rule** | `ruleEngine.findRoute` | First enabled `Rule` whose conditions match `taskType`/`application`/`workflow`. Basis `rule`. **Rules always beat AI and guardrail.** |
-| 4 | **AI policy** (mode `ai`) | `aiPolicy.lookup` + `resolveModel` | The policy's per-task assignment, then a difficulty adjustment (§4). Basis `ai`. |
+| 4 | **AI policy** (mode `ai`) | `aiPolicy.lookup` + `resolveModel` | The policy's per-task assignment. A difficulty adjustment (§4) may re-pick **only when `Settings.aiDifficultyAdjust` is on** (default off); otherwise the assignment is authoritative. Basis `ai`. |
 | 5 | **Cost guardrail** (mode `guardrail`) | `autoRouter.selectAutoRoute` | Downgrades cheap task types to a lighter model. Basis `auto`. |
 | 6 | **Canary** (auto only) | `canaryEngine.selectCanary` | Diverts a deterministic % of matching traffic to a candidate. Override `canary`. |
 | 7 | **Allowed-models** | handler.js | If the key restricts models and routing landed outside the set → swap to the key default, else `403`. Override `allowed`. |
@@ -77,8 +77,8 @@ Mode `ai`, policy maps `coding` → `claude-sonnet-4-6`, instance difficulty mat
 → classified `coding` (mid), served `claude-sonnet-4-6`. Basis `ai`.
 > "Auto-routing: Arbr classified this as coding, mid 6/10, confidence 0.90, and the global AI policy mapped it to claude-sonnet-4-6."
 
-### 2.4 AI policy, difficulty-adjusted (downgrade)
-Same policy, but the instance is rated *easier* than the task's tier and a cheaper capable model exists.
+### 2.4 AI policy, difficulty-adjusted (downgrade) — only when `aiDifficultyAdjust` is enabled
+Same policy, but the instance is rated *easier* than the task's tier and a cheaper capable model exists. This path runs **only** when the opt-in `aiDifficultyAdjust` setting is on; with it off (default) the policy pick from §2.3 is served unchanged.
 > "The policy's base pick was claude-sonnet-4-6; difficulty (light) adjusted it to claude-haiku-4-5."
 
 Note: after #232, difficulty may only substitute a **cheaper, priced** model, and never overrides an explicit assignment with an unrelated/unpriced one.

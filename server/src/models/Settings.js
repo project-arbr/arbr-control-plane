@@ -30,6 +30,13 @@ const settingsSchema = new mongoose.Schema(
       generatorModel:    { type: String, default: null },
       capabilityVersion: { type: Number, default: null },
     },
+    // AI mode only. When OFF (default) the policy is authoritative: every request routes to the
+    // model the policy assigns for its task type (falling back to the default model if that model
+    // is unavailable). When ON, a per-request "difficulty adjustment" may substitute a cheaper
+    // model — one NOT necessarily in the policy — for instances the classifier rates easier than
+    // the task's usual tier. Off by default because a silent swap to an unlisted model is
+    // surprising; leave it off to keep routing == the policy table.
+    aiDifficultyAdjust: { type: Boolean, default: false },
     // Editable knobs for the automated-routing cost guardrail. null fields fall back
     // to the hardcoded defaults in pricing/table.js (so behaviour is unchanged until edited).
     //   cheapTaskTypes: string[] — task types eligible for downgrade

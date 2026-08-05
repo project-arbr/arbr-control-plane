@@ -267,7 +267,10 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
       // fall back to the task's default policy pick when we're unsure.
       const effDifficulty = (confidence == null || confidence >= 0.5) ? difficulty : null;
       const base = aiPolicy.lookup(aiMap, taskType);
-      const hit = aiPolicy.resolveModel({ map: aiMap, taskType, difficulty: effDifficulty, eff });
+      // Off by default — the policy is authoritative. Only the opt-in setting lets a request
+      // downgrade to a cheaper, possibly-unlisted model. Settings.get() is cached (5s).
+      const aiAdjust = (await Settings.get()).aiDifficultyAdjust === true;
+      const hit = aiPolicy.resolveModel({ map: aiMap, taskType, difficulty: effDifficulty, eff, adjust: aiAdjust });
       if (hit && eff.liveIds.includes(hit.provider)) {
         served = { provider: hit.provider, model: hit.model };
         routingDecision = "ai";

@@ -155,12 +155,16 @@ function lookup(map, taskType) {
   return { provider: m.provider, model };
 }
 
-// Difficulty-aware resolution. Start from the policy's pick for the task type; if the
-// classifier rated THIS instance easier or harder than the task's default tier, re-pick
-// within that tier using the same scoring engine. Falls back to the base pick on anything
-// unexpected (no difficulty, unknown task, scoring error, or a non-live result).
-function resolveModel({ map, taskType, difficulty, eff }) {
+// Resolve the model for a task. By default the policy is authoritative: return exactly the
+// model the policy assigns (the caller falls through to the default model if that pick is
+// unavailable). Only when `adjust` is enabled (Settings.aiDifficultyAdjust) do we apply the
+// per-request difficulty downgrade: if the classifier rated THIS instance easier or harder than
+// the task's default tier, re-pick within that tier using the scoring engine. That path can
+// substitute a cheaper model NOT in the operator's policy, which is why it is opt-in.
+function resolveModel({ map, taskType, difficulty, eff, adjust = false }) {
   const base = lookup(map, taskType);
+  // Policy is authoritative unless the operator opted into difficulty adjustment.
+  if (!adjust) return base;
   // Only ADJUST an existing policy pick; never invent one for an unmapped task (that stays
   // passthrough, as before). And no difficulty/eff → unchanged behavior.
   if (!base || !difficulty || !eff || !eff.liveIds) return base;

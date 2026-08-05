@@ -104,17 +104,19 @@ Known cheap task types: `classification`, `extraction`, `summarisation`, `transl
 
 The classifier also outputs a **difficulty score (1–10)** and a **confidence (0–1)**. Both are stored on the `RequestRecord` for observability. Low-confidence results (`< 0.5`) do not drive difficulty-based routing changes.
 
-## Difficulty-aware routing
+## Difficulty-aware routing (opt-in)
 
-Within a task type, not all requests are equally hard. Once AI routing mode is on, Arbr adjusts the model pick based on difficulty:
+By default the AI policy is **authoritative**: every request routes to exactly the model the policy assigns for its task type, and if that model is unavailable it falls through to the default model. What you see in the policy table is what runs.
+
+There is an optional per-request **difficulty adjustment** — off by default — that trades that predictability for cost. Enable it under **Routing → "Auto-adjust model by request difficulty"** (or set `aiDifficultyAdjust` via `PATCH /api/governance`). When on, and once AI routing mode is on:
 
 | Difficulty | Routing adjustment |
 |---|---|
-| Easy (score ≤ 3) | Re-picks within the task type's tier toward a **cheaper** model |
+| Easy (score ≤ 3) | Re-picks toward a **cheaper** model — which may be one **not in your policy** |
 | Normal (4–7) | Uses the policy's default pick as-is |
 | Hard (score ≥ 8) | Re-picks toward a **stronger** model within the available set |
 
-This only applies when the AI policy has a pick for the task type; unmapped tasks are pass-through as before.
+It only adjusts a task the policy already has a pick for (unmapped tasks stay pass-through), and it only substitutes downward for cost. Because the re-pick scores the whole live-model catalog, it can land on a model you didn't assign — that is why it is opt-in. Leave it off to keep routing equal to the policy table.
 
 ## Routing explainability
 
