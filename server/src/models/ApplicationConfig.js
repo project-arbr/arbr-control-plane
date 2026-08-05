@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const schema = new mongoose.Schema({
   applicationName: { type: String, required: true, unique: true, index: true },
@@ -8,4 +9,4 @@ const schema = new mongoose.Schema({
   aiPolicyAssignments: { type: mongoose.Schema.Types.Mixed, default: null }, // null = use global
 }, { collection: "applicationconfigs", timestamps: true });
 
-module.exports = mongoose.model("ApplicationConfig", schema);
+module.exports = defineModel("ApplicationConfig", schema);

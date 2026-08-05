@@ -1,6 +1,7 @@
 // Immutable audit trail for admin operations. Written on every mutation to
 // rules, caps, keys, connections, and settings. Read-only from the dashboard.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const auditLogSchema = new mongoose.Schema(
   {
@@ -18,4 +19,4 @@ const auditLogSchema = new mongoose.Schema(
   { collection: "auditlogs" }
 );
 
-module.exports = mongoose.model("AuditLog", auditLogSchema);
+module.exports = defineModel("AuditLog", auditLogSchema);

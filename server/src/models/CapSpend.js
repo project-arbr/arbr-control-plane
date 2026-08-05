@@ -3,6 +3,7 @@
 // 30s-stale aggregation cache. Analytics.spend remains the source of truth for
 // dashboards; reconcile() realigns counters periodically.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const capSpendSchema = new mongoose.Schema(
   {
@@ -17,4 +18,4 @@ const capSpendSchema = new mongoose.Schema(
 
 capSpendSchema.index({ capId: 1, windowKey: 1 }, { unique: true });
 
-module.exports = mongoose.model("CapSpend", capSpendSchema);
+module.exports = defineModel("CapSpend", capSpendSchema);

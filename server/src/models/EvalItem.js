@@ -2,6 +2,7 @@
 // parent dataset's piiMode (masked / omitted for metadata_only). Deleted with the dataset and
 // by the retention purge.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const evalItemSchema = new mongoose.Schema(
   {
@@ -38,4 +39,4 @@ const evalItemSchema = new mongoose.Schema(
   { collection: "eval_items", timestamps: true }
 );
 
-module.exports = mongoose.model("EvalItem", evalItemSchema);
+module.exports = defineModel("EvalItem", evalItemSchema);

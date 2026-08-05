@@ -2,6 +2,7 @@
 // the thresholds it was judged against, a cost ceiling, and the aggregated summary. Its
 // terminal status (passed/failed) is what gates a recommendation into an enabled rule.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const evalRunSchema = new mongoose.Schema(
   {
@@ -54,4 +55,4 @@ const evalRunSchema = new mongoose.Schema(
   { collection: "eval_runs", timestamps: true }
 );
 
-module.exports = mongoose.model("EvalRun", evalRunSchema);
+module.exports = defineModel("EvalRun", evalRunSchema);

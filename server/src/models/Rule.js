@@ -1,6 +1,7 @@
 // A human-authored, reversible routing rule. Off by default. The gateway
 // executes an enabled rule exactly as written — no inference, no quality guess.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const ruleSchema = new mongoose.Schema(
   {
@@ -38,4 +39,4 @@ const ruleSchema = new mongoose.Schema(
   { collection: "rules", timestamps: true }
 );
 
-module.exports = mongoose.model("Rule", ruleSchema);
+module.exports = defineModel("Rule", ruleSchema);

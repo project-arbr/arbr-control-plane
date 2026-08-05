@@ -3,6 +3,7 @@
 // the client. Deleting a user's session rows (or disabling the User) revokes
 // access on their very next request — no waiting for a JWT to expire.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -18,4 +19,4 @@ const sessionSchema = new mongoose.Schema(
 // Mongo TTL index — expired sessions are purged automatically.
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-module.exports = mongoose.model("Session", sessionSchema);
+module.exports = defineModel("Session", sessionSchema);

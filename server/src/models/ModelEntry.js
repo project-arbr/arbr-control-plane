@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const modelEntrySchema = new mongoose.Schema(
   {
@@ -52,4 +53,4 @@ const modelEntrySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("ModelEntry", modelEntrySchema);
+module.exports = defineModel("ModelEntry", modelEntrySchema);

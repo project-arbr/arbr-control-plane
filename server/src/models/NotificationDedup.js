@@ -3,6 +3,7 @@
 // replica (or an earlier request on this one) already claimed the key within
 // the window. Self-expires via the TTL index, so no manual pruning is needed.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const DEDUP_WINDOW_SECONDS = 5 * 60;
 
@@ -17,4 +18,4 @@ const notificationDedupSchema = new mongoose.Schema(
 notificationDedupSchema.index({ dedupKey: 1 }, { unique: true });
 notificationDedupSchema.index({ createdAt: 1 }, { expireAfterSeconds: DEDUP_WINDOW_SECONDS });
 
-module.exports = mongoose.model("NotificationDedup", notificationDedupSchema);
+module.exports = defineModel("NotificationDedup", notificationDedupSchema);
