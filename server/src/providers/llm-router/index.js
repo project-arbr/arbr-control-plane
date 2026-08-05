@@ -234,10 +234,19 @@ function extractUsage(response) {
   const outputTokens = um.output_tokens ?? um.outputTokens ?? rm.completion_tokens ?? rm.output_tokens;
   const totalTokens  = um.total_tokens  ?? um.totalTokens  ?? rm.total_tokens;
 
+  // Reasoning/"thinking" tokens (Gemini thoughtsTokenCount, OpenAI o-series reasoning). These
+  // count toward total but not toward the visible output_tokens, which is why total can exceed
+  // input+output. Surfaced so an empty answer with a consumed budget is explainable rather than
+  // mysterious. Only included when the provider reports it.
+  const reasoningTokens =
+    (um.output_token_details && um.output_token_details.reasoning)
+    ?? (rm.completion_tokens_details && rm.completion_tokens_details.reasoning_tokens);
+
   return {
     inputTokens,
     outputTokens,
     totalTokens,
+    ...(reasoningTokens != null ? { reasoningTokens: Number(reasoningTokens) || 0 } : {}),
     cachedReadTokens: Number(cachedReadTokens) || 0,
     cacheWriteTokens: Number(cacheWriteTokens) || 0,
   };

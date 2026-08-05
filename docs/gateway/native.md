@@ -59,6 +59,7 @@ curl -X POST http://localhost:4100/v1/chat \
   "routingDecision": "explicit",
   "classifiedBy": "provided",
   "cacheHit": false,
+  "finishReason": "stop",
   "usage": {
     "inputTokens": 28,
     "outputTokens": 1,
@@ -81,9 +82,12 @@ curl -X POST http://localhost:4100/v1/chat \
 | `routingDecision` | `explicit` \| `passthrough` \| `rule` \| `auto` \| `ai` \| `cache` \| `semantic_cache` \| `fallback` \| `budget` \| `canary` \| `external` |
 | `classifiedBy` | How `taskType` was determined: `provided` \| `keyword` \| `ai` |
 | `cacheHit` | Whether the response was served from Arbr's response cache |
+| `finishReason` | Why generation stopped: `stop` (complete) \| `length` (hit `maxTokens`) \| `tool_calls` \| `content_filter`. `null` if the provider didn't report one. Use it to tell a deliberately-short answer from a truncated one. |
+| `warning` | Present only in the notable case where `finishReason` is `length` **and** `text` is empty — a reasoning/thinking model consumed the whole `maxTokens` budget on internal reasoning before producing any output. Raise `maxTokens`. |
 | `usage.inputTokens` | Total prompt tokens (includes any cached tokens) |
-| `usage.outputTokens` | Completion tokens |
-| `usage.totalTokens` | Total tokens |
+| `usage.outputTokens` | Completion (visible answer) tokens |
+| `usage.totalTokens` | Total tokens — may exceed `inputTokens + outputTokens` when a model spends reasoning tokens |
+| `usage.reasoningTokens` | Present only when the model reports it (Gemini thinking, OpenAI o-series): tokens spent on internal reasoning. These count toward `totalTokens` but not `outputTokens` — the reason for a gap between them |
 | `usage.cachedReadTokens` | Prompt tokens served from the provider's prompt cache (billed at cache-read rate) |
 | `usage.cacheWriteTokens` | Prompt tokens written to the provider's prompt cache (billed at cache-write rate) |
 
