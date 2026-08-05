@@ -705,8 +705,18 @@ async function handleChat(req, res) {
     routingDecision,
     classifiedBy,
     cacheHit: false,
+    // Why generation stopped ("stop" | "length" | "tool_calls" | "content_filter"), so a caller
+    // can tell a deliberately-short answer from a truncated one. openaiCompat already surfaces
+    // this; /v1/chat previously dropped it.
+    finishReason: result.finishReason || null,
     text: deliveryText,
     usage: result.usage,
+    // A thinking/reasoning model can spend the whole max_tokens budget on internal reasoning and
+    // return an empty answer with no error. Flag that case explicitly instead of leaving an empty
+    // string indistinguishable from a legitimate empty response.
+    ...(result.finishReason === "length" && !deliveryText
+      ? { warning: "Output truncated by max_tokens before any text was produced — a reasoning model likely consumed the budget on internal thinking (see usage.reasoningTokens). Raise max_tokens." }
+      : {}),
   });
 
   // 5 · AFTER THE RESPONSE — cache + log (cost computed in the logger).
