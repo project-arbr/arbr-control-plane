@@ -334,8 +334,17 @@ function AiPolicyEditor({ models }) {
   const [expanded, setExpanded] = useState({ light: false, mid: false, premium: false, custom: true });
   const [goal, setGoal] = useState("balanced"); // cost | balanced | quality
   const [sim, setSim] = useState(null);
+  const [difficultyAdjust, setDifficultyAdjust] = useState(false);
   const load = () => api.aiPolicy().then((p) => { setPol(p); setAssignments({ ...p.assignments }); }).catch((e) => setMsg(e.message));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.governance().then((g) => setDifficultyAdjust(!!g.aiDifficultyAdjust)).catch(() => {});
+  }, []);
+  const toggleDifficultyAdjust = async (next) => {
+    setDifficultyAdjust(next);
+    try { await api.updateGovernance({ aiDifficultyAdjust: next }); setMsg(next ? "Difficulty adjustment on" : "Policy is now authoritative"); setTimeout(() => setMsg(null), 2000); }
+    catch (e) { setMsg(e.message); setDifficultyAdjust(!next); }
+  };
   if (!pol) return <Spinner />;
 
   const regen = async () => {
@@ -408,6 +417,22 @@ function AiPolicyEditor({ models }) {
           </button>
         ))}
       </div>
+      {/* Whether requests may deviate from the policy table at serve time. Off = the policy
+          you see is exactly what runs; on = a per-request cost downgrade may pick a cheaper
+          model that isn't in the policy. */}
+      <label className="flex items-start gap-2 rounded-lg border border-gray-200 p-3 text-xs">
+        <input type="checkbox" className="mt-0.5" checked={difficultyAdjust}
+          onChange={(e) => toggleDifficultyAdjust(e.target.checked)} />
+        <span>
+          <span className="font-medium">Auto-adjust model by request difficulty</span>
+          <span className="ml-1 text-gray-500">
+            (cost). When off (default), every request routes to the model this policy assigns for
+            its task — the table below is exactly what runs. When on, a request the classifier
+            rates easier than usual may be downgraded to a cheaper model that isn&apos;t
+            necessarily in the policy.
+          </span>
+        </span>
+      </label>
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn-secondary" disabled={busy} onClick={() => setConfirmRegen(true)}>{busy ? "Generating…" : "Generate with AI"}</button>
         <button className="btn-outline" disabled={busy} onClick={save}>Save edits</button>
