@@ -32,7 +32,7 @@ test("runWithConnection scopes currentConnection for the duration", () => {
 });
 
 test("defineModel resolves to the current connection's model, isolating per connection", () => {
-  const Thing = defineModel("Thing", { fake: true });
+  const Thing = defineModel("Thing", new mongoose.Schema({ x: Number }));
   runWithConnection(makeFakeConn("A"), () => {
     assert.equal(Thing.find(), "A:Thing:find");
     assert.equal(Thing.whoAmI(), "A");       // static's `this` is the real model, not the proxy
@@ -43,7 +43,7 @@ test("defineModel resolves to the current connection's model, isolating per conn
 });
 
 test("defineModel caches the model within a connection", () => {
-  const Thing = defineModel("Thing", { fake: true });
+  const Thing = defineModel("Thing", new mongoose.Schema({ x: Number }));
   const conn = makeFakeConn("C");
   runWithConnection(conn, () => {
     const first = Thing.find();
@@ -54,7 +54,7 @@ test("defineModel caches the model within a connection", () => {
 });
 
 test("defineModel supports `new Model(doc)` via the construct trap", () => {
-  const Thing = defineModel("Thing", { fake: true });
+  const Thing = defineModel("Thing", new mongoose.Schema({ x: Number }));
   runWithConnection(makeFakeConn("D"), () => {
     const doc = new Thing({ x: 1 });
     assert.deepEqual(doc.doc, { x: 1 });

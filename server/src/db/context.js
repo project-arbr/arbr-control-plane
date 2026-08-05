@@ -41,6 +41,12 @@ function modelForCurrent(name, schema) {
 //   - `Model(...)` as a function works (apply trap),
 //   - `doc instanceof Model` works (getPrototypeOf trap).
 function defineModel(name, schema) {
+  // Eagerly compile on the connection current at module-load time — the GLOBAL connection in OSS
+  // and in every existing test. This matches the old `mongoose.model(name, schema)` timing exactly,
+  // so index builds (e.g. NotificationDedup's unique dedup index) start at require-time and are not
+  // raced by code that relies on them right after first use. Per-tenant connections still compile
+  // lazily on their first access.
+  modelForCurrent(name, schema);
   const handler = {
     get(_t, prop) {
       const M = modelForCurrent(name, schema);
