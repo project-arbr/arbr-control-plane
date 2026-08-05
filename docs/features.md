@@ -63,6 +63,7 @@ Connect any combination — all providers share the same routing, logging, and b
 | **Moonshot AI** | `moonshot` | Moonshot 8K/32K/128K |
 | **xAI (Grok)** | `xai` | Grok 3 and Grok 3 Mini |
 | **Groq** | `groq` | Llama 3 models at inference speed |
+| **Mistral AI** | `mistral` | Mistral Small/Medium/Large |
 | **Any LiteLLM proxy** | `openai` (custom base URL) | Hundreds of additional models through a LiteLLM instance |
 
 Dashboard-stored provider keys are encrypted at rest (AES-256-GCM, under `ARBR_ENCRYPTION_KEY`) and never appear in responses. A key can also be set as an env var directly, or point at a reference in a cloud secret manager instead of a literal value — see [Cloud secret-manager integration](#cloud-secret-manager-integration) below.

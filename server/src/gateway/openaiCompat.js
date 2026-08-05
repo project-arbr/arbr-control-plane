@@ -13,7 +13,7 @@ const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
 const { maybeShadowEval } = require("../eval/shadow");
-const { PROVIDERS } = require("../config");
+const { resolveBaseURL } = require("../providers/connections");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
@@ -23,7 +23,7 @@ const { governanceFor, checkModel } = require("../routing/guards");
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
 // streaming) instead of round-tripping through LangChain, which drops everything but text.
-const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm"]);
+const OPENAI_COMPAT_PROVIDERS = new Set(["openai", "deepseek", "moonshot", "xai", "groq", "litellm", "mistral"]);
 
 // Amazon Nova models on Bedrock support tools via ChatBedrockConverse.bindTools().
 // Other Bedrock models (Mistral 7B, Mixtral 8x7B, DeepSeek R1) do not — they share the
@@ -52,11 +52,13 @@ function isNativeToolModel(providerId, modelId) {
 
 // Resolved chat-completions base URL for an OpenAI-compatible provider, or null if the provider
 // is native (anthropic/gemini/bedrock) and must use the LangChain path.
-// `eff` is passed so custom providers (whose baseURL lives in MongoDB) are recognized.
+// `eff` is passed so custom providers (whose baseURL lives in MongoDB) are recognized — including
+// one that shadows a built-in id, where connections.resolveBaseURL gives the custom row priority
+// so the endpoint matches the credential resolved alongside it.
 function openAICompatBaseURL(providerId, eff) {
   if (OPENAI_COMPAT_PROVIDERS.has(providerId)) {
-    const base = PROVIDERS[providerId]?.baseURL || (providerId === "openai" ? "https://api.openai.com/v1" : null);
-    return base ? base.replace(/\/+$/, "") : null;
+    return resolveBaseURL(providerId, eff?.providers?.[providerId])
+        || (providerId === "openai" ? "https://api.openai.com/v1" : null);
   }
   // Custom (user-added) providers: eff carries their baseURL; they're never native.
   if (!NATIVE_TOOL_PROVIDERS.has(providerId)) {
@@ -452,7 +454,7 @@ async function handleOpenAICompat(req, res) {
         error: {
           message:
             `Model "${served.model}" does not support ${features} on /v1/chat/completions. ` +
-            `Route to an OpenAI-compatible provider (openai, deepseek, moonshot, xai, groq), or ` +
+            `Route to an OpenAI-compatible provider (openai, deepseek, moonshot, xai, groq, mistral), or ` +
             `front this provider with a LiteLLM proxy.`,
           type: "not_implemented_error",
           code: "capability_not_supported",
@@ -853,4 +855,7 @@ async function handleOpenAICompat(req, res) {
   });
 }
 
-module.exports = { handleOpenAICompat };
+module.exports = {
+  handleOpenAICompat,
+  openAICompatBaseURL, // pure, exported for tests
+};

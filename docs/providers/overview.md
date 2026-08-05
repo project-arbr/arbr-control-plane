@@ -1,6 +1,6 @@
 # Providers
 
-Arbr supports 8 providers out of the box. All use the same connection interface — one credential field (or AWS keys for Bedrock) and a default model.
+Arbr supports 9 providers out of the box. All use the same connection interface — one credential field (or AWS keys for Bedrock) and a default model.
 
 ## Supported providers
 
@@ -14,6 +14,7 @@ Arbr supports 8 providers out of the box. All use the same connection interface 
 | `moonshot` | Moonshot AI (Kimi) | `MOONSHOT_API_KEY` | `moonshot-v1-8k` |
 | `xai` | xAI (Grok) | `XAI_API_KEY` | `grok-3-mini` |
 | `groq` | Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| `mistral` | Mistral AI | `MISTRAL_API_KEY` | `mistral-small-latest` |
 
 ## Two ways to connect
 
@@ -53,3 +54,4 @@ Each provider has its own page with the exact env var, dashboard field names, se
 - [Moonshot AI](/providers/moonshot)
 - [xAI (Grok)](/providers/xai)
 - [Groq](/providers/groq)
+- [Mistral AI](/providers/mistral)

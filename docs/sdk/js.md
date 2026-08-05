@@ -135,7 +135,7 @@ if (model && !model.toolCallSupported) {
 
 **`toolCallSupported` rules:**
 
-`true` for `openai`, `deepseek`, `groq`, `xai`, `moonshot`, `litellm` — these proxy tools
+`true` for `openai`, `deepseek`, `groq`, `xai`, `moonshot`, `mistral`, `litellm` — these proxy tools
 natively. For Bedrock (`provider: "bedrock-nova"`), it's a pattern-matched allowlist against the
 model id, not a blanket Nova-only rule:
 

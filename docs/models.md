@@ -99,6 +99,14 @@ The tables below are a snapshot of a freshly-synced catalog — exact models and
 | `llama-3.3-70b-versatile` | Llama 3.3 70B (Groq) | mid | $0.59 | $0.79 |
 | `llama-3.1-8b-instant` | Llama 3.1 8B (Groq) | light | $0.05 | $0.08 |
 
+### Mistral AI
+
+| Model ID | Label | Tier | Input $/1M | Output $/1M |
+|---|---|---|---|---|
+| `mistral-medium-latest` | Mistral Medium | mid | $1.50 | $7.50 |
+| `mistral-large-latest` | Mistral Large 3 | mid | $0.50 | $1.50 |
+| `mistral-small-latest` | Mistral Small | light | $0.15 | $0.60 |
+
 ## Adding a model
 
 ### Dashboard (Models page)

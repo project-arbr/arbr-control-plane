@@ -104,6 +104,6 @@ The call is now visible in the dashboard under **Overview** and **Requests**.
 ## What's next
 
 - [How the gateway works](/gateway/overview) — request flow, two endpoints, routing precedence
-- [Connect providers](/providers/overview) — all 8 supported providers
+- [Connect providers](/providers/overview) — all 9 supported providers
 - [Routing](/routing) — rules, guardrail, AI policy, explicit pins
 - [Deploy to production](/deployment) — Docker Compose, nginx, production checklist

@@ -21,7 +21,7 @@ Authorization: Bearer ab_…   (optional until Require API keys is on)
 | `userId` | string | | End-user identifier |
 | `taskType` | string | | One of the known task types (classification, extraction, summarisation, …). Auto-inferred if omitted. |
 | `model` | string | | Model ID to use, or `"auto"` / omit to let the router decide |
-| `provider` | string | | Provider ID (`openai`, `anthropic`, `gemini`, `bedrock-nova`, `deepseek`, `moonshot`, `xai`, `groq`). Required for pass-through to an unregistered model. |
+| `provider` | string | | Provider ID (`openai`, `anthropic`, `gemini`, `bedrock-nova`, `deepseek`, `moonshot`, `xai`, `groq`, `mistral`). Required for pass-through to an unregistered model. |
 | `temperature` | number | | Sampling temperature (0–2) |
 | `maxTokens` | number | | Max completion tokens |
 

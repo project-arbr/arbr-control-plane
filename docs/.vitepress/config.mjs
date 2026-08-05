@@ -60,6 +60,7 @@ export default defineConfig({
           { text: 'Moonshot AI', link: '/providers/moonshot' },
           { text: 'xAI (Grok)', link: '/providers/xai' },
           { text: 'Groq', link: '/providers/groq' },
+          { text: 'Mistral AI', link: '/providers/mistral' },
         ]
       },
       {

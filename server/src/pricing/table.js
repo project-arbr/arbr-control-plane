@@ -47,6 +47,11 @@ const MODELS = {
   // ── Groq (fast inference) ──
   "llama-3.3-70b-versatile": { provider: "groq", inputPer1M: 0.59, outputPer1M: 0.79, tier: "mid" },
   "llama-3.1-8b-instant":    { provider: "groq", inputPer1M: 0.05, outputPer1M: 0.08, tier: "light" },
+
+  // ── Mistral AI ──
+  "mistral-medium-latest": { provider: "mistral", inputPer1M: 1.5,  outputPer1M: 7.5, tier: "mid" },
+  "mistral-large-latest":  { provider: "mistral", inputPer1M: 0.5,  outputPer1M: 1.5, tier: "mid" },
+  "mistral-small-latest":  { provider: "mistral", inputPer1M: 0.15, outputPer1M: 0.6, tier: "light" },
 };
 
 // Suggested light-tier downgrade target per provider (used by the recommender).
@@ -59,6 +64,7 @@ const LIGHT_TARGET_BY_PROVIDER = {
   moonshot: "moonshot-v1-8k",
   xai: "grok-3-mini",
   groq: "llama-3.1-8b-instant",
+  mistral: "mistral-small-latest",
 };
 
 // Task types that are "cheap work" — safe candidates for a lighter model.

@@ -63,6 +63,22 @@ function decideDefaultModel({ configured, defaultProvider, lookup, providerDefau
   };
 }
 
+// The OpenAI-compatible base URL for a provider, given its entry from effective().
+//
+// A user-added custom provider that shadows a built-in id WINS. compute() below already
+// resolves the credential from that row, so the endpoint has to come from the same record
+// — reading the URL from the built-in while the key comes from the custom row sends the
+// operator's key to the wrong host (e.g. an on-prem Mistral deployment silently rerouted
+// to api.mistral.ai). 
+//
+// Returns null when neither has a URL — that's a native provider (anthropic/gemini/
+// bedrock) which must take the LangChain path instead.
+// Pure; exported for tests.
+function resolveBaseURL(providerId, entry) {
+  const url = entry?.baseURL || PROVIDERS[providerId]?.baseURL || null;
+  return url ? url.replace(/\/+$/, "") : null;
+}
+
 // Decrypt a stored credential doc into a credential object. Handles the legacy
 // shape where the ciphertext was a bare API-key string.
 function decodeStored(doc) {
@@ -271,4 +287,5 @@ module.exports = {
   effective, statuses, setCredential, removeCredential, setDefaultProvider, setDefaultModel, invalidate,
   KNOWN: KNOWN_PROVIDERS,
   decideDefaultModel, // pure, exported for tests
+  resolveBaseURL,     // pure, exported for tests
 };

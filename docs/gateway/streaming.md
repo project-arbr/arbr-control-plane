@@ -1,13 +1,13 @@
 # Streaming
 
-Arbr supports real, token-by-token SSE streaming through the OpenAI-compatible endpoint — but only for the **OpenAI-compat provider set**: `openai`, `deepseek`, `moonshot`, `xai`, `groq`, `litellm` (and any custom OpenAI-compatible provider you add). For these, Arbr raw-proxies the upstream response over `fetch`, byte-for-byte, with no LangChain in the path and no intermediate buffering.
+Arbr supports real, token-by-token SSE streaming through the OpenAI-compatible endpoint — but only for the **OpenAI-compat provider set**: `openai`, `deepseek`, `moonshot`, `xai`, `groq`, `mistral`, `litellm` (and any custom OpenAI-compatible provider you add). For these, Arbr raw-proxies the upstream response over `fetch`, byte-for-byte, with no LangChain in the path and no intermediate buffering.
 
 > **Native providers don't stream token-by-token.** For `anthropic`, `gemini`, and `bedrock-nova` (without tool calls), Arbr calls LangChain's `invoke()` — not `.stream()` — waits for the *entire* response, and then emits it as three SSE frames back to back: a role-delta, one chunk containing the full response text, and a finish chunk. The response is still valid SSE and still arrives on `stream: true`, but nothing is incremental: the client sees no chunks at all until the whole answer is ready, then gets it all at once. This is deliberate, not a bug — LangChain's `.stream()` filters out thinking tokens per-chunk for thinking models (Gemini 2.5 Pro/Flash, Claude 3.x), which truncates the visible answer; `invoke()` assembles the full response correctly. See `server/src/gateway/openaiCompat.js` for the buffered-emit path. Every Claude/Gemini/Bedrock example below is therefore "streaming" in protocol only, not in delivery.
 
 ## How it works
 
 ```
-OpenAI-compat providers (openai, deepseek, moonshot, xai, groq, litellm):
+OpenAI-compat providers (openai, deepseek, moonshot, xai, groq, mistral, litellm):
 Client ──stream:true──▶ Arbr /v1/chat/completions ──▶ raw fetch proxy ──▶ Provider
                                │                                              │
                                ◀─── SSE chunk (data: {...}) ◀─── token ──────┘

@@ -18,6 +18,7 @@ const PROVIDER_MAP = {
   moonshot: "moonshot",
   xai: "xai",
   groq: "groq",
+  mistral: "mistral_ai",
   litellm: "litellm",
 };
 

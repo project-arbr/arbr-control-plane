@@ -29,6 +29,7 @@ const LIGHT_TARGET_BY_PROVIDER = {
   moonshot:       "moonshot-v1-8k",
   xai:            "grok-3-mini",
   groq:           "llama-3.1-8b-instant",
+  mistral:        "mistral-small-latest",
 };
 
 // In-memory cache: { [id]: { id, provider, label, inputPer1M, outputPer1M, tier } }

@@ -7,6 +7,20 @@ changelogs under `clients/`.
 
 ## [Unreleased]
 
+### Added
+- Mistral AI provider (`mistral`): OpenAI-compatible adapter routed at
+  `https://api.mistral.ai/v1`, configured via `MISTRAL_API_KEY`, defaulting to
+  `mistral-small-latest`. Streaming, tools, and `response_format` proxy raw like the other
+  compat providers. Ships with a `docs/providers/mistral.md` page.
+
+### Fixed
+- A user-added custom provider that shadows a built-in provider id (e.g. a `mistral` entry
+  pointing at a self-hosted deployment) now routes to its own `baseURL`. The credential was
+  already taken from the custom record while the endpoint came from the built-in, so the
+  operator's key and prompts were sent to the vendor's public API instead. Base-URL
+  resolution now lives in one place (`connections.resolveBaseURL`) shared by the gateway,
+  the router, and the embeddings endpoint.
+
 ## [0.3.0] - 2026-07-22
 
 ### Added

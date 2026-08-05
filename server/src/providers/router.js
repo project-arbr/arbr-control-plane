@@ -3,7 +3,6 @@
 // added in the dashboard take effect without a restart.
 const { createRouter } = require("./llm-router");
 const connections = require("./connections");
-const { PROVIDERS } = require("../config");
 
 let _router = null;
 let _signature = "";
@@ -28,7 +27,7 @@ function toRouterConfig(id, p) {
       },
     };
   }
-  return { apiKey: p.credential.apiKey, model: p.defaultModel, baseURL: PROVIDERS[id]?.baseURL || p.baseURL };
+  return { apiKey: p.credential.apiKey, model: p.defaultModel, baseURL: connections.resolveBaseURL(id, p) };
 }
 
 // Returns { router, eff } or { router: null, eff } in demo mode.

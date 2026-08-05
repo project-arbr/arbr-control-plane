@@ -47,6 +47,7 @@ All provider keys are optional. Set at least one to enable live gateway calls.
 | `MOONSHOT_API_KEY` | Moonshot AI (Kimi) |
 | `XAI_API_KEY` | xAI (Grok) |
 | `GROQ_API_KEY` | Groq |
+| `MISTRAL_API_KEY` | Mistral AI |
 | `LITELLM_BASE_URL` | LiteLLM Proxy — set to register the `litellm` provider. Absent from the connections list entirely when unset. |
 | `LITELLM_API_KEY` | LiteLLM Proxy auth |
 | `LITELLM_DEFAULT_MODEL` | LiteLLM Proxy — default model for the provider |
