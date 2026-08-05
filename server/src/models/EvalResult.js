@@ -1,6 +1,7 @@
 // The per-item outcome of an eval run: the candidate's response, its cost/latency, the judge
 // verdict + rubric scores, and validator results. Powers the "worst examples" evidence view.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const evalResultSchema = new mongoose.Schema(
   {
@@ -42,4 +43,4 @@ const evalResultSchema = new mongoose.Schema(
   { collection: "eval_results", timestamps: true }
 );
 
-module.exports = mongoose.model("EvalResult", evalResultSchema);
+module.exports = defineModel("EvalResult", evalResultSchema);

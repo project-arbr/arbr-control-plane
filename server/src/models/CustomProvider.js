@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const customProviderSchema = new mongoose.Schema(
   {
@@ -14,4 +15,4 @@ const customProviderSchema = new mongoose.Schema(
   { collection: "custom_providers", timestamps: true }
 );
 
-module.exports = mongoose.model("CustomProvider", customProviderSchema);
+module.exports = defineModel("CustomProvider", customProviderSchema);

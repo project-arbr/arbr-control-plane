@@ -2,6 +2,7 @@
 // candidate response (mirrored, never served) for the same request, plus the judge verdict.
 // Prompt/responses are PII-masked at write time (same as RequestRecord) and size-capped.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const evalPairSchema = new mongoose.Schema(
   {
@@ -35,4 +36,4 @@ const evalPairSchema = new mongoose.Schema(
   { collection: "eval_pairs" }
 );
 
-module.exports = mongoose.model("EvalPair", evalPairSchema);
+module.exports = defineModel("EvalPair", evalPairSchema);

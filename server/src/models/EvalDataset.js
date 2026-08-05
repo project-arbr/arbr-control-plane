@@ -3,6 +3,7 @@
 // prompts/responses out of request_records, it is covered by the same retention purge and
 // masking rules (see maintenance/purge.js and piiMode below).
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const evalDatasetSchema = new mongoose.Schema(
   {
@@ -43,4 +44,4 @@ const evalDatasetSchema = new mongoose.Schema(
   { collection: "eval_datasets", timestamps: true }
 );
 
-module.exports = mongoose.model("EvalDataset", evalDatasetSchema);
+module.exports = defineModel("EvalDataset", evalDatasetSchema);

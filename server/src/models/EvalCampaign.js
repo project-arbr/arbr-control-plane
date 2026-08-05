@@ -2,6 +2,7 @@
 // traffic to a candidate model (without serving it), judge candidate-vs-prod, and gate a
 // model switch on a healthy verdict. See server/src/eval/shadow.js.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const evalCampaignSchema = new mongoose.Schema(
   {
@@ -38,4 +39,4 @@ const evalCampaignSchema = new mongoose.Schema(
   { timestamps: true, collection: "eval_campaigns" }
 );
 
-module.exports = mongoose.model("EvalCampaign", evalCampaignSchema);
+module.exports = defineModel("EvalCampaign", evalCampaignSchema);

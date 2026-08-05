@@ -4,6 +4,7 @@
 // the hard CapSpend counters (see routing/capEngine.js) and fire warning/breach
 // webhooks; dashboards use analytics.spend.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const capSchema = new mongoose.Schema(
   {
@@ -25,4 +26,4 @@ const capSchema = new mongoose.Schema(
   { collection: "caps" }
 );
 
-module.exports = mongoose.model("Cap", capSchema);
+module.exports = defineModel("Cap", capSchema);

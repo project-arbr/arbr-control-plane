@@ -2,6 +2,7 @@
 // Records BOTH the model requested and the model served (scope p.10) so realised
 // savings are measurable and later phases can learn which substitutions held up.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 // The kinds of LLM call Arbr makes on its own behalf. One entry per internal call
 // site; see server/src/internal/ for the wrapper that stamps these.
@@ -148,16 +149,16 @@ const requestRecordSchema = new mongoose.Schema(
   { collection: "request_records" }
 );
 
-const RequestRecord = mongoose.model("RequestRecord", requestRecordSchema);
-
+// Predicates attached as SCHEMA statics (not post-hoc on the model object) so they exist on
+// every per-tenant connection's model, not just the one that happened to compile first.
 // Predicates for the internal/customer split, so no caller hand-writes the shape.
-RequestRecord.CUSTOMER_ONLY = { internalKind: null };
-RequestRecord.INTERNAL_ONLY = { internalKind: { $ne: null } };
-RequestRecord.INTERNAL_KINDS = INTERNAL_KINDS;
+requestRecordSchema.statics.CUSTOMER_ONLY = { internalKind: null };
+requestRecordSchema.statics.INTERNAL_ONLY = { internalKind: { $ne: null } };
+requestRecordSchema.statics.INTERNAL_KINDS = INTERNAL_KINDS;
 
 // Predicates for the gateway/ingested split (F-01) — same shape, opposite default
 // visibility: unlike internalKind, callers do NOT exclude INGESTED_ONLY by default.
-RequestRecord.GATEWAY_ONLY = { source: null };
-RequestRecord.INGESTED_ONLY = { source: "ingested" };
+requestRecordSchema.statics.GATEWAY_ONLY = { source: null };
+requestRecordSchema.statics.INGESTED_ONLY = { source: "ingested" };
 
-module.exports = RequestRecord;
+module.exports = defineModel("RequestRecord", requestRecordSchema);

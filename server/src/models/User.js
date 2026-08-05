@@ -3,6 +3,7 @@
 // trusted-header login (default role: viewer); the first administrator is minted
 // by scripts/bootstrap-admin.js, not through the API.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const ROLES = ["viewer", "operator", "administrator"];
 
@@ -20,5 +21,7 @@ const userSchema = new mongoose.Schema(
   { collection: "users" }
 );
 
-module.exports = mongoose.model("User", userSchema);
-module.exports.ROLES = ROLES;
+// Schema static (not post-hoc on the model) so it exists on every per-tenant connection.
+userSchema.statics.ROLES = ROLES;
+
+module.exports = defineModel("User", userSchema);

@@ -3,6 +3,7 @@
 // ({ apiKey } for apiKey providers; { accessKeyId, secretAccessKey, region } for
 // AWS providers). Secrets never leave the server.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const providerCredentialSchema = new mongoose.Schema(
   {
@@ -16,4 +17,4 @@ const providerCredentialSchema = new mongoose.Schema(
   { collection: "provider_credentials", timestamps: true }
 );
 
-module.exports = mongoose.model("ProviderCredential", providerCredentialSchema);
+module.exports = defineModel("ProviderCredential", providerCredentialSchema);

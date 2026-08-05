@@ -2,6 +2,7 @@
 // routing mode, automated-routing policies, default provider/model, API-key
 // requirement. Created on first read.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 const { config } = require("../config");
 
 function privacyDefaults(isProduction = config.isProduction) {
@@ -150,5 +151,7 @@ settingsSchema.statics.invalidateCache = function invalidateCache() {
   _cache.at = 0;
 };
 
-module.exports = mongoose.model("Settings", settingsSchema);
-module.exports.privacyDefaults = privacyDefaults;
+// Schema static (not post-hoc on the model) so it exists on every per-tenant connection.
+settingsSchema.statics.privacyDefaults = privacyDefaults;
+
+module.exports = defineModel("Settings", settingsSchema);

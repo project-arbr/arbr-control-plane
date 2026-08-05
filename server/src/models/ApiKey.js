@@ -2,6 +2,7 @@
 // ONCE at creation; only its sha256 hash is stored. A key binds requests to an
 // application — attribution becomes trusted instead of self-reported.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const apiKeySchema = new mongoose.Schema(
   {
@@ -36,4 +37,4 @@ const apiKeySchema = new mongoose.Schema(
   { collection: "api_keys" }
 );
 
-module.exports = mongoose.model("ApiKey", apiKeySchema);
+module.exports = defineModel("ApiKey", apiKeySchema);

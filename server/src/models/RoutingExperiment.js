@@ -3,6 +3,7 @@
 // are never touched) to the candidate; a monitor auto-rolls-back on guardrail breach, and an
 // admin can promote it to an enabled Rule. See routing/canaryEngine + routing/canaryMonitor.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const routingExperimentSchema = new mongoose.Schema(
   {
@@ -45,4 +46,4 @@ const routingExperimentSchema = new mongoose.Schema(
   { collection: "routing_experiments", timestamps: true }
 );
 
-module.exports = mongoose.model("RoutingExperiment", routingExperimentSchema);
+module.exports = defineModel("RoutingExperiment", routingExperimentSchema);

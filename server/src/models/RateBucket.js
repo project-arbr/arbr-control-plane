@@ -1,6 +1,7 @@
 // Fixed-window request counters for multi-replica RPM enforcement.
 // One document per (key, windowStartMs); atomic $inc keeps replicas consistent.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const rateBucketSchema = new mongoose.Schema(
   {
@@ -18,4 +19,4 @@ rateBucketSchema.index({ key: 1, windowStart: 1 }, { unique: true });
 // Auto-delete ~2 minutes after window start (window is 60s; keep a little headroom).
 rateBucketSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-module.exports = mongoose.model("RateBucket", rateBucketSchema);
+module.exports = defineModel("RateBucket", rateBucketSchema);

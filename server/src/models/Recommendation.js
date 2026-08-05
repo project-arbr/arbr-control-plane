@@ -1,6 +1,7 @@
 // An advisory, costed optimisation suggestion produced from the logged data.
 // A person accepts it (→ creates a disabled rule) or dismisses it.
 const mongoose = require("mongoose");
+const { defineModel } = require("../db/context");
 
 const recommendationSchema = new mongoose.Schema(
   {
@@ -77,4 +78,4 @@ const recommendationSchema = new mongoose.Schema(
   { collection: "recommendations", timestamps: true }
 );
 
-module.exports = mongoose.model("Recommendation", recommendationSchema);
+module.exports = defineModel("Recommendation", recommendationSchema);
