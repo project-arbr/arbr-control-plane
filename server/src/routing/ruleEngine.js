@@ -6,8 +6,9 @@
 const Rule = require("../models/Rule");
 const Settings = require("../models/Settings");
 const pricing = require("../pricing/registry");
+const { perConnCache } = require("../db/context");
 
-let _rulesCache = { rules: [], loadedAt: 0 };
+const _rulesCache = perConnCache(); // per-connection: each tenant caches its own rules
 const RULES_TTL_MS = 5000;
 
 // How many condition fields a rule sets — a rule matching task+app+workflow is more
@@ -30,7 +31,7 @@ function sortRules(rules) {
 
 async function refreshRules() {
   const rules = sortRules(await Rule.find({ enabled: true }).lean());
-  _rulesCache = { rules, loadedAt: Date.now() };
+  _rulesCache.set({ rules, loadedAt: Date.now() });
   return rules;
 }
 
@@ -80,14 +81,15 @@ function ruleTargetHealth(target, { liveIds = [], modelEntry = null } = {}) {
 }
 
 function invalidate() {
-  _rulesCache.loadedAt = 0;
+  _rulesCache.invalidate();
 }
 
 async function getEnabledRules() {
-  if (Date.now() - _rulesCache.loadedAt > RULES_TTL_MS) {
+  const c = _rulesCache.get();
+  if (!c || Date.now() - c.loadedAt > RULES_TTL_MS) {
     await refreshRules();
   }
-  return _rulesCache.rules;
+  return _rulesCache.get().rules;
 }
 
 // A rule matches when every non-null condition field equals the request's value.

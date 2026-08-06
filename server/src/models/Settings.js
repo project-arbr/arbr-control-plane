@@ -2,7 +2,7 @@
 // routing mode, automated-routing policies, default provider/model, API-key
 // requirement. Created on first read.
 const mongoose = require("mongoose");
-const { defineModel } = require("../db/context");
+const { defineModel, perConnCache } = require("../db/context");
 const { config } = require("../config");
 
 function privacyDefaults(isProduction = config.isProduction) {
@@ -134,21 +134,22 @@ const settingsSchema = new mongoose.Schema(
   { collection: "settings" }
 );
 
-let _cache = { doc: null, at: 0 };
+const _cache = perConnCache(); // per-connection: each tenant caches its own Settings doc
 const CACHE_TTL_MS = 5_000;
 
 settingsSchema.statics.get = async function get() {
-  if (_cache.doc && Date.now() - _cache.at < CACHE_TTL_MS) return _cache.doc;
+  const c = _cache.get();
+  if (c && Date.now() - c.at < CACHE_TTL_MS) return c.doc;
   let doc = await this.findOne({ key: "global" });
   if (!doc) {
     doc = await this.create({ key: "global" });
   }
-  _cache = { doc, at: Date.now() };
+  _cache.set({ doc, at: Date.now() });
   return doc;
 };
 
 settingsSchema.statics.invalidateCache = function invalidateCache() {
-  _cache.at = 0;
+  _cache.invalidate();
 };
 
 // Schema static (not post-hoc on the model) so it exists on every per-tenant connection.

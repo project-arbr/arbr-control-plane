@@ -16,10 +16,13 @@ const Settings = require("../models/Settings");
 const secrets = require("../security/secrets");
 const secretResolver = require("../security/secretResolver");
 const pricing = require("../pricing/registry");
+const { perConnCache } = require("../db/context");
 
 const TTL_MS = 3000;
-let _cache = { value: null, at: 0 };
-function invalidate() { _cache.at = 0; }
+// Per-connection: each tenant caches ONLY its own decrypted provider credentials. A global cache
+// here would serve one tenant's keys to another within the 3s window — the worst possible leak.
+const _cache = perConnCache();
+function invalidate() { _cache.invalidate(); }
 
 // effective() recomputes every few seconds, so warn at most once a minute per
 // distinct problem. Silence here is what made the fallback so hard to diagnose.
@@ -163,9 +166,10 @@ async function compute() {
 }
 
 async function effective() {
-  if (_cache.value && Date.now() - _cache.at < TTL_MS) return _cache.value;
+  const c = _cache.get();
+  if (c && Date.now() - c.at < TTL_MS) return c.value;
   const value = await compute();
-  _cache = { value, at: Date.now() };
+  _cache.set({ value, at: Date.now() });
   return value;
 }
 

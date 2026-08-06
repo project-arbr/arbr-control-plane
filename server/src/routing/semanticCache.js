@@ -13,9 +13,17 @@
 
 const { OpenAIEmbeddings } = require("@langchain/openai");
 const secretResolver = require("../security/secretResolver");
+const { perConnCache } = require("../db/context");
 
 const MAX_ENTRIES = 1000;
-const _store = new Map(); // key → { embedding: number[], value, expiresAt }
+// Per-connection store: cached embeddings/responses are matched only within the same tenant, so a
+// semantic hit is never served across tenants. In OSS this is the one global db's store.
+const _storeCache = perConnCache();
+function store() {
+  let m = _storeCache.get();
+  if (!m) { m = new Map(); _storeCache.set(m); } // key → { embedding: number[], value, expiresAt }
+  return m;
+}
 let _seq = 0;
 let _embedder = null;
 let _embedderInitKey = null;
@@ -72,13 +80,13 @@ function _textFromMessages(messages) {
 
 // Evict expired entries lazily during iteration.
 function _evictExpired(now) {
-  for (const [k, entry] of _store) {
-    if (entry.expiresAt < now) _store.delete(k);
+  for (const [k, entry] of store()) {
+    if (entry.expiresAt < now) store().delete(k);
   }
 }
 
 async function get(messages, threshold, ttlMinutes) {
-  if (_store.size === 0) return null;
+  if (store().size === 0) return null;
   const embedder = _initEmbedder();
   if (!embedder) return null;
 
@@ -97,7 +105,7 @@ async function get(messages, threshold, ttlMinutes) {
   _evictExpired(now);
 
   let best = null, bestSim = -1;
-  for (const [, entry] of _store) {
+  for (const [, entry] of store()) {
     const sim = cosineSimilarity(queryVec, entry.embedding);
     if (sim > bestSim) { bestSim = sim; best = entry; }
   }
@@ -119,20 +127,20 @@ async function set(messages, value, ttlMinutes) {
     return;
   }
 
-  if (_store.size >= MAX_ENTRIES) {
-    const oldest = _store.keys().next().value;
-    if (oldest) _store.delete(oldest);
+  if (store().size >= MAX_ENTRIES) {
+    const oldest = store().keys().next().value;
+    if (oldest) store().delete(oldest);
   }
 
   const ttl = typeof ttlMinutes === "number" && ttlMinutes > 0 ? ttlMinutes : 60;
-  _store.set(`sc_${++_seq}`, {
+  store().set(`sc_${++_seq}`, {
     embedding,
     value,
     expiresAt: Date.now() + ttl * 60 * 1000,
   });
 }
 
-function clear() { _store.clear(); }
-function size()  { return _store.size; }
+function clear() { store().clear(); }
+function size()  { return store().size; }
 
 module.exports = { get, set, clear, size, cosineSimilarity, invalidate, _textFromMessages, _initEmbedder };

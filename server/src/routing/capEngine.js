@@ -15,13 +15,15 @@ const Cap = require("../models/Cap");
 const CapSpend = require("../models/CapSpend");
 const analytics = require("../analytics/aggregate");
 const notifier = require("./notifier");
+const { perConnCache } = require("../db/context");
 
-// Cap document list cache only (not spend). Spend is always read fresh.
+// Cap document list cache only (not spend). Spend is always read fresh. Per-connection so each
+// tenant caches its own caps.
 const CAPS_TTL_MS = 5_000;
-let _capsCache = { caps: [], at: 0 };
+const _capsCache = perConnCache();
 
 function invalidate() {
-  _capsCache.at = 0;
+  _capsCache.invalidate();
 }
 
 // Pure: rolling window start for a cap period.
@@ -69,9 +71,10 @@ function _matches(cap, ctx = {}) {
 // usage alert works. Previously only block/downgrade caps were loaded, so an alert
 // cap never notified.
 async function _activeCaps() {
-  if (Date.now() - _capsCache.at < CAPS_TTL_MS) return _capsCache.caps;
+  const c = _capsCache.get();
+  if (c && Date.now() - c.at < CAPS_TTL_MS) return c.caps;
   const caps = await Cap.find({ enabled: true }).lean();
-  _capsCache = { caps, at: Date.now() };
+  _capsCache.set({ caps, at: Date.now() });
   return caps;
 }
 

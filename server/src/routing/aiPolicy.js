@@ -7,15 +7,16 @@ const pricing = require("../pricing/registry");
 const { TASK_TYPES, TASK_CATALOG } = require("../classify/classifier");
 const { projectImpact } = require("./policySim");
 const { internalComplete } = require("../internal/complete");
+const { perConnCache } = require("../db/context");
 
 // Increment when MODEL_CAPABILITIES or TASK_CAPABILITIES change.
 // GET /api/ai-policy auto-regenerates if the stored version is behind.
 // HOW TO UPDATE: change the tables below, then increment this number by 1.
 const CAPABILITY_VERSION = 2;
 
-let _cache = { map: null, at: 0 };
+const _cache = perConnCache(); // per-connection: each tenant caches its own policy map
 const TTL_MS = 5000;
-function invalidate() { _cache.at = 0; }
+function invalidate() { _cache.invalidate(); }
 
 // ── Capability tables ──────────────────────────────────────────────────────────
 // Scoring dimensions (order matters for DIMS iteration).
@@ -135,10 +136,11 @@ async function allTaskTypes() {
 
 // The current assignments map (cached). { [taskType]: modelId }
 async function getEffective() {
-  if (_cache.map && Date.now() - _cache.at < TTL_MS) return _cache.map;
+  const c = _cache.get();
+  if (c && Date.now() - c.at < TTL_MS) return c.map;
   const s = await Settings.get();
   const map = (s.aiPolicy && s.aiPolicy.assignments) || {};
-  _cache = { map, at: Date.now() };
+  _cache.set({ map, at: Date.now() });
   return map;
 }
 
