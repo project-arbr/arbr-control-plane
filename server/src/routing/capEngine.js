@@ -84,13 +84,8 @@ async function getSpend(cap, now = new Date()) {
   return doc ? Number(doc.spent) || 0 : 0;
 }
 
-// Atomic $inc after a priced request. No-ops for zero/negative cost. ctx carries the
-// request's scope fields (application/provider/user/department/workflow/model) so a
-// cap on any of those dimensions accumulates.
-async function recordSpend(totalCost, ctx = {}) {
-  const cost = Number(totalCost) || 0;
-  if (cost <= 0) return;
-  const caps = await _activeCaps();
+// Shared: atomically $inc the current window counter for every matching cap in `caps`.
+async function _bump(caps, ctx, amount) {
   const now = new Date();
   const ops = [];
   for (const cap of caps) {
@@ -99,14 +94,36 @@ async function recordSpend(totalCost, ctx = {}) {
     ops.push(
       CapSpend.findOneAndUpdate(
         { capId: cap._id, windowKey: key },
-        { $inc: { spent: cost }, $set: { updatedAt: now } },
+        { $inc: { spent: amount }, $set: { updatedAt: now } },
         { upsert: true, returnDocument: "after" }
       ).catch((err) => {
-        console.error("[capEngine] recordSpend failed:", err.message);
+        console.error("[capEngine] counter $inc failed:", err.message);
       })
     );
   }
   if (ops.length) await Promise.all(ops);
+}
+
+// Atomic $inc after a priced request. No-ops for zero/negative cost. Applies only to
+// spend-metric caps (request-metric caps are counted by recordRequest, not by cost). ctx
+// carries the request's scope fields (application/provider/user/department/workflow/model)
+// so a cap on any of those dimensions accumulates.
+async function recordSpend(totalCost, ctx = {}) {
+  const cost = Number(totalCost) || 0;
+  if (cost <= 0) return;
+  const caps = (await _activeCaps()).filter((c) => (c.metric || "spend") === "spend");
+  await _bump(caps, ctx, cost);
+}
+
+// Atomic +1 per customer-facing request, for request-metric caps only. Called once per
+// successful request regardless of cost (so $0 / cached requests still count). Arbr's own
+// internal overhead calls (classification, policy generation, ...) are not the customer's
+// requests, so they never burn a request quota — the caller passes internalKind and we skip.
+async function recordRequest(ctx = {}) {
+  if (ctx.internalKind) return;
+  const caps = (await _activeCaps()).filter((c) => c.metric === "requests");
+  if (!caps.length) return;
+  await _bump(caps, ctx, 1);
 }
 
 // The strictest enforcement for this request's scope: block > downgrade > null.
@@ -170,6 +187,9 @@ async function reconcileFromAnalytics() {
   const now = new Date();
   let updated = 0;
   for (const cap of caps) {
+    // Request-metric counters measure a raw count, not spend — analytics.spend can't realign
+    // them. Their $inc counters are authoritative under normal operation; skip here.
+    if ((cap.metric || "spend") !== "spend") continue;
     const spent = await analytics.spend({
       // The friendly "user" dimension maps to the analytics/record field "userId".
       dimension: cap.dimension === "user" ? "userId" : cap.dimension,
@@ -194,6 +214,7 @@ async function reconcileFromAnalytics() {
 module.exports = {
   enforcement,
   recordSpend,
+  recordRequest,
   getSpend,
   invalidate,
   describeScope,
