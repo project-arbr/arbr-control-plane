@@ -35,10 +35,20 @@ const authRoutes = require("./api/routes/auth");
 const connections = require("./providers/connections");
 const { computeReadiness } = require("./health/readiness");
 const telemetry = require("./telemetry");
+const { runWithConnection } = require("./db/context");
+const { ALL_ON } = require("./cloud/entitlements");
+
+// Single-tenant defaults for buildApp's tenancy hooks. The open-source server always uses these,
+// so every request runs on the one global connection with all features on — unchanged behavior.
+// arbr-cloud passes per-tenant hooks via mountCore() instead.
+const defaultResolveTenantDb = () => mongoose.connection;
+const defaultEntitlements = () => ALL_ON;
 
 // Built dashboard (created by `npm --prefix web run build`). When present, the
 // server serves it on the same port — single-port production / Docker.
 const WEB_DIST = path.resolve(__dirname, "../../web/dist");
+// Computed once at load; used by buildApp (to serve the SPA) and start() (boot log).
+const hasWeb = fs.existsSync(path.join(WEB_DIST, "index.html"));
 
 // Set by installShutdownHandlers on the first SIGTERM/SIGINT; read by
 // GET /health/ready so readiness (unlike liveness) can correctly reflect a
@@ -78,6 +88,32 @@ async function start() {
     }
   }
 
+  const app = buildApp();
+  startBackgroundJobs();
+  const server = http.createServer(app);
+  server.on("upgrade", handleUpgrade);
+  server.listen(config.port, config.host, () => {
+    // describe() masks the one credential-bearing value it prints
+    // (MONGO_URI, via maskMongoUri in config.js); everything else in the
+    // boot summary is non-secret operational config (ports, auth mode,
+    // issuer URL) meant to be visible in server logs.
+    // codeql[js/clear-text-logging]
+    console.log("\n" + describe() + "\n");
+    console.log(`  ready:       http://localhost:${config.port}`);
+    console.log(`  gateway:     POST http://localhost:${config.port}/v1/chat`);
+    console.log(`  api:         http://localhost:${config.port}/api/status`);
+    if (hasWeb) console.log(`  dashboard:   http://localhost:${config.port}/`);
+    else console.log(`  dashboard:   run "npm run dev" (Vite on :${process.env.WEB_PORT || 5173})`);
+    console.log("");
+  });
+  installShutdownHandlers({ server });
+}
+
+// buildApp: the full Express app (gateway + admin + dashboard) plus boot-time background jobs.
+// The tenancy hooks default to single-tenant (global connection, all features on), so the
+// open-source server is byte-for-byte unchanged. arbr-cloud calls this via mountCore() with
+// per-tenant hooks to serve many accounts from one process (database-per-tenant).
+function buildApp({ resolveTenantDb = defaultResolveTenantDb, entitlements = defaultEntitlements } = {}) {
   const app = express();
   // Behind a reverse proxy (nginx/ALB) this yields correct client IPs + proto.
   app.set("trust proxy", true);
@@ -120,6 +156,17 @@ async function start() {
       isShuttingDown, mongoReadyState: mongoose.connection.readyState,
     });
     res.status(ready ? 200 : 503).json({ ok: ready, ready, reason });
+  });
+
+  // Tenancy seam: scope every request below to its tenant's database + entitlements. In OSS both
+  // hooks are single-tenant defaults (the one global connection, all features on), so this is a
+  // transparent pass-through. Health checks above are intentionally NOT scoped (global liveness).
+  app.use((req, res, next) => {
+    let conn, ent;
+    try { ent = entitlements(req); conn = resolveTenantDb(req); }
+    catch (e) { return res.status(e.statusCode || 500).json({ error: e.code || "tenant_unavailable", message: String(e.message || e) }); }
+    req.entitlements = ent;
+    runWithConnection(conn, next);
   });
 
   // The unified AI gateway — one endpoint for all AI requests.
@@ -232,8 +279,7 @@ async function start() {
   // adminAuth.js), rate-limited per source IP (see adminRateLimit.js).
   app.use("/api", adminRateLimit.middleware, adminAuth.middleware, apiRoutes);
 
-  // Serve the built dashboard if it exists (single-port mode).
-  const hasWeb = fs.existsSync(path.join(WEB_DIST, "index.html"));
+  // Serve the built dashboard if it exists (single-port mode). hasWeb is module-level.
   if (hasWeb) {
     app.use(express.static(WEB_DIST));
     app.get(/^\/(?!api|v1|health).*/, (_req, res) => {
@@ -250,40 +296,24 @@ async function start() {
     res.status(status).json({ error: err.code || "internal_error", message: String(err.message || err) });
   });
 
+  return app;
+}
+
+// Boot-time background jobs — start once per process, in start() (not buildApp), so merely
+// building the app (arbr-cloud, tests) never starts timers or fires queries.
+function startBackgroundJobs() {
   // Daily purge of request records older than the configured retention window.
   // Runs immediately on startup (catches any overdue records), then every 24h.
   purgeOldRecords();
   setInterval(purgeOldRecords, 24 * 60 * 60 * 1000);
-
   // Error-rate alerting: checks rolling 1-hour error rate every 5 min and fires
   // the governance webhook when the threshold is exceeded.
   errorAlertMonitor.start();
-
   // Canary auto-rollback: every 5 min, roll back any active routing experiment that
   // breaches its guardrails (error rate, latency, cost saving, shadow worse-rate).
   canaryMonitor.start();
-
   // Eval replay worker: picks up queued eval runs (survives restarts; setImmediate did not).
   evalWorker.start();
-
-  const server = http.createServer(app);
-  server.on("upgrade", handleUpgrade);
-  server.listen(config.port, config.host, () => {
-    // describe() masks the one credential-bearing value it prints
-    // (MONGO_URI, via maskMongoUri in config.js); everything else in the
-    // boot summary is non-secret operational config (ports, auth mode,
-    // issuer URL) meant to be visible in server logs.
-    // codeql[js/clear-text-logging]
-    console.log("\n" + describe() + "\n");
-    console.log(`  ready:       http://localhost:${config.port}`);
-    console.log(`  gateway:     POST http://localhost:${config.port}/v1/chat`);
-    console.log(`  api:         http://localhost:${config.port}/api/status`);
-    if (hasWeb) console.log(`  dashboard:   http://localhost:${config.port}/`);
-    else console.log(`  dashboard:   run "npm run dev" (Vite on :${process.env.WEB_PORT || 5173})`);
-    console.log("");
-  });
-
-  installShutdownHandlers({ server });
 }
 
 // Graceful shutdown.
@@ -357,7 +387,13 @@ function installShutdownHandlers({ server }) {
   process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-start().catch((err) => {
-  console.error("Failed to start Arbr Control Plane:", err);
-  process.exit(1);
-});
+// Only auto-start when run directly (node src/index.js). When required — e.g. arbr-cloud
+// importing mountCore()/buildApp() — do nothing; the caller controls boot and listening.
+if (require.main === module) {
+  start().catch((err) => {
+    console.error("Failed to start Arbr Control Plane:", err);
+    process.exit(1);
+  });
+}
+
+module.exports = { start, buildApp };
