@@ -27,6 +27,7 @@ const logger = require("../logging/logger");
 const Settings = require("../models/Settings");
 const ApplicationConfig = require("../models/ApplicationConfig");
 const { createBoundedTtlCache } = require("../utils/boundedTtlCache");
+const { currentConnection } = require("../db/context");
 const { pushOverride } = require("./explain");
 const { hasVisionContent, isVisionCapable, governanceFor, checkModel } = require("../routing/guards");
 
@@ -44,13 +45,16 @@ async function getAppConfig(appName) {
   // from a request body (data plane, and now the /routing/explain preview), so a
   // non-string like { $ne: null } must never become a NoSQL operator in findOne.
   appName = String(appName);
-  const hit = _appConfigCache.getEntry(appName);
+  // Namespace the cache key by the request's database so the same application name in two
+  // tenants never shares a cached config (this one bounded cache is shared across tenants).
+  const key = `${currentConnection().name}:${appName}`;
+  const hit = _appConfigCache.getEntry(key);
   if (hit) return hit.value;
   const cfg = await ApplicationConfig.findOne({ applicationName: appName }).lean().catch(() => null);
   // Misses are cached too. Unknown names are the cheap case to spam, and caching
   // the null is exactly what keeps that traffic off the database; now that the
   // map is bounded, doing so no longer trades a DB problem for a memory one.
-  _appConfigCache.set(appName, cfg);
+  _appConfigCache.set(key, cfg);
   return cfg;
 }
 

@@ -10,6 +10,7 @@ const ProviderCredential = require("../../src/models/ProviderCredential");
 const ApiKey = require("../../src/models/ApiKey");
 const RequestRecord = require("../../src/models/RequestRecord");
 const Cap = require("../../src/models/Cap");
+const Settings = require("../../src/models/Settings");
 
 let mongod, base, connA, connB, skip = false;
 
@@ -70,4 +71,18 @@ test("the same required model resolves to a different database per connection", 
   assert.equal(a, 1);
   assert.equal(b, 1);
   assert.notEqual(connA.name, connB.name); // genuinely different databases
+});
+
+test("Settings.get()'s 5s cache is per tenant (cached settings never cross)", async (t) => {
+  if (maybeSkip(t)) return;
+  await runWithConnection(connA, async () => {
+    const s = await Settings.get(); s.defaultProvider = "prov-A"; await s.save(); Settings.invalidateCache();
+  });
+  await runWithConnection(connB, async () => {
+    const s = await Settings.get(); s.defaultProvider = "prov-B"; await s.save(); Settings.invalidateCache();
+  });
+  // Prime A's cache, then B's, then read A again — A must not have been overwritten by B's cache.
+  assert.equal((await runWithConnection(connA, () => Settings.get())).defaultProvider, "prov-A");
+  assert.equal((await runWithConnection(connB, () => Settings.get())).defaultProvider, "prov-B");
+  assert.equal((await runWithConnection(connA, () => Settings.get())).defaultProvider, "prov-A");
 });

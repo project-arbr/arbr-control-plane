@@ -76,4 +76,21 @@ function defineModel(name, schema) {
   return new Proxy(function () {}, handler);
 }
 
-module.exports = { currentConnection, runWithConnection, modelForCurrent, defineModel, _als };
+// A per-connection cache slot. Module-level in-memory caches (Settings 5s, connections 3s creds,
+// caps, routing policy, ...) MUST be keyed per connection, or a TTL window would serve one
+// tenant's cached data to another. This gives each connection its own slot, keyed by the
+// connection's database name. In OSS everything runs on the one global connection, so it behaves
+// exactly like a single cache. `invalidate()` clears the current connection's slot (an admin edit
+// runs inside that tenant's request); `invalidateAll()` clears every tenant's slot.
+function perConnCache() {
+  const byConn = new Map();
+  const keyOf = () => currentConnection().name || "__global__";
+  return {
+    get() { return byConn.get(keyOf()); },
+    set(v) { byConn.set(keyOf(), v); return v; },
+    invalidate() { byConn.delete(keyOf()); },
+    invalidateAll() { byConn.clear(); },
+  };
+}
+
+module.exports = { currentConnection, runWithConnection, modelForCurrent, defineModel, perConnCache, _als };

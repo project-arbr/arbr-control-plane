@@ -4,8 +4,9 @@
 // unchanged-until-edited. Cached with a short TTL like the rule cache.
 const Settings = require("../models/Settings");
 const pricing = require("../pricing/registry");
+const { perConnCache } = require("../db/context");
 
-let _cache = { policy: null, loadedAt: 0 };
+const _cache = perConnCache(); // per-connection: each tenant caches its own guardrail policy
 const TTL_MS = 5000;
 
 // The shipped defaults (mirror pricing/table.js) used when nothing is overridden.
@@ -18,13 +19,14 @@ function defaults() {
 }
 
 function invalidate() {
-  _cache.loadedAt = 0;
+  _cache.invalidate();
 }
 
 // Effective policy = defaults with any stored overrides applied.
 // Returns { cheapTaskTypes: Set, lightTargets: {provider:model}, mode }.
 async function getEffective() {
-  if (_cache.policy && Date.now() - _cache.loadedAt < TTL_MS) return _cache.policy;
+  const c = _cache.get();
+  if (c && Date.now() - c.loadedAt < TTL_MS) return c.policy;
   const s = await Settings.get();
   const p = (s && s.policy) || {};
   const d = defaults();
@@ -35,7 +37,7 @@ async function getEffective() {
     lightTargets: targets,
     mode: p.mode === "aggressive" ? "aggressive" : "conservative",
   };
-  _cache = { policy: eff, loadedAt: Date.now() };
+  _cache.set({ policy: eff, loadedAt: Date.now() });
   return eff;
 }
 
