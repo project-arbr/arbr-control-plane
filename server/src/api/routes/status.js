@@ -5,6 +5,7 @@ const auth = require("../../gateway/auth");
 const ruleEngine = require("../../routing/ruleEngine");
 const connections = require("../../providers/connections");
 const Settings = require("../../models/Settings");
+const { config } = require("../../config");
 const { capStatus } = require("./_shared");
 
 const router = express.Router();
@@ -27,6 +28,8 @@ router.get("/status", async (_req, res, next) => {
       routingMode,
       requireApiKey,
       breachedCaps,
+      accountUrl: config.ui.accountUrl,
+      showDemoBadge: config.ui.showDemoBadge,
     });
   } catch (e) { next(e); }
 });
