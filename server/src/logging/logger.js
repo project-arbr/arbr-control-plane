@@ -86,20 +86,26 @@ async function writeOrThrow(record) {
 
   const doc = await RequestRecord.create(fields);
 
-  // Hard budget counters: only count successful, priced spend (not blocked/failed).
-  if (rec.status === "success" && totalCost > 0 && rec.knownPricing !== false) {
-    setImmediate(() =>
-      capEngine.recordSpend(totalCost, {
-        application: rec.application,
-        provider: rec.provider,
-        userId: rec.userId || null,
-        department: rec.department || null,
-        workflow: rec.workflow || null,
-        model: rec.model || null,
-        // Arbr's own overhead counts against a global cap but not a scoped one.
-        internalKind: rec.internalKind || null,
-      }).catch(() => {})
-    );
+  // Hard usage counters, off the request path. Spend-metric caps count priced spend;
+  // request-metric caps count every successful request (even $0 / cached ones).
+  if (rec.status === "success") {
+    const capCtx = {
+      application: rec.application,
+      provider: rec.provider,
+      userId: rec.userId || null,
+      department: rec.department || null,
+      workflow: rec.workflow || null,
+      model: rec.model || null,
+      // Arbr's own overhead counts against a global spend cap but not a scoped one, and
+      // never against a request quota (recordRequest skips it).
+      internalKind: rec.internalKind || null,
+    };
+    setImmediate(() => {
+      if (totalCost > 0 && rec.knownPricing !== false) {
+        capEngine.recordSpend(totalCost, capCtx).catch(() => {});
+      }
+      capEngine.recordRequest(capCtx).catch(() => {});
+    });
   }
 
   return doc;
