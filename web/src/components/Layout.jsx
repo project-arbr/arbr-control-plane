@@ -94,20 +94,27 @@ const icons = {
       <path d="M12 3a13 13 0 0 1 0 18a13 13 0 0 1 0-18z"/>
     </Icon>
   ),
+  account: (
+    <Icon>
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <circle cx="8.5" cy="11" r="2"/>
+      <path d="M13.5 10h4M13.5 14h4M5.5 16c.4-1.2 1.4-1.8 3-1.8s2.6.6 3 1.8"/>
+    </Icon>
+  ),
 };
 
 // ── Navigation definition ─────────────────────────────────────────────────────
 // "Users" only appears for administrators — under adminkey mode (no per-user
 // identity, req.user is the implicit master-key administrator) it always
 // shows, matching what the API actually allows.
-function buildNavGroups(canManageUsers) {
+function buildNavGroups(canManageUsers, hosted) {
   const govern = [
     { to: "/budgets",    label: "Budgets",    icon: icons.budgets },
     { to: "/governance", label: "Governance", icon: icons.governance },
     { to: "/audit",      label: "Audit",      icon: icons.audit },
   ];
   if (canManageUsers) govern.push({ to: "/users", label: "Users", icon: icons.users });
-  return [
+  const groups = [
     { section: "Connect", hint: "Wire apps & providers to the gateway", items: [
       { to: "/models",   label: "Models",   icon: icons.models },
       { to: "/settings", label: "Settings", icon: icons.settings },
@@ -125,6 +132,13 @@ function buildNavGroups(canManageUsers) {
     ] },
     { section: "Govern", hint: "Limits, guardrails, and records", items: govern },
   ];
+  // Hosted-only: the tenant's plan & billing page. Inert in OSS (no accountUrl → no section).
+  if (hosted) {
+    groups.push({ section: "Account", hint: "Your plan & billing", items: [
+      { to: "/account", label: "Account", icon: icons.account },
+    ] });
+  }
+  return groups;
 }
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
 const PROJECT_LINK = { href: "https://projectarbr.org/", label: "projectarbr.org", icon: icons.globe };
@@ -144,7 +158,8 @@ function Wordmark() {
 export default function Layout({ status, user, onSignOut, children }) {
   const [collapsed, setCollapsed] = useState(new Set());
   const canManageUsers = !user || user.role === "administrator";
-  const NAV_GROUPS = buildNavGroups(canManageUsers);
+  const hosted = !!(status && status.accountUrl); // hosted deployments expose an account/billing page
+  const NAV_GROUPS = buildNavGroups(canManageUsers, hosted);
 
   function toggleSection(section) {
     setCollapsed((prev) => {
