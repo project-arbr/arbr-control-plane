@@ -253,9 +253,11 @@ export default function Layout({ status, user, onSignOut, children }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b border-gray-100 bg-gray-50/80 px-8 py-3 backdrop-blur-sm">
           {status?.demoMode ? (
-            <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-              Demo — no provider keys
-            </span>
+            status?.showDemoBadge === false ? null : (
+              <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                Demo — no provider keys
+              </span>
+            )
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -271,6 +273,19 @@ export default function Layout({ status, user, onSignOut, children }) {
             <span className="inline-flex items-center rounded-md border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-arbr-charcoal">
               {status.routingMode === "ai" ? "AI routing" : "Cost guardrail"}
             </span>
+          )}
+          {status?.accountUrl && (
+            <a
+              href={status.accountUrl}
+              title="Account"
+              aria-label="Account"
+              className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-arbr-charcoal/30"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </a>
           )}
         </header>
         <main className="flex-1 overflow-y-auto px-8 py-6">{children}</main>

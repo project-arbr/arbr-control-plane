@@ -213,6 +213,13 @@ const config = {
   demoMode: envLiveIds.length === 0,
   defaultProviderPref: process.env.DEFAULT_PROVIDER || null,
 
+  // Optional header UI hooks. Inert for OSS defaults; hosted deployments set these so the
+  // console can link to an external account/billing page and suppress the "no keys" badge.
+  ui: {
+    accountUrl: process.env.ARBR_ACCOUNT_URL || null,       // when set, the header shows an account link
+    showDemoBadge: process.env.ARBR_SHOW_DEMO_BADGE !== "0", // set "0" to hide the demo (no-provider-keys) badge
+  },
+
   defaultModels: DEFAULT_MODELS,
 };
 
