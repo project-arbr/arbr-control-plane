@@ -18,6 +18,7 @@ import Applications from "./pages/Applications.jsx";
 import InternalSpend from "./pages/InternalSpend.jsx";
 import ApplicationDetail from "./pages/ApplicationDetail.jsx";
 import Users from "./pages/Users.jsx";
+import Account from "./pages/Account.jsx";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -77,6 +78,9 @@ export default function App() {
         <Route path="/governance" element={<Governance />} />
         <Route path="/audit" element={<Audit />} />
         <Route path="/users" element={<Users />} />
+        {/* Hosted-only: the tenant plan/billing page. In OSS (no accountUrl) the route isn't even
+            registered, so /account never mounts the component or hits the (absent) data endpoint. */}
+        {status?.accountUrl && <Route path="/account" element={<Account />} />}
         <Route path="/docs" element={<Docs />} />
 
         {/* Redirects for old / deep links. */}
