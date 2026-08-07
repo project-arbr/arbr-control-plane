@@ -9,6 +9,7 @@ const EvalRun = require("../../models/EvalRun");
 const { invalidateCampaignCache } = require("../../eval/shadow");
 const { summarizeEvalPairs } = require("../../eval/logic");
 const evalThresholds = require("../../eval/thresholds");
+const { requireFeature } = require("../../cloud/entitlements");
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ router.get("/eval/campaigns", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/eval/campaigns", requireRole("operator"), async (req, res, next) => {
+router.post("/eval/campaigns", requireRole("operator"), requireFeature("evals_canary"), async (req, res, next) => {
   try {
     const b = req.body || {};
     const { application, candidateModel, judgeModel, sampleRate, thresholds, name, baselineModel, scope,
@@ -82,7 +83,7 @@ router.get("/eval/campaigns/:id", async (req, res, next) => {
 });
 
 // Start a shadow campaign directly from a recommendation (requires its offline eval passed).
-router.post("/recommendations/:id/start-shadow", requireRole("operator"), async (req, res, next) => {
+router.post("/recommendations/:id/start-shadow", requireRole("operator"), requireFeature("evals_canary"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });

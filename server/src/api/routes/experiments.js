@@ -10,6 +10,7 @@ const EvalRun = require("../../models/EvalRun");
 const evalThresholds = require("../../eval/thresholds");
 const RoutingExperiment = require("../../models/RoutingExperiment");
 const canaryEngine = require("../../routing/canaryEngine");
+const { requireFeature } = require("../../cloud/entitlements");
 
 const router = express.Router();
 
@@ -51,7 +52,7 @@ router.get("/routing-experiments/:id", async (req, res, next) => {
 // Create a canary directly (not from a recommendation) — e.g. from a passed offline eval.
 // Same gate as shadow/recommendation: a passed offline run (requiredEvalRunId) or an override.
 // Only auto-routed traffic is affected.
-router.post("/routing-experiments", requireRole("operator"), async (req, res, next) => {
+router.post("/routing-experiments", requireRole("operator"), requireFeature("evals_canary"), async (req, res, next) => {
   try {
     const b = req.body || {};
     if (!b.application) return res.status(400).json({ error: "application is required" });
@@ -80,7 +81,7 @@ router.post("/routing-experiments", requireRole("operator"), async (req, res, ne
 });
 
 // Create a canary from a passed recommendation (only auto-routed traffic is affected).
-router.post("/recommendations/:id/create-canary", requireRole("operator"), async (req, res, next) => {
+router.post("/recommendations/:id/create-canary", requireRole("operator"), requireFeature("evals_canary"), async (req, res, next) => {
   try {
     const rec = await Recommendation.findById(req.params.id);
     if (!rec) return res.status(404).json({ error: "not found" });

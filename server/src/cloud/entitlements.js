@@ -30,4 +30,19 @@ function limit(req, key, fallback = null) {
   return e.limits && e.limits[key] != null ? e.limits[key] : fallback;
 }
 
-module.exports = { entitlementsFor, feature, limit, ALL_ON };
+// Express middleware form of `feature()` for gating a whole route. Responds 402 (Payment
+// Required) when the signed-in plan doesn't include `key`. In OSS (ALL_ON) it always allows,
+// so self-hosted route behaviour is unchanged. For endpoints that mix gated and un-gated fields
+// (e.g. PATCH /governance), call `feature(req, key)` inline instead of using this.
+function requireFeature(key) {
+  return function requireFeatureMw(req, res, next) {
+    if (feature(req, key)) return next();
+    return res.status(402).json({
+      error: "upgrade_required",
+      feature: key,
+      message: `This feature (${key}) requires a paid plan.`,
+    });
+  };
+}
+
+module.exports = { entitlementsFor, feature, limit, requireFeature, ALL_ON };

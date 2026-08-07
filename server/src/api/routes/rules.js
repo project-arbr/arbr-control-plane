@@ -4,6 +4,7 @@ const Rule = require("../../models/Rule");
 const { logAction } = require("../auditLogger");
 const { requireRole } = require("../rbac");
 const ruleEngine = require("../../routing/ruleEngine");
+const { feature } = require("../../cloud/entitlements");
 const responseCache = require("../../routing/responseCache");
 const semanticCache = require("../../routing/semanticCache");
 const connections = require("../../providers/connections");
@@ -140,6 +141,10 @@ router.get("/routing-mode", async (_req, res, next) => {
 
 router.put("/routing-mode", requireRole("administrator"), async (req, res, next) => {
   try {
+    // "ai" mode is the paid feature; "off"/"guardrail" stay available on every plan.
+    if (String(req.body?.mode) === "ai" && !feature(req, "ai_routing")) {
+      return res.status(402).json({ error: "upgrade_required", feature: "ai_routing", message: "AI routing requires a paid plan." });
+    }
     const mode = await ruleEngine.setRoutingMode(req.body?.mode);
     res.json({ routingMode: mode });
   } catch (e) { next(e); }
