@@ -4,6 +4,7 @@ const { logAction } = require("../auditLogger");
 const { requireRole } = require("../rbac");
 const Settings = require("../../models/Settings");
 const { config } = require("../../config");
+const { feature } = require("../../cloud/entitlements");
 const telemetry = require("../../telemetry");
 const telemetryConfig = require("../../telemetry/config");
 
@@ -50,9 +51,24 @@ router.get("/governance", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Fields on this shared handler that belong to a gated feature. Setting any of them requires the
+// corresponding entitlement (inert in OSS, where feature() always allows). Other fields on this
+// endpoint (maintenance, retention, max-tokens, semantic cache, ...) are ungated on every plan.
+const GUARDRAIL_FIELDS = [
+  "piiMaskingEnabled", "customPiiPatterns", "outputGuardrailsEnabled", "outputGuardrailRules",
+  "maskPiiInResponses", "promptInjectionDetectionEnabled", "promptInjectionRules",
+];
+const WEBHOOK_FIELDS = ["webhookUrl", "alertErrorRateEnabled", "alertErrorRateThreshold"];
+
 router.patch("/governance", requireRole("administrator"), async (req, res, next) => {
   try {
     const body = req.body || {};
+    if (GUARDRAIL_FIELDS.some((f) => f in body) && !feature(req, "guardrails_pii")) {
+      return res.status(402).json({ error: "upgrade_required", feature: "guardrails_pii", message: "Guardrails & PII protection require a paid plan." });
+    }
+    if (WEBHOOK_FIELDS.some((f) => f in body) && !feature(req, "webhooks")) {
+      return res.status(402).json({ error: "upgrade_required", feature: "webhooks", message: "Webhooks require a paid plan." });
+    }
     const update = {};
     if (body.maintenanceMode !== undefined) {
       update["maintenanceMode.enabled"] = !!body.maintenanceMode.enabled;

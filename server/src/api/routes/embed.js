@@ -3,10 +3,11 @@
 // (the app sets none globally), so a partner can drop it into an <iframe>.
 const express = require("express");
 const { PAGE } = require("../../embed/usageChart");
+const { requireFeature } = require("../../cloud/entitlements");
 
 const router = express.Router();
 
-router.get("/usage", (_req, res) => {
+router.get("/usage", requireFeature("embed_widgets"), (_req, res) => {
   res.set("Cache-Control", "public, max-age=300");
   res.type("html").send(PAGE);
 });

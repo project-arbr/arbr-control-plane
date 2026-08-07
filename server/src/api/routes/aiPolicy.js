@@ -2,6 +2,7 @@
 const express = require("express");
 const aiPolicy = require("../../routing/aiPolicy");
 const { requireRole } = require("../rbac");
+const { requireFeature } = require("../../cloud/entitlements");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 const Settings = require("../../models/Settings");
 
@@ -21,14 +22,14 @@ router.get("/ai-policy", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put("/ai-policy", requireRole("administrator"), async (req, res, next) => {
+router.put("/ai-policy", requireRole("administrator"), requireFeature("ai_routing"), async (req, res, next) => {
   try {
     await aiPolicy.setAssignments(req.body?.assignments || {});
     res.json(await aiPolicy.describe());
   } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
 });
 
-router.post("/ai-policy/regenerate", requireRole("administrator"), async (req, res, next) => {
+router.post("/ai-policy/regenerate", requireRole("administrator"), requireFeature("ai_routing"), async (req, res, next) => {
   try {
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "demo_mode", message: "Add a provider key to generate an AI policy." });

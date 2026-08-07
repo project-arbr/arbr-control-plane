@@ -6,6 +6,7 @@ const aiPolicy = require("../../routing/aiPolicy");
 const { toRouterConfig, getRouter } = require("../../providers/router");
 const Settings = require("../../models/Settings");
 const { config, KNOWN_PROVIDERS } = require("../../config");
+const { requireFeature } = require("../../cloud/entitlements");
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.put("/app-configs/:app", requireRole("operator"), async (req, res, next) 
   } catch (e) { next(e); }
 });
 
-router.post("/app-configs/:app/generate-policy", requireRole("operator"), async (req, res, next) => {
+router.post("/app-configs/:app/generate-policy", requireRole("operator"), requireFeature("ai_routing"), async (req, res, next) => {
   try {
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "no live providers — cannot generate policy" });
@@ -77,7 +78,7 @@ router.post("/app-configs/:app/simulate", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/app-configs/:app/set-default-policy", requireRole("administrator"), async (req, res, next) => {
+router.post("/app-configs/:app/set-default-policy", requireRole("administrator"), requireFeature("ai_routing"), async (req, res, next) => {
   try {
     const cfg = await ApplicationConfig.findOne({ applicationName: req.params.app }).lean();
     if (!cfg?.aiPolicyAssignments) return res.status(400).json({ error: "No custom policy set for this application." });
