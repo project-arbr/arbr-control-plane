@@ -73,6 +73,7 @@ export default defineConfig({
           { text: 'Accountable admin access', link: '/auth' },
           { text: 'OpenTelemetry tracing', link: '/opentelemetry' },
           { text: 'Cloud secret-manager integration', link: '/secret-manager' },
+          { text: 'Scoped usage API (read tokens)', link: '/usage-api' },
           { text: 'Design-partner demo fixture', link: '/demo-fixture' },
         ]
       },
