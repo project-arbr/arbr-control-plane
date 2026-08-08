@@ -29,6 +29,7 @@ router.get("/status", async (_req, res, next) => {
       requireApiKey,
       breachedCaps,
       accountUrl: config.ui.accountUrl,
+      logoutUrl: config.ui.logoutUrl,
       showDemoBadge: config.ui.showDemoBadge,
     });
   } catch (e) { next(e); }
