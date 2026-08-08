@@ -217,6 +217,7 @@ const config = {
   // console can link to an external account/billing page and suppress the "no keys" badge.
   ui: {
     accountUrl: process.env.ARBR_ACCOUNT_URL || null,       // when set, the header shows an account link
+    logoutUrl: process.env.ARBR_LOGOUT_URL || null,         // when set, sign-out navigates here (hosted logout) instead of the core Login page
     showDemoBadge: process.env.ARBR_SHOW_DEMO_BADGE !== "0", // set "0" to hide the demo (no-provider-keys) badge
   },
 
