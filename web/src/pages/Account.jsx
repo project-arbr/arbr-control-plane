@@ -138,8 +138,7 @@ export default function Account() {
             Cancel subscription
           </button>
         )}
-        {/* Hosted logout: the cloud layer's /auth/logout destroys the session and returns to the landing. */}
-        <a href="/auth/logout" className="btn-ghost">Log out</a>
+        {/* Logout lives in the header user menu (avatar → Log out), not on this page. */}
         {msg && <span className="text-sm text-gray-500">{msg}</span>}
       </div>
     </div>
