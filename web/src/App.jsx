@@ -50,6 +50,14 @@ export default function App() {
   useEffect(() => { refreshStatus(); loadCurrency(); }, []);
 
   const signOut = async () => {
+    // Hosted deployments own logout: a full navigation to their logout URL destroys the hosted
+    // session and returns to the landing page. OSS keeps the in-app core logout + Login screen.
+    if (status?.logoutUrl) {
+      clearAdminToken();
+      resetCsrfToken();
+      window.location.href = status.logoutUrl;
+      return;
+    }
     try { await api.logout(); } catch { /* ignore — still clear local state */ }
     clearAdminToken();
     resetCsrfToken();
