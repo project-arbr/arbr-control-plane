@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Card, Badge, Spinner } from "../components/ui.jsx";
 
 // The hosted Account page. Data + billing actions are served by the hosted layer (arbr-cloud) at
@@ -31,6 +31,7 @@ export default function Account() {
   const [err, setErr] = useState(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const autoUpgradedRef = useRef(false); // guard so ?upgrade=1 opens Checkout exactly once
 
   const load = useCallback(async () => {
     try { setData(await getAccount()); setErr(null); }
@@ -76,6 +77,17 @@ export default function Account() {
       setMsg("Subscription cancelled — updating…"); pollPlan("free");
     } catch (e) { setBusy(false); setMsg(`Could not cancel (${e.message}).`); }
   };
+
+  // Deep-link from the hosted /plans "Subscribe" CTA: it signs the visitor in and lands them here at
+  // /account?upgrade=1, so open Checkout automatically. Fire once, and strip the flag so a refresh
+  // (or the browser back button) doesn't reopen it.
+  useEffect(() => {
+    if (autoUpgradedRef.current || !data) return;
+    if (new URLSearchParams(window.location.search).get("upgrade") !== "1") return;
+    autoUpgradedRef.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+    if (data.plan === "free" && data.billingEnabled) upgrade();
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <div className="mx-auto max-w-2xl text-sm text-red-600">Could not load account — {err}</div>;
   if (!data) return <div className="flex justify-center py-16"><Spinner /></div>;
