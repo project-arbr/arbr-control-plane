@@ -137,14 +137,9 @@ export default function Account() {
 
       <div className="flex flex-wrap items-center gap-3">
         {data.plan === "free" ? (
-          <button
-            className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={busy || !data.billingEnabled}
-            title={data.billingEnabled ? "" : "Billing not configured yet"}
-            onClick={upgrade}
-          >
-            Upgrade to Paid
-          </button>
+          // Send the user to the in-app /plans page (plan comparison + upgrade). That page links back
+          // to /account?upgrade=1, where the effect above opens Checkout — one checkout path, reused.
+          <a className="btn-primary" href="/plans">Upgrade to Paid</a>
         ) : (
           <button className="btn-outline disabled:opacity-50" disabled={busy} onClick={cancel}>
             Cancel subscription
