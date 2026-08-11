@@ -107,7 +107,7 @@ const icons = {
 // "Users" only appears for administrators — under adminkey mode (no per-user
 // identity, req.user is the implicit master-key administrator) it always
 // shows, matching what the API actually allows.
-function buildNavGroups(canManageUsers, hosted) {
+function buildNavGroups(canManageUsers) {
   const govern = [
     { to: "/budgets",    label: "Budgets",    icon: icons.budgets },
     { to: "/governance", label: "Governance", icon: icons.governance },
@@ -132,12 +132,7 @@ function buildNavGroups(canManageUsers, hosted) {
     ] },
     { section: "Govern", hint: "Limits, guardrails, and records", items: govern },
   ];
-  // Hosted-only: the tenant's plan & billing page. Inert in OSS (no accountUrl → no section).
-  if (hosted) {
-    groups.push({ section: "Account", hint: "Your plan & billing", items: [
-      { to: "/account", label: "Account", icon: icons.account },
-    ] });
-  }
+  // The hosted account page is reached from the header user menu (avatar → Account), not the sidebar.
   return groups;
 }
 const FOOTER_LINK = { to: "/docs", label: "Docs", icon: icons.docs };
@@ -158,8 +153,7 @@ function Wordmark() {
 export default function Layout({ status, user, onSignOut, children }) {
   const [collapsed, setCollapsed] = useState(new Set());
   const canManageUsers = !user || user.role === "administrator";
-  const hosted = !!(status && status.accountUrl); // hosted deployments expose an account/billing page
-  const NAV_GROUPS = buildNavGroups(canManageUsers, hosted);
+  const NAV_GROUPS = buildNavGroups(canManageUsers);
 
   function toggleSection(section) {
     setCollapsed((prev) => {
@@ -290,17 +284,41 @@ export default function Layout({ status, user, onSignOut, children }) {
             </span>
           )}
           {status?.accountUrl && (
-            <a
-              href={status.accountUrl}
-              title="Account"
-              aria-label="Account"
-              className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-arbr-charcoal/30"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </a>
+            // Hosted user menu: hover (or keyboard focus) the avatar to reveal Account + Log out.
+            // The wrapper's pt-1 is a transparent bridge so moving the cursor onto the menu doesn't
+            // cross a gap and dismiss it.
+            <div className="group relative ml-1">
+              <button
+                type="button"
+                aria-label="Account menu"
+                aria-haspopup="menu"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-colors group-hover:border-gray-300 group-hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-arbr-charcoal/30"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </button>
+              <div className="invisible absolute right-0 top-full z-20 pt-1 opacity-0 transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="w-40 rounded-lg border border-gray-100 bg-white py-1 shadow-menu">
+                  <a
+                    href={status.accountUrl}
+                    className="block px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900"
+                  >
+                    Account
+                  </a>
+                  {onSignOut && (
+                    <button
+                      type="button"
+                      onClick={onSignOut}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      Log out
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </header>
         <main className="flex-1 overflow-y-auto px-8 py-6">{children}</main>
