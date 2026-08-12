@@ -56,7 +56,10 @@ export default function GettingStarted() {
         !!(s && (s.demoMode === false || (Array.isArray(s.liveProviders) && s.liveProviders.length > 0))),
         Array.isArray(keys) && keys.length > 0,
         !!(ov && Number(ov.totalRequests) > 0),
-        !!(s && ((s.routingMode && s.routingMode !== "off") || s.defaultModel)) || (Array.isArray(rules) && rules.length > 0),
+        // Routing = the user actually turned on auto-routing OR created a rule (generic or app-specific).
+        // A default model doesn't count — it's auto-set when a provider is connected, so it isn't a
+        // signal that the user configured routing.
+        !!(s && s.routingMode && s.routingMode !== "off") || (Array.isArray(rules) && rules.length > 0),
       ];
       setDone(d);
       if (d.every(Boolean)) { write(DISMISS_KEY, true); setDismissed(true); } // all set — retire it
