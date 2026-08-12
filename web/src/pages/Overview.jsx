@@ -5,6 +5,7 @@ import { Stat, Card, Table, Spinner, Tabs, useTabParam } from "../components/ui.
 import ByDimension from "./ByDimension.jsx";
 import RequestsTable from "../components/RequestsTable.jsx";
 import TrendChart from "../components/TrendChart.jsx";
+import GettingStarted from "../components/GettingStarted.jsx";
 
 const TABS = [
   ["summary",    "Summary"],
@@ -179,6 +180,8 @@ export default function Overview() {
         <h1 className="text-2xl font-bold text-arbr-charcoal">Overview</h1>
         <p className="text-sm text-gray-500">Total AI usage and cost across the organisation.</p>
       </div>
+
+      <GettingStarted />
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
