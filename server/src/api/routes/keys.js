@@ -5,6 +5,7 @@ const auth = require("../../gateway/auth");
 const { logAction } = require("../auditLogger");
 const { requireRole } = require("../rbac");
 const { rotateKey } = require("../keyRotation");
+const { limit } = require("../../cloud/entitlements");
 const crypto = require("crypto");
 
 const router = express.Router();
@@ -33,6 +34,20 @@ router.post("/keys", requireRole("operator"), async (req, res, next) => {
     const { name, application, rpm, allowedModels, defaultModel, userId, department, expiresAt } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: "name is required" });
     if (!application || !String(application).trim()) return res.status(400).json({ error: "application is required" });
+    // Hosted plan cap on the number of applications. Adding a key under a NEW application name is what
+    // grows the count; adding another key to an existing application does not. limit() returns null in
+    // OSS (entitlements "all on"), so this is inert when self-hosted.
+    const maxApps = limit(req, "maxApplications", null);
+    if (maxApps != null) {
+      const appName = String(application).trim();
+      const apps = await ApiKey.distinct("application", { revokedAt: null });
+      if (!apps.includes(appName) && apps.length >= maxApps) {
+        return res.status(402).json({
+          error: "application_limit_reached",
+          message: `Your plan allows up to ${maxApps} applications. Upgrade to add more.`,
+        });
+      }
+    }
     // A "read" token is a scoped, read-only usage token (see ApiKey.kind); anything
     // else is a normal data-plane gateway key. The prefix advertises which it is.
     const kind = req.body?.kind === "read" ? "read" : "gateway";
