@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { getAdminToken } from "../api.js";
 import { Logo } from "./Logo.jsx";
+import GettingStarted from "./GettingStarted.jsx";
 
 // ── Inline icons (16×16 stroke, no external dep) ──────────────────────────────
 const Icon = ({ children }) => (
@@ -323,6 +324,7 @@ export default function Layout({ status, user, onSignOut, children }) {
         </header>
         <main className="flex-1 overflow-y-auto px-8 py-6">{children}</main>
       </div>
+      <GettingStarted />
     </div>
   );
 }
