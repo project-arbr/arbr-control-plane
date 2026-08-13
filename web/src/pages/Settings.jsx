@@ -3,6 +3,17 @@ import { api } from "../api.js";
 import { Card, Badge, Spinner, Toggle, Tabs, useTabParam } from "../components/ui.jsx";
 import { loadCurrency } from "../api.js";
 
+// A labeled form field: uppercase label above a full-width control. Used to lay fields out on a grid
+// so every input lines up regardless of content.
+function Field({ label, className = "", children }) {
+  return (
+    <div className={className}>
+      <div className="label mb-1.5">{label}</div>
+      {children}
+    </div>
+  );
+}
+
 // ── Key row — inline edit of name + application ───────────────────────────────
 
 function expiryBadge(expiresAt) {
@@ -212,55 +223,56 @@ function ApiKeys({ onChange }) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-5">
-        <div>
-          <div className="label mb-1">Type</div>
-          <select className="input w-48" value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="gateway">Gateway key (runs inference)</option>
-            <option value="read">Read token (usage only)</option>
-          </select>
+      <div className="border-b border-gray-100 pb-6">
+        <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Type">
+            <select className="input w-full" value={kind} onChange={(e) => setKind(e.target.value)}>
+              <option value="gateway">Gateway key (runs inference)</option>
+              <option value="read">Read token (usage only)</option>
+            </select>
+          </Field>
+          <Field label="Name">
+            <input className="input w-full" placeholder="e.g. tester-laptop" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Application (attribution)">
+            <input className="input w-full" placeholder="e.g. opencode" value={application} onChange={(e) => setApplication(e.target.value)} />
+          </Field>
+          <Field label="User ID (optional)">
+            <input className="input w-full" placeholder="e.g. alice@company.com" value={userId} onChange={(e) => setUserId(e.target.value)} />
+          </Field>
+          <Field label="Department (optional)">
+            <input className="input w-full" placeholder="e.g. engineering" value={department} onChange={(e) => setDepartment(e.target.value)} />
+          </Field>
+          {kind === "gateway" && (
+            <>
+              <Field label="Rate limit (req/min, optional)">
+                <input className="input w-full" type="number" min="1" placeholder="unlimited" value={rpm} onChange={(e) => setRpm(e.target.value)} />
+              </Field>
+              <Field label="Default model (optional)">
+                <input className="input w-full" placeholder="global default" value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} />
+              </Field>
+              <Field label="Allowed models (optional, comma-separated)">
+                <input className="input w-full" placeholder="leave blank = unrestricted" value={allowedModels} onChange={(e) => setAllowedModels(e.target.value)} />
+              </Field>
+            </>
+          )}
+          <Field label="Expires at (optional)">
+            <input className="input w-full" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+          </Field>
         </div>
-        <div>
-          <div className="label mb-1">Name</div>
-          <input className="input w-44" placeholder="e.g. tester-laptop" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">Application (attribution)</div>
-          <input className="input w-48" placeholder="e.g. opencode" value={application} onChange={(e) => setApplication(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">User ID (optional)</div>
-          <input className="input w-48" placeholder="e.g. alice@company.com" value={userId} onChange={(e) => setUserId(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">Department (optional)</div>
-          <input className="input w-36" placeholder="e.g. engineering" value={department} onChange={(e) => setDepartment(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">Rate limit (req/min, optional)</div>
-          <input className="input w-40" type="number" min="1" placeholder="unlimited" value={rpm} onChange={(e) => setRpm(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">Default model (optional)</div>
-          <input className="input w-48" placeholder="global default" value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">Allowed models (optional, comma-separated)</div>
-          <input className="input w-72" placeholder="leave blank = unrestricted" value={allowedModels} onChange={(e) => setAllowedModels(e.target.value)} />
-        </div>
-        <div>
-          <div className="label mb-1">Expires at (optional)</div>
-          <input className="input w-40" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-        </div>
-        <button className="btn-secondary" disabled={busy} onClick={create}>Create {kind === "read" ? "token" : "key"}</button>
-        {err && <div className="w-full text-xs text-red-600">{err}</div>}
+
         {kind === "read" && (
-          <div className="w-full text-xs text-gray-500">
-            A read token reads only this application {userId.trim() ? `and user "${userId.trim()}"` : "(all users)"}
-            's usage via <code className="rounded bg-gray-100 px-1">GET /v1/usage/overview</code>. It cannot run
+          <p className="mt-4 text-xs text-gray-500">
+            A read token reads only this application {userId.trim() ? `and user "${userId.trim()}"` : "(all users)"}'s
+            usage via <code className="rounded bg-gray-100 px-1">GET /v1/usage/overview</code>. It cannot run
             inference, and rate limit / default model / allowed models do not apply.
-          </div>
+          </p>
         )}
+
+        <div className="mt-5 flex items-center gap-3">
+          <button className="btn-primary" disabled={busy} onClick={create}>Create {kind === "read" ? "token" : "key"}</button>
+          {err && <span className="text-xs text-red-600">{err}</span>}
+        </div>
       </div>
 
       {keys === null ? <Spinner /> : keys.length === 0 ? (
