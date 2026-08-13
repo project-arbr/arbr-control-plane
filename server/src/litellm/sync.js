@@ -138,6 +138,15 @@ function buildIndex(data) {
 
     const provider = normalizeProvider(prefix);
 
+    // Skip the LiteLLM "amazon-nova" namespace: its ids (e.g. "nova-lite-v1") are NOT the Bedrock
+    // inference-profile ids the adapter calls — the real Nova models are seeded from the curated
+    // catalogue under provider "bedrock-nova". Importing these only yields misleading "did you mean"
+    // suggestions and an orphaned, never-connected "amazon-nova" provider tag.
+    if (prefix === "amazon-nova") continue;
+    // Skip obviously-noisy Bedrock catalogue variants (commitment plans, legacy invoke/, wildcard region)
+    // that clutter /v1/models. Region-specific ids are kept.
+    if (provider === "bedrock-nova" && (/(^|\/)\d+-month-commitment\//.test(id) || id.startsWith("invoke/") || id.startsWith("*/"))) continue;
+
     // Skip deprecated
     if (ltEntry.deprecated === true) continue;
     // Skip dated snapshots: -YYYY-MM-DD, -YYYYMMDD, -YYYY-MM
