@@ -10,12 +10,16 @@
 const crypto = require("crypto");
 const ApiKey = require("../models/ApiKey");
 const Settings = require("../models/Settings");
+const { perConnCache, currentConnection, runWithConnection } = require("../db/context");
 
 const KEY_TTL_MS = 5000;
-let _cache = { byHash: new Map(), at: 0 };
+// Per-connection (per-tenant) key cache. A process-global map would let one tenant's request read
+// another tenant's cached keys within the 5s TTL window (accepting a foreign key or missing its own);
+// perConnCache keys each { byHash, at } slot by the connection's db name. OSS has one connection.
+const _cache = perConnCache();
 
 function invalidate() {
-  _cache.at = 0;
+  _cache.invalidate(); // drop the current tenant's slot so the next lookup reloads
 }
 
 function hashKey(rawKey) {
@@ -23,10 +27,12 @@ function hashKey(rawKey) {
 }
 
 async function _keysByHash() {
-  if (Date.now() - _cache.at < KEY_TTL_MS) return _cache.byHash;
+  const slot = _cache.get();
+  if (slot && Date.now() - slot.at < KEY_TTL_MS) return slot.byHash;
   const docs = await ApiKey.find({ enabled: true, revokedAt: null }).lean();
-  _cache = { byHash: new Map(docs.map((d) => [d.keyHash, d])), at: Date.now() };
-  return _cache.byHash;
+  const byHash = new Map(docs.map((d) => [d.keyHash, d]));
+  _cache.set({ byHash, at: Date.now() });
+  return byHash;
 }
 
 // Multi-replica RPM (Mongo fixed-window counters; see routing/rateLimit.js).
@@ -38,8 +44,14 @@ function stampLastUsed(keyDoc) {
   const prev = _lastStamped.get(keyDoc.keyHash) || 0;
   if (Date.now() - prev < 60_000) return;
   _lastStamped.set(keyDoc.keyHash, Date.now());
+  // The setImmediate callback runs OUTSIDE the request's AsyncLocalStorage store, so capture the tenant
+  // connection now and re-enter it — otherwise the write resolves ApiKey against the (unconnected in
+  // hosted) default connection and silently no-ops.
+  const conn = currentConnection();
   setImmediate(() =>
-    ApiKey.updateOne({ _id: keyDoc._id }, { $set: { lastUsedAt: new Date() } }).catch(() => {})
+    runWithConnection(conn, () =>
+      ApiKey.updateOne({ _id: keyDoc._id }, { $set: { lastUsedAt: new Date() } }).catch(() => {})
+    )
   );
 }
 

@@ -166,7 +166,14 @@ function buildApp({ resolveTenantDb = defaultResolveTenantDb, entitlements = def
     try { ent = entitlements(req); conn = resolveTenantDb(req); }
     catch (e) { return res.status(e.statusCode || 500).json({ error: e.code || "tenant_unavailable", message: String(e.message || e) }); }
     req.entitlements = ent;
-    runWithConnection(conn, next);
+    // Warm THIS tenant's model registry before dispatching (the registry cache is per-connection, and
+    // the hosted mount never runs registry.init(), so without this it would be empty after a restart).
+    // AsyncLocalStorage carries through the await, so next() and every downstream registry read run in
+    // the tenant connection with its models loaded. Null-safe: a load failure degrades to empty, not an error.
+    runWithConnection(conn, async () => {
+      try { await registry.ensureLoaded(); } catch (e) { console.warn("[registry] ensureLoaded failed:", e.message); }
+      next();
+    });
   });
 
   // The unified AI gateway — one endpoint for all AI requests.
