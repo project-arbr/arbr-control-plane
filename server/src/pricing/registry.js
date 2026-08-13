@@ -6,6 +6,7 @@
 const ModelEntry = require("../models/ModelEntry");
 const Settings = require("../models/Settings");
 const { clampMaxTokens } = require("./clamp");
+const { perConnCache } = require("../db/context");
 
 // Task types that are "cheap work" — safe candidates for a lighter model.
 const CHEAP_TASK_TYPES = new Set([
@@ -32,14 +33,30 @@ const LIGHT_TARGET_BY_PROVIDER = {
   mistral:        "mistral-small-latest",
 };
 
-// In-memory cache: { [id]: { id, provider, label, inputPer1M, outputPer1M, tier } }
-let _cache = {};
-let _ready = false;
+// In-memory cache of { [id]: modelDoc } — PER CONNECTION (per tenant DB), not a process-global.
+// Under database-per-tenant hosting a single global object would serve one tenant's models to all
+// tenants (and go empty after a restart until a write repopulated it); perConnCache keys each slot by
+// the connection's db name. In OSS there is one connection, so it behaves like a single cache.
+const _cache = perConnCache();
+const TTL_MS = Number(process.env.ARBR_REGISTRY_TTL_MS) || 5 * 60 * 1000;
+
+function _models() {
+  const slot = _cache.get();
+  return (slot && slot.models) || {};
+}
 
 async function _load() {
   const docs = await ModelEntry.find({ enabled: true }).lean();
-  _cache = Object.fromEntries(docs.map((d) => [d.id, d]));
-  _ready = true;
+  _cache.set({ models: Object.fromEntries(docs.map((d) => [d.id, d])), at: Date.now() });
+}
+
+// Populate the CURRENT connection's slot when empty or past the TTL. Called once per request by the
+// tenancy middleware (inside the tenant connection), so the synchronous accessors below have this
+// tenant's models. Cheap after the first load per tenant per TTL.
+async function ensureLoaded() {
+  const slot = _cache.get();
+  if (slot && Date.now() - slot.at < TTL_MS) return;
+  await _load();
 }
 
 // Called once at server boot after mongoose.connect().
@@ -59,7 +76,7 @@ async function init() {
     await ModelEntry.updateMany({ builtIn: true }, { $set: { builtIn: false } });
   }
   await _load();
-  console.log(`[registry] ${Object.keys(_cache).length} models loaded`);
+  console.log(`[registry] ${Object.keys(_models()).length} models loaded`);
   startAutoRefresh();
 }
 
@@ -89,11 +106,11 @@ async function reload() {
 // ── Sync accessors (safe after init()) ──────────────────────────────────────
 
 function getModel(id) {
-  return _cache[id] || null;
+  return _models()[id] || null;
 }
 
 function listModels() {
-  return Object.values(_cache);
+  return Object.values(_models());
 }
 
 // Vision-capable model IDs, optionally restricted to live providers. Used to tell
@@ -101,7 +118,7 @@ function listModels() {
 // cannot. Only affirmatively-flagged models qualify (null = unknown = excluded).
 function listVisionModels(liveIds = null) {
   const live = liveIds ? new Set(liveIds) : null;
-  return Object.values(_cache)
+  return Object.values(_models())
     .filter((m) => m.supportsVision === true && (!live || live.has(m.provider)))
     .map((m) => m.id)
     .sort();
@@ -111,7 +128,7 @@ function listVisionModels(liveIds = null) {
 // The common miss is a client sending a bare ID for a model the registry stores
 // region-scoped, e.g. "deepseek.v3.2" when the ID is "ap-southeast-3/deepseek.v3.2".
 function suggestModels(query, opts = {}) {
-  return rankSuggestions(query, Object.values(_cache), opts);
+  return rankSuggestions(query, Object.values(_models()), opts);
 }
 
 // Pure ranker over an explicit model list, so the scoring is testable without a DB.
@@ -140,7 +157,7 @@ function rankSuggestions(query, models, { limit = 5, liveIds = null } = {}) {
 }
 
 function isPremium(id) {
-  const m = _cache[id];
+  const m = _models()[id];
   return !!m && m.tier === "premium";
 }
 
@@ -152,7 +169,7 @@ function isCheapTask(taskType) {
 // cached-read and cache-write tokens so they bill at the provider's cache rates. Omitting cache
 // (or a model with no cache rates) prices everything at inputPer1M — identical to before.
 function costFor(modelId, promptTokens = 0, completionTokens = 0, cache = {}) {
-  const m = _cache[modelId];
+  const m = _models()[modelId];
   if (!m) return { inputCost: 0, outputCost: 0, totalCost: 0 };
   const cachedRead = Number(cache.cachedReadTokens) || 0;
   const cacheWrite = Number(cache.cacheWriteTokens) || 0;
@@ -169,12 +186,12 @@ function costFor(modelId, promptTokens = 0, completionTokens = 0, cache = {}) {
 // Max completion tokens the model accepts, or null when unknown. The gateway uses this
 // to clamp an over-large client max_tokens to the served model's ceiling.
 function maxOutputFor(modelId) {
-  const m = _cache[modelId];
+  const m = _models()[modelId];
   return m && m.maxOutputTokens ? m.maxOutputTokens : null;
 }
 
 function suggestLightTarget(modelId) {
-  const m = _cache[modelId];
+  const m = _models()[modelId];
   if (!m) return null;
   const target = LIGHT_TARGET_BY_PROVIDER[m.provider];
   if (!target || target === modelId) return null;
@@ -187,6 +204,7 @@ module.exports = {
   LIGHT_TARGET_BY_PROVIDER,
   // Lifecycle
   init,
+  ensureLoaded,
   reload,
   startAutoRefresh,
   stopAutoRefresh,
