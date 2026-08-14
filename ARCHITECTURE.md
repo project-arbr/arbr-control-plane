@@ -62,7 +62,7 @@ verified against the code, not approximated:
 4. **Enforce budget** — `routing/capEngine.js` runs *after* routing, against the model
    routing just decided on. A breached enforcing cap outranks everything decided in step
    3, **including an explicit pin** — that's the point of enforcement (per the code's own
-   comment at `gateway/handler.js:382-384`): block returns 429; downgrade forces the
+   comment at `gateway/handler.js:491-493`): block returns 429; downgrade forces the
    provider's light-tier model regardless of how the served model was originally chosen.
 5. **Output-side clamp, then cache** — `pricing.clampMaxTokens` caps output to the *served*
    model's known ceiling, then the exact-match response cache
@@ -117,7 +117,7 @@ server/src/
                         integration — resolves a `gcp-sm://...` reference transparently;
                         one new file per additional cloud (AWS/Azure documented, not built)
   internal/complete.js   the one call site for every LLM call Arbr makes for itself
-                        (classification, policy generation, judging) — tagged and excluded
+                        (classification, judging, connection/model tests) — tagged and excluded
                         from customer-facing analytics
   health/readiness.js   pure GET /health/ready decision logic (shutting-down / Mongo state)
   telemetry/        OpenTelemetry: otel.js (OTLP export) · attributes.js (span shape,
@@ -192,8 +192,8 @@ traffic.
   `OTEL_ENABLED` (which would also flip `@langchain/core` into LangSmith-OTel mode).
 
 - **Arbr's own AI spend is counted but never attributed to a customer.** Arbr makes LLM
-  calls for itself (task classification on the routing path, AI policy generation, eval
-  judging, connection/model tests). Those are real money on the customer's provider key,
+  calls for itself (task classification on the routing path, eval judging,
+  connection/model tests). Those are real money on the customer's provider key,
   so they are stamped with `RequestRecord.internalKind` and **included in headline
   `totalCost`** — a cost dashboard that hid them would understate the actual provider bill.
   They are **excluded** from every per-application/workflow/user dimension view, from
