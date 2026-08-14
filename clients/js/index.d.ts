@@ -33,6 +33,9 @@ export type RoutingDecision =
 
 export type ClassifiedBy = "provided" | "keyword" | "ai";
 
+/** Why generation stopped. "length" means the answer was truncated by max_tokens. */
+export type FinishReason = "stop" | "length" | "tool_calls" | "content_filter";
+
 export interface Usage {
   inputTokens?: number;
   outputTokens?: number;
@@ -55,6 +58,10 @@ export interface ChatResponse {
   cacheHit: boolean;
   text: string;
   usage?: Usage;
+  /** Why generation stopped — tells a deliberately short answer from a truncated one. May be null. */
+  finishReason?: FinishReason | null;
+  /** Present only when a reasoning model spent the whole max_tokens budget on internal thinking and returned no text. */
+  warning?: string;
 }
 
 export interface StatusResponse {
@@ -121,6 +128,8 @@ export interface ClientOptions {
   baseUrl?: string;
   /** Gateway API key ("ab_…", from Settings → API keys). Falls back to ARBR_API_KEY. Binds attribution server-side. */
   apiKey?: string;
+  /** Read token (an API key of kind "read") for the usage analytics API. Falls back to ARBR_READ_TOKEN. Scoped read-only; cannot run inference. */
+  readToken?: string;
   /** Default attribution metadata merged into every call. */
   application?: string;
   workflow?: string;
@@ -197,6 +206,58 @@ export interface EmbeddingsResponse {
   usage: { prompt_tokens: number; total_tokens: number };
 }
 
+export type UsageBucket = "hour" | "day" | "month";
+
+/** Headline usage stats for a read token's scope (GET /v1/usage/overview). */
+export interface UsageOverview {
+  totalRequests: number;
+  totalCost: number;
+  customerCost: number;
+  internalCost: number;
+  avgCostPerRequest: number;
+  avgLatency: number;
+  totalTokens: number;
+  failures: number;
+  cacheHits: number;
+  cacheHitRate: number;
+  cachedReadTokens: number;
+  cacheSavingUsd: number;
+  [k: string]: unknown;
+}
+
+/** One point in the cost/request trend (GET /v1/usage/timeseries). */
+export interface UsageTimeseriesPoint {
+  /** "YYYY-MM-DD" (day/month) or "YYYY-MM-DDTHH" (hour), UTC. */
+  date: string;
+  requests: number;
+  cost: number;
+  failures: number;
+}
+
+/** Spend + usage for one model (GET /v1/usage/by-model). `key` is the model id. */
+export interface UsageModelRow {
+  key: string;
+  requests: number;
+  cost: number;
+  avgLatency: number;
+  failures: number;
+  [k: string]: unknown;
+}
+
+/** The scope a read token is allowed to see (GET /v1/usage/scope). */
+export interface UsageScope {
+  application: string | null;
+  userId: string | null;
+}
+
+/** Read-only usage analytics, authenticated by a read token (see ClientOptions.readToken). */
+export interface UsageApi {
+  overview(opts?: { signal?: AbortSignal }): Promise<UsageOverview>;
+  timeseries(bucket?: UsageBucket, opts?: { signal?: AbortSignal }): Promise<UsageTimeseriesPoint[]>;
+  byModel(opts?: { signal?: AbortSignal }): Promise<UsageModelRow[]>;
+  scope(opts?: { signal?: AbortSignal }): Promise<UsageScope>;
+}
+
 export interface Client {
   /** One routed completion via POST /v1/chat. */
   chat(opts: ChatRequest): Promise<ChatResponse>;
@@ -216,6 +277,8 @@ export interface Client {
   taskTypes(opts?: { signal?: AbortSignal }): Promise<TaskTypesResponse>;
   /** Generate embeddings — POST /v1/embeddings. OpenAI-compatible response format. */
   embeddings(opts: EmbeddingsRequest): Promise<EmbeddingsResponse>;
+  /** Read-only usage analytics (GET /v1/usage/*). Requires a read token (ClientOptions.readToken / ARBR_READ_TOKEN). */
+  usage: UsageApi;
   baseUrl: string;
 }
 

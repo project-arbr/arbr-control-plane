@@ -69,6 +69,7 @@ the dashboard Requests drilldown.
 |---|---|---|
 | `baseUrl` | `process.env.ARBR_GATEWAY_URL` | Gateway origin. Required (here or via env). |
 | `apiKey` | `process.env.ARBR_API_KEY` | Gateway API key (`ab_…`, dashboard → Settings → API keys). Sent as `Authorization: Bearer`; binds attribution server-side. Required once the gateway has *Require API keys* on. |
+| `readToken` | `process.env.ARBR_READ_TOKEN` | Read token (API key of kind `read`) for `client.usage`. Scoped read-only; cannot run inference. Only needed for the usage analytics API. |
 | `application` | — | Default attribution merged into every call. Strongly recommended. |
 | `workflow`, `department`, `userId` | — | More default attribution. |
 | `timeoutMs` | `60000` | Per attempt, via `AbortController`. |
@@ -90,10 +91,16 @@ Request fields: `messages` (required), `model`, `provider`, `taskType`, `tempera
 ```
 
 Response: `{ requestId, model, modelRequested, provider, routingDecision, classifiedBy,
-cacheHit, text, usage: { inputTokens, outputTokens, totalTokens, cachedReadTokens, cacheWriteTokens } }`.
+cacheHit, finishReason, text, usage: { inputTokens, outputTokens, totalTokens, cachedReadTokens, cacheWriteTokens } }`
+(plus an optional `warning`).
 
 `usage.cachedReadTokens` and `usage.cacheWriteTokens` are non-zero when the provider's prompt
 cache was active (Anthropic, OpenAI). The gateway prices these at provider cache rates automatically.
+
+`finishReason` is `"stop" | "length" | "tool_calls" | "content_filter"` — check it to tell a
+deliberately short answer from one truncated by `maxTokens`. When a reasoning model spends its
+whole budget on internal thinking and returns no text, `finishReason` is `"length"` and a `warning`
+string is present; raise `maxTokens` and retry.
 
 ### Streaming
 
@@ -216,6 +223,35 @@ for (const p of providers) {
 // bedrock-nova → 11 models
 // anthropic    → 3 models
 ```
+
+### `client.usage` — usage analytics (read-only)
+
+Query cost, requests, and token usage programmatically — the same numbers the dashboard shows,
+scoped to a **read token**. A read token (an API key of kind `read`, created in the console under
+Settings → API keys) is locked to one application (and optionally one user) and **cannot run
+inference**, so it's safe to hand to a partner app or drop into a per-tenant dashboard. Set it via
+`createClient({ readToken })` or `ARBR_READ_TOKEN`.
+
+```js
+const arbr = createClient({ baseUrl: "http://localhost:4100", readToken: "ab_read_…" });
+
+const o = await arbr.usage.overview();
+console.log(`$${o.totalCost.toFixed(2)} over ${o.totalRequests} requests`);
+console.log(`cache hit rate ${(o.cacheHitRate * 100).toFixed(1)}% · saved $${o.cacheSavingUsd.toFixed(2)}`);
+
+const trend = await arbr.usage.timeseries("day");   // [{ date, requests, cost, failures }, …]
+const byModel = await arbr.usage.byModel();          // [{ key: modelId, requests, cost, … }, …]
+const scope = await arbr.usage.scope();              // { application, userId } this token may read
+```
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `usage.overview()` | `GET /v1/usage/overview` | Headline cost / requests / tokens / cache stats |
+| `usage.timeseries(bucket)` | `GET /v1/usage/timeseries` | Trend points; `bucket` ∈ `"hour" \| "day" \| "month"` |
+| `usage.byModel()` | `GET /v1/usage/by-model` | Spend + usage per model |
+| `usage.scope()` | `GET /v1/usage/scope` | The `{ application, userId }` this token is scoped to |
+
+Calling any of these without a read token throws a `GatewayError` explaining how to create one.
 
 ### `asLangChainModel(client, meta?) → { invoke, stream }`
 

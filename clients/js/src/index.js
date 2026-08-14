@@ -302,7 +302,37 @@ function createClient(options = {}) {
     );
   }
 
-  return { chat, stream, status, models, providers, taskTypes, embeddings, baseUrl };
+  // ── Usage analytics (read-only) ───────────────────────────────────────────
+  // Authenticated by a READ token (an API key of kind "read"), NOT the gateway key.
+  // A read token is scoped to one application (+ optional user) and cannot run
+  // inference — every query is forced to its own scope server-side. Create one in
+  // the console under Settings → API keys. Falls back to ARBR_READ_TOKEN.
+  const readToken = options.readToken || process.env.ARBR_READ_TOKEN || null;
+  // Returns a rejected promise (not a sync throw) so `await client.usage.x()` / `.catch()` behave
+  // like every other client method when no read token is configured.
+  function usageGet(path, { signal } = {}) {
+    if (!readToken) {
+      return Promise.reject(invalid("the usage API needs a read token — pass `readToken` (or set ARBR_READ_TOKEN). Create one in the console under Settings → API keys. A gateway key cannot read usage."));
+    }
+    return requestWithRetries(
+      fetchImpl,
+      `${baseUrl}/v1/usage/${path}`,
+      { method: "GET", headers: { Authorization: `Bearer ${readToken}` } },
+      { timeoutMs, retries, signal }
+    );
+  }
+  const usage = {
+    /** Headline stats for this token's scope: cost, requests, tokens, success rate, cache reuse. */
+    overview: (opts = {}) => usageGet("overview", opts),
+    /** Cost/request trend over time. bucket ∈ "hour" | "day" | "month" (default "day"). */
+    timeseries: (bucket = "day", opts = {}) => usageGet(`timeseries?bucket=${encodeURIComponent(bucket)}`, opts),
+    /** Spend + usage broken down by model, within this token's scope. */
+    byModel: (opts = {}) => usageGet("by-model", opts),
+    /** Echo the token's own scope ({ application, userId }) so you know what it may read. */
+    scope: (opts = {}) => usageGet("scope", opts),
+  };
+
+  return { chat, stream, status, models, providers, taskTypes, embeddings, usage, baseUrl };
 }
 
 // ── LangChain-style adapter (duck-typed; no LangChain dependency) ─────────────

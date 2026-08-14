@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0 (2026-08-15)
+
+- **`client.usage`** — read-only usage analytics, authenticated by a **read token** (an API key of kind `read`, created in the console under Settings → API keys), not the gateway key. A read token is scoped to one application (+ optional user) and cannot run inference, so it's safe to embed in a partner app or a per-tenant dashboard.
+  - `usage.overview()` — headline stats for the token's scope (`GET /v1/usage/overview`): cost, requests, tokens, success rate, prompt-cache reuse + savings.
+  - `usage.timeseries(bucket)` — cost/request trend (`GET /v1/usage/timeseries`), `bucket` ∈ `"hour" | "day" | "month"`.
+  - `usage.byModel()` — spend + usage broken down by model (`GET /v1/usage/by-model`).
+  - `usage.scope()` — echo the token's own scope (`GET /v1/usage/scope`).
+  - Configure with `createClient({ readToken })` or `ARBR_READ_TOKEN`.
+- **`chat()` now surfaces `finishReason`** (`"stop" | "length" | "tool_calls" | "content_filter"`) and an optional **`warning`** — so you can tell a deliberately short answer from one truncated by `max_tokens` (e.g. a reasoning model that spent the whole budget on internal thinking and returned no text).
+- **TypeScript**: added `FinishReason`, `UsageOverview`, `UsageTimeseriesPoint`, `UsageModelRow`, `UsageScope`, `UsageApi`, `UsageBucket`; `ChatResponse` gains `finishReason`/`warning`; `ClientOptions` gains `readToken`; `Client` gains `usage`.
+
 ## 0.5.0 (2026-07-13)
 
 - **`embeddings()`** — generate vector embeddings via `POST /v1/embeddings`. OpenAI-compatible wire format (`{ model, input, dimensions? }`). Dispatches to Gemini (`gemini-embedding-001`) or any OpenAI-compat provider (`text-embedding-3-small`, etc.) with full observability parity to chat.

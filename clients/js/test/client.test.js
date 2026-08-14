@@ -280,3 +280,57 @@ test("chat: usage without cache fields → cachedReadTokens and cacheWriteTokens
   assert.equal(res.usage.cachedReadTokens, undefined);
   assert.equal(res.usage.cacheWriteTokens, undefined);
 });
+
+// ── v0.6.0: finishReason / warning pass-through ──────────────────────────────
+
+test("chat: surfaces finishReason and warning from the gateway", async (t) => {
+  const { baseUrl } = await mockGateway(t, () => ({
+    body: { ...OK_RESPONSE, finishReason: "length", warning: "Output truncated by max_tokens." },
+  }));
+  const client = createClient({ baseUrl });
+  const res = await client.chat({ messages: "hi" });
+  assert.equal(res.finishReason, "length");
+  assert.equal(res.warning, "Output truncated by max_tokens.");
+});
+
+// ── v0.6.0: usage analytics (read token) ─────────────────────────────────────
+
+test("usage.overview: hits /v1/usage/overview with the read token", async (t) => {
+  const { baseUrl, seen } = await mockGateway(t, () => ({
+    body: { totalRequests: 42, totalCost: 1.23, cacheHitRate: 0.5, cacheSavingUsd: 0.4 },
+  }));
+  const client = createClient({ baseUrl, apiKey: "ab_gateway", readToken: "ab_read_xyz" });
+  const out = await client.usage.overview();
+  assert.equal(out.totalRequests, 42);
+  const call = seen[seen.length - 1];
+  assert.equal(call.method, "GET");
+  assert.equal(call.url, "/v1/usage/overview");
+  assert.equal(call.auth, "Bearer ab_read_xyz"); // read token, NOT the gateway key
+});
+
+test("usage.timeseries: forwards the bucket query param", async (t) => {
+  const { baseUrl, seen } = await mockGateway(t, () => ({ body: [] }));
+  const client = createClient({ baseUrl, readToken: "ab_read_xyz" });
+  await client.usage.timeseries("month");
+  assert.equal(seen[seen.length - 1].url, "/v1/usage/timeseries?bucket=month");
+});
+
+test("usage.byModel / scope: hit the right endpoints", async (t) => {
+  const { baseUrl, seen } = await mockGateway(t, () => ({ body: {} }));
+  const client = createClient({ baseUrl, readToken: "ab_read_xyz" });
+  await client.usage.byModel();
+  assert.equal(seen[seen.length - 1].url, "/v1/usage/by-model");
+  await client.usage.scope();
+  assert.equal(seen[seen.length - 1].url, "/v1/usage/scope");
+});
+
+test("usage without a read token throws a clear GatewayError", async (t) => {
+  const { baseUrl } = await mockGateway(t);
+  const client = createClient({ baseUrl, apiKey: "ab_gateway" }); // no readToken
+  await assert.rejects(() => client.usage.overview(), (e) => {
+    assert.ok(e instanceof GatewayError);
+    assert.equal(e.code, "invalid_input");
+    assert.match(e.message, /read token/i);
+    return true;
+  });
+});
