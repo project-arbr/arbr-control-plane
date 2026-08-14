@@ -4,6 +4,7 @@ import { api, fmt } from "../api.js";
 import { Card, Badge, Spinner, Toggle, Tabs, useTabParam, ConfirmDialog, Stat, Table } from "../components/ui.jsx";
 import RequestsTable from "../components/RequestsTable.jsx";
 import TrendChart from "../components/TrendChart.jsx";
+import ReasoningDrawer from "../components/ReasoningDrawer.jsx";
 
 const TABS = [
   ["overview",  "Overview"],
@@ -125,6 +126,9 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   const [confirmGen, setConfirmGen]   = useState(false);
   const [goal, setGoal]               = useState("balanced"); // cost | balanced | quality
   const [sim, setSim]                 = useState(null);        // impact simulation result
+  const [evidence, setEvidence]       = useState(null);        // per-task candidate reasoning from the last generate
+  const [showReasoning, setShowReasoning] = useState(false);
+  const [generatorModel, setGeneratorModel] = useState(null);
 
   useEffect(() => { api.aiPolicy().then(setGlobalPol).catch((e) => setMsg(e.message)); }, []);
 
@@ -190,11 +194,13 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   // Generate uses excluded as the exclusion list automatically, optimizing for the chosen goal.
   const generate = async () => {
     setConfirmGen(false);
-    setBusy(true); setMsg(`Generating (goal: ${goal})…`); setSim(null);
+    setBusy(true); setMsg(`Generating (goal: ${goal})…`); setSim(null); setEvidence(null);
     try {
       const result = await api.generateAppPolicy(appName, excluded, goal);
       setAssignments(result.assignments);
       setSim(result.simulation || null);
+      setEvidence(result.evidence || null);
+      setGeneratorModel(result.generatorModel || null);
       setMsg(result.generatorModel ? `Done — via ${result.generatorModel}` : "Done");
       setTimeout(() => setMsg(null), 3000);
       onSaved?.();
@@ -250,6 +256,15 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
             onCancel={() => setConfirmGen(false)}
           />
         )}
+        {showReasoning && evidence && (
+          <ReasoningDrawer
+            evidence={evidence}
+            catalog={globalPol.taskCatalog || []}
+            goal={goal}
+            generatorModel={generatorModel}
+            onClose={() => setShowReasoning(false)}
+          />
+        )}
         <div className="space-y-4">
           {/* Goal selector — generation optimizes the cost/capability blend for this goal */}
           <div className="flex items-center gap-2 text-xs">
@@ -281,6 +296,9 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
                 </button>
                 <button className="btn-ghost text-xs" disabled={busy} onClick={resetToGlobal}>Reset to global default</button>
               </>
+            )}
+            {evidence && Object.keys(evidence).length > 0 && (
+              <button className="btn-ghost text-xs" disabled={busy} onClick={() => setShowReasoning(true)}>View reasoning</button>
             )}
             {msg && <span className="text-xs text-gray-500">{msg}</span>}
           </div>
