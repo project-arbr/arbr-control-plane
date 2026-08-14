@@ -53,7 +53,7 @@ router.post("/app-configs/:app/generate-policy", requireRole("operator"), requir
     if (!r) return res.status(503).json({ error: "no live providers — cannot generate policy" });
     const excludeModels = Array.isArray(req.body?.excludeModels) ? req.body.excludeModels : [];
     const goal = String(req.body?.goal || "balanced");
-    const { assignments, generatorModel } = await aiPolicy.computeAssignments({ router: r, eff, excludeModels, goal });
+    const { assignments, generatorModel, evidence } = await aiPolicy.computeAssignments({ eff, excludeModels, goal });
     const generatedAt = new Date();
     const cfg = await ApplicationConfig.findOneAndUpdate(
       { applicationName: req.params.app },
@@ -62,7 +62,7 @@ router.post("/app-configs/:app/generate-policy", requireRole("operator"), requir
     ).lean();
     setImmediate(() => logAction("appConfig.generatePolicy", "appConfig", req.params.app, { excludeModels, goal }, req.user));
     const simulation = await aiPolicy.simulate({ assignments, application: req.params.app, windowDays: Number(req.body?.windowDays) || 14 });
-    res.json({ assignments, generatedAt, generatorModel: generatorModel.id, cfg, simulation });
+    res.json({ assignments, generatedAt, generatorModel, evidence, cfg, simulation });
   } catch (e) { next(e); }
 });
 

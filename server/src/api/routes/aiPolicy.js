@@ -16,7 +16,7 @@ router.get("/ai-policy", async (_req, res, next) => {
     // Auto-regen when: assignments already exist (not a fresh install) AND version is stale.
     if (storedVer !== aiPolicy.CAPABILITY_VERSION && s.aiPolicy?.assignments) {
       const { router: r, eff } = await getRouter().catch(() => ({}));
-      if (r) await aiPolicy.regenerate({ router: r, eff });
+      if (r) await aiPolicy.regenerate({ eff });
     }
     res.json(await aiPolicy.describe());
   } catch (e) { next(e); }
@@ -34,9 +34,11 @@ router.post("/ai-policy/regenerate", requireRole("administrator"), requireFeatur
     const { router: r, eff } = await getRouter();
     if (!r) return res.status(503).json({ error: "demo_mode", message: "Add a provider key to generate an AI policy." });
     const goal = String(req.body?.goal || "balanced");
-    const pol = await aiPolicy.regenerate({ router: r, eff, goal });
+    const pol = await aiPolicy.regenerate({ eff, goal, windowDays: Number(req.body?.windowDays) || 14 });
     const simulation = await aiPolicy.simulate({ assignments: pol.assignments, windowDays: Number(req.body?.windowDays) || 14 });
-    res.json({ ...(await aiPolicy.describe()), simulation });
+    // evidence: per-task Top-3 candidates (quality, expected cost, confidence, reason) — not persisted,
+    // so it rides on the regenerate response for the operator to inspect why each pick won.
+    res.json({ ...(await aiPolicy.describe()), evidence: pol.evidence, simulation });
   } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
 });
 
