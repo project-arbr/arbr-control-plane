@@ -12,7 +12,8 @@ const { perConnCache } = require("../db/context");
 // GET /api/ai-policy auto-regenerates if the stored version is behind.
 // HOW TO UPDATE: change the tables/engine below, then increment this number by 1.
 // v3: deterministic evidence-based engine (capability gates + traffic-informed expected cost).
-const CAPABILITY_VERSION = 3;
+// v4: prefix-aware curated-capability matching (Bedrock region/account ids resolve) + DeepSeek V3.x rows.
+const CAPABILITY_VERSION = 4;
 
 const _cache = perConnCache(); // per-connection: each tenant caches its own policy map
 const TTL_MS = 5000;
@@ -58,6 +59,8 @@ const MODEL_CAPABILITIES = {
   // DeepSeek
   "deepseek-chat":                 { coding:0.92, reasoning:0.82, writing:0.72, analysis:0.72, language:0.65, general:0.68, data:0.80 },
   "deepseek-reasoner":             { coding:0.78, reasoning:0.97, writing:0.60, analysis:0.75, language:0.60, general:0.62, data:0.70 },
+  "deepseek.v3.2":                 { coding:0.90, reasoning:0.88, writing:0.72, analysis:0.76, language:0.66, general:0.72, data:0.80 },
+  "deepseek.v3.1":                 { coding:0.90, reasoning:0.84, writing:0.72, analysis:0.74, language:0.66, general:0.70, data:0.80 },
   // xAI
   "grok-2":                        { coding:0.78, reasoning:0.82, writing:0.80, analysis:0.78, language:0.72, general:0.74, data:0.70 },
   "grok-3":                        { coding:0.85, reasoning:0.90, writing:0.85, analysis:0.85, language:0.78, general:0.80, data:0.78 },
@@ -241,11 +244,29 @@ function goalWeight(goal, tier) {
   return COST_SENSITIVITY[tier] || 0.25; // "balanced" / unset
 }
 
+// Normalize a model id for curated-capability matching. Gateway/Bedrock ids carry an inference-profile
+// prefix (e.g. "us-gov-east-1/amazon.nova-pro-v1:0") and account variants ("us.amazon." vs "amazon.")
+// that an exact-id lookup misses — so "amazon.nova-pro" would score as an unknown model despite being in
+// the curated table. This drops the "region/" path segment, unifies the Bedrock account prefix, and folds
+// dots→dashes, while KEEPING the model-family word (unlike the benchmark normalizer, which strips it).
+function capKey(id) {
+  let s = String(id || "").toLowerCase();
+  const slash = s.lastIndexOf("/");
+  if (slash >= 0) s = s.slice(slash + 1);          // us-gov-east-1/amazon.nova-pro-v1:0 → amazon.nova-pro-v1:0
+  s = s.replace(/^us\.amazon\./, "amazon.").replace(/^us\./, ""); // unify Bedrock account prefixes
+  return s.replace(/\./g, "-");                    // dots→dashes so "deepseek.v3.2" ≈ "deepseek-v3-2"
+}
+
+// Curated table indexed by normalized key, so prefixed/variant ids resolve to their known scores.
+const _capIndex = {};
+for (const [k, v] of Object.entries(MODEL_CAPABILITIES)) _capIndex[capKey(k)] = v;
+
 // Resolve a model's capability vector and whether it is MEASURED (from a LiveBench/LMSYS sync) or
 // ESTIMATED (curated table, or keyword-derived). Single source of truth for gates, scoring, evidence.
 function resolveCapabilities(model) {
   if (model.capabilities && model.capabilities.coding != null) return { caps: model.capabilities, measured: true };
-  if (MODEL_CAPABILITIES[model.id]) return { caps: MODEL_CAPABILITIES[model.id], measured: false };
+  const curated = MODEL_CAPABILITIES[model.id] || _capIndex[capKey(model.id)];
+  if (curated) return { caps: curated, measured: false };
   return { caps: deriveCapabilities(model), measured: false };
 }
 
@@ -326,11 +347,13 @@ function expectedCostPer1k(model, tokens) {
   return perReq * 1000;
 }
 
-// Templated, operator-facing rationale for the top pick (no LLM).
-function reasonFor(c, rank, goal, bar) {
+// Templated, operator-facing rationale for the top pick (no LLM). `barMet` is false when NO candidate
+// reached the quality bar and it was relaxed — so we must not claim the winner "cleared" it.
+function reasonFor(c, rank, goal, bar, barMet) {
   if (rank !== 0) return "";
   if (goal === "quality") return `highest capability (${Math.round(c.quality * 100)}) for this task`;
-  return `clears the ${bar.toFixed(2)} quality bar (${c.quality.toFixed(2)}) at the lowest expected cost`;
+  if (barMet) return `clears the ${bar.toFixed(2)} quality bar (${c.quality.toFixed(2)}) at the lowest expected cost`;
+  return `no model meets the ${bar.toFixed(2)} quality bar (best is ${c.quality.toFixed(2)}) — picked the lowest expected cost among the closest, add benchmark data to differentiate`;
 }
 
 // Rank all candidate models for one task with evidence attached. SYNCHRONOUS (cost reads the in-memory
@@ -360,9 +383,11 @@ function rankCandidates(task, liveModels, catalogMap, tokenProfiles, goal, tierO
     const meas = elig.filter((c) => c.measured);
     if (meas.length) elig = meas;
   }
-  // 3) quality bar — relax only if it empties the pool
+  // 3) quality bar — relax only if it empties the pool. barMet records whether the bar actually held,
+  // so the evidence/reason don't claim a "cleared bar" when everything fell short and cost alone decided.
   let clearing = elig.filter((c) => c.quality >= bar);
-  if (!clearing.length) clearing = elig;
+  const barMet = clearing.length > 0;
+  if (!barMet) clearing = elig;
 
   // 4) rank: quality goal → highest quality; else → cheapest expected cost. Deterministic tie-breaks.
   clearing.sort((a, b) => {
@@ -385,7 +410,7 @@ function rankCandidates(task, liveModels, catalogMap, tokenProfiles, goal, tierO
     measured: c.measured,
     confidence: c.measured ? (c.quality >= bar ? "high" : "medium") : "low",
     needsShadowEval: !c.measured,
-    reason: reasonFor(c, i, goal, bar),
+    reason: reasonFor(c, i, goal, bar, barMet),
   }));
 }
 
@@ -508,4 +533,4 @@ async function describe() {
   };
 }
 
-module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION, _goalWeight: goalWeight, _pricedPool: pricedPool, _rankCandidates: rankCandidates, _passesGates: passesGates, _qualityScore: qualityScore };
+module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION, _goalWeight: goalWeight, _pricedPool: pricedPool, _rankCandidates: rankCandidates, _passesGates: passesGates, _qualityScore: qualityScore, _resolveCapabilities: resolveCapabilities, _capKey: capKey };

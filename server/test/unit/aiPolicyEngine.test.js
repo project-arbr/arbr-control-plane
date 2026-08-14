@@ -3,7 +3,7 @@
 // with hand-built model pools — no DB, no LLM — so the policy decisions are asserted in isolation.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { _rankCandidates, _passesGates, _qualityScore } = require("../../src/routing/aiPolicy");
+const { _rankCandidates, _passesGates, _qualityScore, _resolveCapabilities, _capKey } = require("../../src/routing/aiPolicy");
 
 // Helper: a fully-specified (MEASURED) model with an explicit capability vector.
 function measured(id, tier, caps, inputPer1M, outputPer1M) {
@@ -98,6 +98,55 @@ test("same inputs produce the same ranking every time", () => {
   const a = _rankCandidates("coding", pool, { coding: { tier: "mid" } }, {}, "balanced");
   const b = _rankCandidates("coding", pool, { coding: { tier: "mid" } }, {}, "balanced");
   assert.deepEqual(a, b);
+});
+
+// ── Prefixed Bedrock ids resolve to curated capabilities (not the 0.40 unknown default) ─────
+test("region/account-prefixed Bedrock ids resolve to curated capabilities", () => {
+  // us-gov-east-1/amazon.nova-pro-v1:0 must match the curated us.amazon.nova-pro-v1:0 row.
+  const nova = _resolveCapabilities({ id: "us-gov-east-1/amazon.nova-pro-v1:0" });
+  assert.equal(nova.measured, false, "curated caps are estimated, not measured");
+  assert.equal(nova.caps.reasoning, 0.80, "resolves to nova-pro's known reasoning score, not the 0.40 default");
+  assert.equal(nova.caps.analysis, 0.82);
+});
+
+test("deepseek.v3.2 with a region prefix resolves to its curated caps", () => {
+  const ds = _resolveCapabilities({ id: "us-east-2/deepseek.v3.2" });
+  assert.equal(ds.measured, false);
+  assert.equal(ds.caps.coding, 0.90, "a strong coder, not the 0.40 unknown default");
+});
+
+test("capKey strips the region prefix and unifies the Bedrock account prefix", () => {
+  assert.equal(_capKey("us-gov-east-1/amazon.nova-pro-v1:0"), _capKey("us.amazon.nova-pro-v1:0"));
+  assert.equal(_capKey("us-east-2/deepseek.v3.2"), "deepseek-v3-2");
+});
+
+test("a genuinely unknown model still falls back to the estimated default", () => {
+  const unknown = _resolveCapabilities({ id: "acme/frontier-model-9000" });
+  assert.equal(unknown.measured, false);
+  assert.equal(unknown.caps.coding, 0.4, "keyword-derived default when nothing matches");
+});
+
+// ── The reason is honest when the quality bar was relaxed (#the misleading-text bug) ─────────
+test("reason does not claim the bar was cleared when no candidate met it", () => {
+  // Two low-capability estimated models; neither clears the 0.80 balanced bar for a coding task.
+  const pool = [
+    estimated("cheap-unknown", "mid", "assistant", 0.05, 0.1),
+    estimated("dear-unknown", "mid", "assistant", 0.5, 1.0),
+  ];
+  const [top] = _rankCandidates("coding", pool, { coding: { tier: "mid" } }, {}, "balanced");
+  assert.ok(top.quality < 0.8, "precondition: nobody clears the 0.80 bar");
+  assert.match(top.reason, /no model meets the 0\.80 quality bar/, "must not falsely claim the bar was cleared");
+  assert.doesNotMatch(top.reason, /clears the 0\.80 quality bar/);
+});
+
+test("reason DOES claim a cleared bar when a candidate genuinely meets it", () => {
+  const pool = [
+    measured("strong-coder", "mid",
+      { coding:0.92, reasoning:0.85, writing:0.7, analysis:0.75, language:0.6, general:0.7, data:0.8 }, 1.0, 3.0),
+  ];
+  const [top] = _rankCandidates("coding", pool, { coding: { tier: "mid" } }, {}, "balanced");
+  assert.ok(top.quality >= 0.8, "precondition: clears the bar");
+  assert.match(top.reason, /clears the 0\.80 quality bar/);
 });
 
 test("qualityScore is the task-weighted capability average", () => {
