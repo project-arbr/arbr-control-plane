@@ -6,13 +6,13 @@ const RequestRecord = require("../models/RequestRecord");
 const pricing = require("../pricing/registry");
 const { TASK_TYPES, TASK_CATALOG } = require("../classify/classifier");
 const { projectImpact } = require("./policySim");
-const { internalComplete } = require("../internal/complete");
 const { perConnCache } = require("../db/context");
 
-// Increment when MODEL_CAPABILITIES or TASK_CAPABILITIES change.
+// Increment when MODEL_CAPABILITIES / TASK_CAPABILITIES / the scoring engine change.
 // GET /api/ai-policy auto-regenerates if the stored version is behind.
-// HOW TO UPDATE: change the tables below, then increment this number by 1.
-const CAPABILITY_VERSION = 2;
+// HOW TO UPDATE: change the tables/engine below, then increment this number by 1.
+// v3: deterministic evidence-based engine (capability gates + traffic-informed expected cost).
+const CAPABILITY_VERSION = 3;
 
 const _cache = perConnCache(); // per-connection: each tenant caches its own policy map
 const TTL_MS = 5000;
@@ -226,22 +226,6 @@ function deriveCapabilities(model) {
   return caps;
 }
 
-// Brace-depth scanner: finds the last complete {...} block in LLM response text.
-function parseJsonBlock(text) {
-  let depth = 0, end = -1;
-  for (let i = (text || "").length - 1; i >= 0; i--) {
-    const ch = text[i];
-    if (ch === "}") { if (depth === 0) end = i; depth++; }
-    else if (ch === "{") {
-      depth--;
-      if (depth === 0 && end !== -1) {
-        try { return JSON.parse(text.slice(i, end + 1)); } catch { end = -1; depth = 0; }
-      }
-    }
-  }
-  return null;
-}
-
 // How much cost (vs capability) matters per tier.
 // Light is intentionally low (0.20) so that coding-specialist models (e.g. Flash at $0.30)
 // win over cheap generalists (nova-micro at $0.035) when the capability gap is large (>0.22).
@@ -257,19 +241,31 @@ function goalWeight(goal, tier) {
   return COST_SENSITIVITY[tier] || 0.25; // "balanced" / unset
 }
 
-// Scoring function: returns weighted capability score and cost efficiency ratio.
-// costScore = cheapestInPool / model.cost  →  cheapest model = 1.0, expensive → near 0.
-function scoreModel(taskCaps, model, cheapestCost) {
-  const caps = (model.capabilities?.coding != null ? model.capabilities : null)
-            || MODEL_CAPABILITIES[model.id]
-            || deriveCapabilities(model);
+// Resolve a model's capability vector and whether it is MEASURED (from a LiveBench/LMSYS sync) or
+// ESTIMATED (curated table, or keyword-derived). Single source of truth for gates, scoring, evidence.
+function resolveCapabilities(model) {
+  if (model.capabilities && model.capabilities.coding != null) return { caps: model.capabilities, measured: true };
+  if (MODEL_CAPABILITIES[model.id]) return { caps: MODEL_CAPABILITIES[model.id], measured: false };
+  return { caps: deriveCapabilities(model), measured: false };
+}
+
+// Task-weighted capability in 0–1 — the V1 quality signal.
+// SEAM (#5): blend in tenant-eval win-rate + production success-rate terms here once that data exists.
+function qualityScore(taskCaps, caps) {
   let weighted = 0, totalWeight = 0;
   for (const d of DIMS) {
     const w = taskCaps[d] || 0;
-    weighted    += w * (caps[d] || 0.4);
+    weighted    += w * (caps[d] != null ? caps[d] : 0.4);
     totalWeight += w;
   }
-  const capScore  = totalWeight > 0 ? weighted / totalWeight : 0.4;
+  return totalWeight > 0 ? weighted / totalWeight : 0.4;
+}
+
+// Returns weighted capability score + a cost-efficiency ratio (used by simulate()'s capability proxy).
+// costScore = cheapestInPool / model.cost → cheapest model = 1.0, expensive → near 0.
+function scoreModel(taskCaps, model, cheapestCost) {
+  const { caps } = resolveCapabilities(model);
+  const capScore  = qualityScore(taskCaps, caps);
   const cost      = model.inputPer1M || 0.001;
   const costScore = cheapestCost / cost;
   return { capScore, costScore };
@@ -287,133 +283,172 @@ function pricedPool(models) {
   return priced.length ? priced : models;
 }
 
-// Core scoring engine — shared by regenerate() and computeAssignments().
-// excludeModels: array of model IDs to exclude from consideration.
-async function _computeAssignments({ router, eff, excludeModels = [], goal = "balanced" }) {
-  if (!eff) throw new Error("no effective config");
+// ── Deterministic evidence-based engine ─────────────────────────────────────
+// The policy is DECIDED here, not by an LLM: for each task we gate candidates on capability, score
+// their measured capability, price them at their real expected cost, and pick the cheapest that clears
+// the goal's quality bar. Reproducible and explainable. (The LLM no longer chooses; a bounded LLM
+// tie-breaker/explainer is a future option — ties are broken deterministically today.)
+const GATE_NEED  = 0.7;   // a task weight at/above this triggers a hard capability gate on that dimension
+const GATE_FLOOR = 0.55;  // a gated dimension requires at least this much model capability
+const GOAL_BAR   = { cost: 0.70, balanced: 0.80, quality: 0.0 }; // min-quality bar per goal
+const DEFAULT_TASK_CAPS = { coding:0.3, reasoning:0.3, writing:0.3, analysis:0.3, language:0.1, general:0.5, data:0.2 };
+const DEFAULT_TOKENS    = { avgIn: 600, avgOut: 300 }; // assumed profile when a task has no traffic yet
 
+// A model clears a task's hard gates only if it meets the floor on every dimension the task strongly needs.
+function passesGates(taskCaps, caps) {
+  for (const d of DIMS) {
+    if ((taskCaps[d] || 0) >= GATE_NEED && (caps[d] != null ? caps[d] : 0.4) < GATE_FLOOR) return false;
+  }
+  return true;
+}
+
+// Which tiers are eligible for a task's tier (premium considers all; in cost goal it floors at mid).
+function poolFor(tier, liveModels, goal) {
+  const byTier = { light: [], mid: [], premium: [] };
+  for (const m of liveModels) { if (byTier[m.tier]) byTier[m.tier].push(m); }
+  if (tier === "premium") {
+    if (goal === "cost") { const p = [...byTier.mid, ...byTier.premium]; return p.length ? p : liveModels; }
+    return liveModels;
+  }
+  const p = tier === "light" ? [...byTier.light] : [...byTier.light, ...byTier.mid];
+  return p.length ? p : liveModels;
+}
+
+// Real expected cost per 1,000 requests for a model given a task's average token profile — input
+// AND output priced (not input-price-only), from the pool model's own rates. Unpriced input →
+// Infinity (never wins); output rate falls back to the input rate when a model omits it.
+function expectedCostPer1k(model, tokens) {
+  const t = tokens || DEFAULT_TOKENS;
+  const inRate = model.inputPer1M;
+  if (!(inRate > 0)) return Infinity;
+  const outRate = model.outputPer1M != null ? model.outputPer1M : inRate;
+  const perReq = (t.avgIn / 1e6) * inRate + (t.avgOut / 1e6) * outRate;
+  return perReq * 1000;
+}
+
+// Templated, operator-facing rationale for the top pick (no LLM).
+function reasonFor(c, rank, goal, bar) {
+  if (rank !== 0) return "";
+  if (goal === "quality") return `highest capability (${Math.round(c.quality * 100)}) for this task`;
+  return `clears the ${bar.toFixed(2)} quality bar (${c.quality.toFixed(2)}) at the lowest expected cost`;
+}
+
+// Rank all candidate models for one task with evidence attached. SYNCHRONOUS (cost reads the in-memory
+// registry), so the serve-time difficulty path can call it too. `tokenProfiles` may be {} → default profile.
+function rankCandidates(task, liveModels, catalogMap, tokenProfiles, goal, tierOverride) {
+  const tier     = tierOverride || catalogMap[task]?.tier || "mid";
+  const taskCaps = TASK_CAPABILITIES[task] || DEFAULT_TASK_CAPS;
+  const tokens   = tokenProfiles[task] || DEFAULT_TOKENS;
+  const bar      = GOAL_BAR[goal] != null ? GOAL_BAR[goal] : 0.80;
+  const pool     = poolFor(tier, liveModels, goal);
+
+  let cands = pool.map((m) => {
+    const { caps, measured } = resolveCapabilities(m);
+    return {
+      model: m.id, tier: m.tier, measured,
+      quality: qualityScore(taskCaps, caps),
+      expectedCostPer1k: expectedCostPer1k(m, tokens),
+      gatePass: passesGates(taskCaps, caps),
+    };
+  });
+
+  // 1) hard capability gates — relax only if they empty the pool
+  let elig = cands.filter((c) => c.gatePass);
+  if (!elig.length) elig = cands;
+  // 2) conservative unknowns — a premium task never takes an ESTIMATED model when a MEASURED one qualifies
+  if (tier === "premium") {
+    const meas = elig.filter((c) => c.measured);
+    if (meas.length) elig = meas;
+  }
+  // 3) quality bar — relax only if it empties the pool
+  let clearing = elig.filter((c) => c.quality >= bar);
+  if (!clearing.length) clearing = elig;
+
+  // 4) rank: quality goal → highest quality; else → cheapest expected cost. Deterministic tie-breaks.
+  clearing.sort((a, b) => {
+    if (goal === "quality") {
+      if (b.quality !== a.quality) return b.quality - a.quality;
+      if (a.expectedCostPer1k !== b.expectedCostPer1k) return a.expectedCostPer1k - b.expectedCostPer1k;
+    } else {
+      if (a.expectedCostPer1k !== b.expectedCostPer1k) return a.expectedCostPer1k - b.expectedCostPer1k;
+      if (b.quality !== a.quality) return b.quality - a.quality;
+    }
+    if (a.measured !== b.measured) return a.measured ? -1 : 1; // measured beats estimated
+    return a.model < b.model ? -1 : 1;                          // stable id order
+  });
+
+  return clearing.map((c, i) => ({
+    model: c.model,
+    tier: c.tier,
+    quality: +c.quality.toFixed(3),
+    expectedCostPer1k: isFinite(c.expectedCostPer1k) ? +c.expectedCostPer1k.toFixed(4) : null,
+    measured: c.measured,
+    confidence: c.measured ? (c.quality >= bar ? "high" : "medium") : "low",
+    needsShadowEval: !c.measured,
+    reason: reasonFor(c, i, goal, bar),
+  }));
+}
+
+// Average prompt/completion tokens per task from recent customer traffic (windowed) — the real
+// expected-cost inputs. Empty for a tenant with no traffic yet (→ DEFAULT_TOKENS per task).
+async function taskTokenProfiles(windowDays = 14) {
+  const since = new Date(Date.now() - windowDays * 86400000);
+  const agg = await RequestRecord.aggregate([
+    { $match: { status: "success", timestamp: { $gte: since }, ...RequestRecord.CUSTOMER_ONLY } },
+    { $group: { _id: "$taskType", reqs: { $sum: 1 },
+        promptTokens: { $sum: "$promptTokens" }, completionTokens: { $sum: "$completionTokens" } } },
+  ]).catch(() => []);
+  const out = {};
+  for (const r of agg) {
+    if (!r._id || !r.reqs) continue;
+    out[String(r._id).toLowerCase()] = { avgIn: r.promptTokens / r.reqs, avgOut: r.completionTokens / r.reqs };
+  }
+  return out;
+}
+
+// Core engine — deterministic. Returns the winning model per task plus the top-N candidate evidence.
+// excludeModels: array of model IDs to exclude from consideration.
+async function _computeAssignments({ eff, excludeModels = [], goal = "balanced", windowDays = 14 }) {
+  if (!eff) throw new Error("no effective config");
   const excludeSet = new Set(excludeModels);
   const liveIdSet  = new Set(eff.liveIds);
   const liveModels = pricedPool(pricing.listModels()
     .filter((m) => liveIdSet.has(m.provider) && !excludeSet.has(m.id) && m.chatCapable !== false))
     .sort((a, b) => (b.inputPer1M || 0) - (a.inputPer1M || 0));
-
   if (!liveModels.length) throw new Error("no live models available after exclusions");
 
-  // Use the configured default model as the generator — it's the one the admin
-  // has verified works. Fall back to the first live model only if no default is set.
-  const defaultEntry = eff.defaultModel
-    ? pricing.getModel(eff.defaultModel)
-    : null;
-  const generatorModel = (defaultEntry && liveIdSet.has(defaultEntry.provider))
-    ? defaultEntry
-    : liveModels[0];
-  const tasks          = await allTaskTypes();
-  const catalogMap     = Object.fromEntries(TASK_CATALOG.map((t) => [t.id, t]));
-  const validIds       = new Set(liveModels.map((m) => m.id));
+  const tasks         = await allTaskTypes();
+  const catalogMap    = Object.fromEntries(TASK_CATALOG.map((t) => [t.id, t]));
+  const tokenProfiles = await taskTokenProfiles(windowDays);
 
-  // ── Attempt a single LLM call to generate all assignments at once ─────────
-  try {
-    const modelList = liveModels.map((m) =>
-      `  - ${m.id} (tier: ${m.tier || "?"}, $${(m.inputPer1M || 0).toFixed(2)}/1M tokens in)`
-    ).join("\n");
-
-    const taskList = tasks.map((t) => {
-      const meta = catalogMap[t];
-      return `  - ${t}${meta ? ` — ${meta.description || meta.label || ""}` : ""}`;
-    }).join("\n");
-
-    const prompt =
-      `You are routing policy generator for an AI gateway. Assign the single best model to each task type.\n\n` +
-      `Available models (choose ONLY from this list):\n${modelList}\n\n` +
-      `Task types to assign:\n${taskList}\n\n` +
-      `Rules:\n` +
-      `- Use light-tier models for simple/cheap tasks, premium for complex reasoning\n` +
-      `- Vary assignments — don't give every task the same model\n` +
-      `- Choose the model best suited for each task's requirements\n` +
-      (goal === "cost"
-        ? `- GOAL: reduce cost by 30–50% vs using premium models everywhere. Use light-tier for simple tasks (faq, translation, classification, support-response, summarisation). Use mid-tier for moderate tasks (coding, extraction, content generation). Reserve premium only where deep reasoning is truly required. Vary assignments across models — do NOT map every task to the same model, and do NOT choose a model purely because its price is zero; each task must be handled by something genuinely capable of it.\n`
-        : goal === "quality"
-        ? `- GOAL: maximize quality — prefer the most capable model for each task, cost is secondary\n`
-        : `- GOAL: balance capability and cost\n`) +
-      `\n` +
-      `Return ONLY a valid JSON object mapping each task ID to one model ID. Example:\n` +
-      `{"faq":"model-a","coding":"model-b","translation":"model-c"}`;
-
-    const resp = await internalComplete({
-      kind: "policy-generation",
-      router,
-      messages: [{ role: "user", content: prompt }],
-      provider: generatorModel.provider,
-      model:    generatorModel.id,
-      temperature: 0.2,
-      maxTokens:   1200,
-    });
-
-    const raw = parseJsonBlock(resp.text || "");
-    if (raw && typeof raw === "object") {
-      const assignments = {};
-      for (const task of tasks) {
-        const assigned = raw[task];
-        // accept the LLM's choice only if it picked a valid live model
-        assignments[task] = validIds.has(assigned) ? assigned : _scoringFallback(task, liveModels, catalogMap, eff, undefined, goal);
-      }
-      return { assignments, generatorModel };
-    }
-  } catch (_e) { /* fall through to scoring matrix */ }
-
-  // ── Scoring matrix fallback ───────────────────────────────────────────────
   const assignments = {};
+  const evidence    = {};
   for (const task of tasks) {
-    assignments[task] = _scoringFallback(task, liveModels, catalogMap, eff, undefined, goal);
+    const ranked = rankCandidates(task, liveModels, catalogMap, tokenProfiles, goal);
+    assignments[task] = ranked[0]?.model || liveModels[0].id;
+    evidence[task]    = ranked.slice(0, 3);
   }
-  return { assignments, generatorModel };
+  return { assignments, evidence, generatorModel: "deterministic-scorer" };
 }
 
+// Single-id resolver used by the serve-time difficulty downgrade (resolveModel, sync hot path).
+// Delegates to the same gated ranker; the default token profile keeps it synchronous (no DB read).
 function _scoringFallback(task, liveModels, catalogMap, eff, tierOverride, goal) {
-  const byTier = { light: [], mid: [], premium: [] };
-  for (const m of liveModels) { if (byTier[m.tier]) byTier[m.tier].push(m); }
-  const hardFallback = liveModels[0].id;
-
-  function poolFor(tier) {
-    if (tier === "premium") {
-      // cost mode: allow mid as the floor (skip light — premium tasks need real capability)
-      if (goal === "cost") {
-        const p = [...(byTier.mid || []), ...(byTier.premium || [])];
-        return p.length ? p : liveModels;
-      }
-      return liveModels;
-    }
-    const p = tier === "light"
-      ? [...(byTier.light || [])]
-      : [...(byTier.light || []), ...(byTier.mid || [])];
-    return p.length ? p : liveModels;
-  }
-
-  const tier     = tierOverride || catalogMap[task]?.tier || "mid";
-  const taskCaps = TASK_CAPABILITIES[task] || { coding:0.3, reasoning:0.3, writing:0.3, analysis:0.3, language:0.1, general:0.5, data:0.2 };
-  const pool     = poolFor(tier);
-  const cheapest = Math.min(...pool.map((m) => m.inputPer1M || 0.001));
-  const cs       = goalWeight(goal, tier);
-  let best = pool[0], bestScore = -1;
-  for (const m of pool) {
-    const { capScore, costScore } = scoreModel(taskCaps, m, cheapest);
-    const final = (1 - cs) * capScore + cs * costScore;
-    if (final > bestScore) { bestScore = final; best = m; }
-  }
-  return best?.id || hardFallback;
+  const ranked = rankCandidates(task, liveModels, catalogMap, {}, goal, tierOverride);
+  return ranked[0]?.model || liveModels[0].id;
 }
 
-// Policy engine — saves global AI policy to Settings.
-async function regenerate({ router, eff, goal }) {
-  const { assignments, generatorModel } = await _computeAssignments({ router, eff, goal });
+// Policy engine — computes the deterministic policy and saves it to Settings. Returns the stored
+// policy plus per-task candidate `evidence` (top 3, not persisted) for the operator to inspect.
+async function regenerate({ eff, goal, windowDays } = {}) {
+  const { assignments, evidence, generatorModel } = await _computeAssignments({ eff, goal, windowDays });
   const s = await Settings.get();
-  s.aiPolicy = { assignments, generatedAt: new Date(), generatorModel: generatorModel.id, capabilityVersion: CAPABILITY_VERSION };
+  s.aiPolicy = { assignments, generatedAt: new Date(), generatorModel, capabilityVersion: CAPABILITY_VERSION };
   s.markModified("aiPolicy");
   await s.save();
   Settings.invalidateCache();
   invalidate();
-  return s.aiPolicy;
+  return { assignments, generatedAt: s.aiPolicy.generatedAt, generatorModel, capabilityVersion: CAPABILITY_VERSION, evidence };
 }
 
 // Project a proposed taskType->model policy over recent traffic. Cost is a real re-pricing of the
@@ -473,4 +508,4 @@ async function describe() {
   };
 }
 
-module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION, _goalWeight: goalWeight, _pricedPool: pricedPool };
+module.exports = { getEffective, lookup, resolveModel, setAssignments, regenerate, computeAssignments: _computeAssignments, simulate, describe, invalidate, CAPABILITY_VERSION, _goalWeight: goalWeight, _pricedPool: pricedPool, _rankCandidates: rankCandidates, _passesGates: passesGates, _qualityScore: qualityScore };
