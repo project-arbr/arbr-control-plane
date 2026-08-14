@@ -7,6 +7,7 @@ const ModelEntry = require("../models/ModelEntry");
 const Settings = require("../models/Settings");
 const { clampMaxTokens } = require("./clamp");
 const { perConnCache } = require("../db/context");
+const providerCatalogue = require("./table"); // curated first-class provider models (real callable ids)
 
 // Task types that are "cheap work" — safe candidates for a lighter model.
 const CHEAP_TASK_TYPES = new Set([
@@ -71,10 +72,10 @@ async function init() {
     await require("../litellm/sync").run().catch((e) =>
       console.warn("[registry] initial sync failed (run Sync Models in the UI):", e.message)
     );
-  } else {
-    // Unmark legacy seed models so sync cleanup can manage them going forward.
-    await ModelEntry.updateMany({ builtIn: true }, { $set: { builtIn: false } });
   }
+  // Ensure the curated first-class provider models (real callable ids) are present + protected on every
+  // boot, so connected providers can be discovered/pinned regardless of LiteLLM's catalogue naming.
+  await seedProviderCatalogue();
   await _load();
   console.log(`[registry] ${Object.keys(_models()).length} models loaded`);
   startAutoRefresh();
@@ -101,6 +102,31 @@ function stopAutoRefresh() {
 // Call after any write to /api/models to keep cache current.
 async function reload() {
   await _load();
+}
+
+// Seed the curated first-class provider catalogue (pricing/table.js) into the registry as protected
+// builtIn rows. The registry is otherwise populated ONLY from the LiteLLM catalogue, whose ids/provider
+// tags don't match what the adapters actually call (e.g. Bedrock Nova serves `us.amazon.nova-lite-v1:0`,
+// but LiteLLM lists it under a bare/`amazon-nova` key) — so a connected provider's real models can't be
+// discovered or pinned. Seeding the callable ids under the connection provider fixes discovery + pinning
+// and gives the default a real registry entry. Idempotent: refreshes pricing/provider each run but leaves
+// operator-owned tier/enabled after first insert, and keeps builtIn:true so the LiteLLM cleanup (which
+// only deletes builtIn:false) can never remove them. Runs against currentConnection() (per tenant in
+// hosted, the one connection in OSS).
+async function seedProviderCatalogue() {
+  const ops = Object.entries(providerCatalogue.MODELS).map(([id, m]) => ({
+    updateOne: {
+      filter: { id },
+      update: {
+        $set: { provider: m.provider, inputPer1M: m.inputPer1M, outputPer1M: m.outputPer1M, chatCapable: true, builtIn: true },
+        $setOnInsert: { id, tier: m.tier, enabled: true, label: id },
+      },
+      upsert: true,
+    },
+  }));
+  if (ops.length) {
+    await ModelEntry.bulkWrite(ops, { ordered: false }).catch((e) => console.warn("[registry] seed provider catalogue failed:", e.message));
+  }
 }
 
 // ── Sync accessors (safe after init()) ──────────────────────────────────────
@@ -205,6 +231,7 @@ module.exports = {
   // Lifecycle
   init,
   ensureLoaded,
+  seedProviderCatalogue,
   reload,
   startAutoRefresh,
   stopAutoRefresh,
