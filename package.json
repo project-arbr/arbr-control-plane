@@ -49,12 +49,12 @@
     "bench:latency:stream": "node server/scripts/latency-bench.js --stream"
   },
   "dependencies": {
-    "@google-cloud/secret-manager": "^6.3.0",
-    "@langchain/anthropic": "^1.5.1",
+    "@google-cloud/secret-manager": "^7.0.0",
+    "@langchain/anthropic": "^1.5.4",
     "@langchain/aws": "^1.4.3",
     "@langchain/core": "^1.2.2",
     "@langchain/google-genai": "^2.2.0",
-    "@langchain/openai": "^1.5.5",
+    "@langchain/openai": "^1.5.6",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/resources": "^2.10.0",
@@ -66,18 +66,18 @@
     "csrf-csrf": "^4.0.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.6.0",
-    "jose": "^6.2.4",
-    "mongoose": "^9.8.0",
+    "express-rate-limit": "^8.6.2",
+    "jose": "^6.2.8",
+    "mongoose": "^9.9.2",
     "openid-client": "^6.8.4",
     "uuid": "^14.0.1",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "concurrently": "^10.0.3",
-    "eslint": "^10.7.0",
-    "globals": "^17.7.0",
+    "concurrently": "^10.0.4",
+    "eslint": "^10.8.1",
+    "globals": "^17.9.0",
     "mongodb-memory-server": "^11.2.0",
     "supertest": "^7.2.2",
     "vitepress": "^1.6.4"
