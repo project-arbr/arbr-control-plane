@@ -22,6 +22,12 @@ let sendCount;
 before(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
+  // The dedup guarantee IS the unique index on dedupKey. Mongoose builds indexes in the background
+  // after connect(), so without waiting the inserts below can race ahead of the index — uniqueness
+  // isn't enforced yet and every claim "succeeds", so dedup silently no-ops. That's the flake in
+  // issue #293 (tests 98 + 100 failed, 99 passed — the exact signature of an unenforced unique index).
+  // Production is unaffected: the index is built at boot, long before any notification fires.
+  await NotificationDedup.createIndexes();
 });
 
 after(async () => {
