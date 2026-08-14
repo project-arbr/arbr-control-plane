@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 (2026-08-15)
+
+- **Usage analytics** — read-only, authenticated by a **read token** (an API key of kind `read`, created in the console under Settings → API keys), not the gateway key. A read token is scoped to one application (+ optional user) and cannot run inference, so it's safe to embed in a partner app or per-tenant dashboard. Configure with `create_client(read_token=...)` or `$ARBR_READ_TOKEN`.
+  - `usage_overview()` / `ausage_overview()` — headline stats: cost, requests, tokens, success rate, prompt-cache reuse + savings (`GET /v1/usage/overview`).
+  - `usage_timeseries(bucket)` / `ausage_timeseries(bucket)` — cost/request trend, `bucket` ∈ `"hour" | "day" | "month"` (`GET /v1/usage/timeseries`).
+  - `usage_by_model()` / `ausage_by_model()` — spend + usage by model (`GET /v1/usage/by-model`).
+  - `usage_scope()` / `ausage_scope()` — echo the token's own scope (`GET /v1/usage/scope`).
+- **`ChatResponse` now carries `finish_reason`** (`"stop" | "length" | "tool_calls" | "content_filter"`) and an optional **`warning`** — so you can tell a deliberately short answer from one truncated by `max_tokens` (e.g. a reasoning model that spent the whole budget on internal thinking and returned no text).
+
 ## 0.5.0 (2026-07-13)
 
 - **`embeddings()` / `aembeddings()`** — generate vector embeddings via `POST /v1/embeddings`. OpenAI-compatible wire format. Dispatches to Gemini (`gemini-embedding-001`) or any OpenAI-compat provider (`text-embedding-3-small`, etc.) with full observability parity to chat.

@@ -62,22 +62,28 @@ per-request and visible in the dashboard Requests drilldown.
 
 ## API
 
-### `create_client(base_url=None, *, application=None, workflow=None, department=None, user_id=None, api_key=None, timeout_s=60, retries=2) → Client`
+### `create_client(base_url=None, *, application=None, workflow=None, department=None, user_id=None, api_key=None, read_token=None, timeout_s=60, retries=2) → Client`
 
 `base_url` falls back to `$ARBR_GATEWAY_URL`; `api_key` to `$ARBR_API_KEY`. A gateway API key
 (`ab_…`, dashboard → Settings → API keys) is sent as `Authorization: Bearer` and binds attribution
 server-side — required once the gateway has *Require API keys* on. The metadata kwargs are defaults
-merged into every call (per-call kwargs override them).
+merged into every call (per-call kwargs override them). `read_token` (falls back to
+`$ARBR_READ_TOKEN`) is only needed for the read-only [usage analytics](#usage-analytics-read-only) methods.
 
 ### `Client.chat(messages, *, model=None, provider=None, task_type=None, temperature=None, max_tokens=None, ...) → ChatResponse`
 
 `messages` accepts a bare string, `{"role", "content"}` dicts, or LangChain message objects.
 `ChatResponse` is a frozen dataclass: `text`, `usage` (`input_tokens/output_tokens/total_tokens/cached_read_tokens/cache_write_tokens`),
 `model`, `model_requested`, `provider`, `routing_decision`, `classified_by`, `cache_hit`,
-`request_id`, plus `.raw` (the unmodified gateway payload).
+`request_id`, `finish_reason`, `warning`, plus `.raw` (the unmodified gateway payload).
 
 `usage.cached_read_tokens` and `usage.cache_write_tokens` are non-zero when the provider's prompt
 cache was active (Anthropic, OpenAI). The gateway prices these at provider cache rates automatically.
+
+`finish_reason` is `"stop" | "length" | "tool_calls" | "content_filter"` — check it to tell a
+deliberately short answer from one truncated by `max_tokens`. When a reasoning model spends its
+whole budget on internal thinking and returns no text, `finish_reason` is `"length"` and `warning`
+is set; raise `max_tokens` and retry.
 
 ### `Client.achat(...)` / `Client.astream(...)` / `Client.astatus()`
 
@@ -168,6 +174,35 @@ for p in result["data"]:
 ```
 
 Async counterpart: `await arbr.aproviders()`.
+
+### Usage analytics (read-only)
+
+Query cost, requests, and token usage programmatically — the same numbers the dashboard shows,
+scoped to a **read token**. A read token (an API key of kind `read`, created in the console under
+Settings → API keys) is locked to one application (and optionally one user) and **cannot run
+inference**, so it's safe to hand to a partner app or a per-tenant dashboard. Set it via
+`create_client(read_token=...)` or `$ARBR_READ_TOKEN`.
+
+```python
+arbr = create_client(base_url="http://localhost:4100", read_token="ab_read_…")
+
+o = arbr.usage_overview()
+print(f"${o['totalCost']:.2f} over {o['totalRequests']} requests")
+print(f"cache hit rate {o['cacheHitRate'] * 100:.1f}% · saved ${o['cacheSavingUsd']:.2f}")
+
+trend = arbr.usage_timeseries("day")   # [{"date", "requests", "cost", "failures"}, …]
+by_model = arbr.usage_by_model()        # [{"key": model_id, "requests", "cost", …}, …]
+scope = arbr.usage_scope()              # {"application": ..., "userId": ...}
+```
+
+| Method (async prefix `a`) | Endpoint | Returns |
+|---|---|---|
+| `usage_overview()` | `GET /v1/usage/overview` | Headline cost / requests / tokens / cache stats |
+| `usage_timeseries(bucket)` | `GET /v1/usage/timeseries` | Trend points; `bucket` ∈ `"hour" \| "day" \| "month"` |
+| `usage_by_model()` | `GET /v1/usage/by-model` | Spend + usage per model |
+| `usage_scope()` | `GET /v1/usage/scope` | The `{application, userId}` this token is scoped to |
+
+Calling any of these without a read token raises `GatewayError` explaining how to create one.
 
 ## Error handling
 

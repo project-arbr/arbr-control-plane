@@ -326,3 +326,64 @@ def test_chat_usage_cache_fields_absent(gateway):
     res = karya.chat(messages=[{"role": "user", "content": "hi"}])
     assert res.usage.cached_read_tokens == 0
     assert res.usage.cache_write_tokens == 0
+
+
+# ── v0.6.0: finish_reason / warning pass-through ─────────────────────────────
+
+def test_chat_surfaces_finish_reason_and_warning(gateway):
+    gw = gateway(lambda m, p, b, n: (
+        200,
+        {**OK_RESPONSE, "finishReason": "length", "warning": "Output truncated by max_tokens."},
+        0,
+    ))
+    res = create_client(gw.base_url).chat("hi")
+    assert res.finish_reason == "length"
+    assert res.warning == "Output truncated by max_tokens."
+
+
+def test_chat_finish_reason_defaults_to_none(gateway):
+    gw = gateway()  # OK_RESPONSE has no finishReason
+    res = create_client(gw.base_url).chat("hi")
+    assert res.finish_reason is None
+    assert res.warning is None
+
+
+# ── v0.6.0: usage analytics (read token) ─────────────────────────────────────
+
+def test_usage_overview_uses_read_token(gateway):
+    gw = gateway(lambda m, p, b, n: (200, {"totalRequests": 42, "totalCost": 1.23}, 0))
+    client = create_client(gw.base_url, api_key="ab_gateway", read_token="ab_read_xyz")
+    out = client.usage_overview()
+    assert out["totalRequests"] == 42
+    sent = gw.seen[-1]
+    assert sent["method"] == "GET"
+    assert sent["path"] == "/v1/usage/overview"
+    assert sent["auth"] == "Bearer ab_read_xyz"  # read token, not the gateway key
+
+
+def test_usage_timeseries_forwards_bucket(gateway):
+    gw = gateway(lambda m, p, b, n: (200, [], 0))
+    client = create_client(gw.base_url, read_token="ab_read_xyz")
+    client.usage_timeseries("month")
+    assert gw.seen[-1]["path"] == "/v1/usage/timeseries?bucket=month"
+
+
+def test_usage_timeseries_rejects_bad_bucket(gateway):
+    client = create_client(gateway().base_url, read_token="ab_read_xyz")
+    with pytest.raises(GatewayError):
+        client.usage_timeseries("year")
+
+
+def test_usage_by_model_and_scope_endpoints(gateway):
+    gw = gateway(lambda m, p, b, n: (200, {}, 0))
+    client = create_client(gw.base_url, read_token="ab_read_xyz")
+    client.usage_by_model()
+    assert gw.seen[-1]["path"] == "/v1/usage/by-model"
+    client.usage_scope()
+    assert gw.seen[-1]["path"] == "/v1/usage/scope"
+
+
+def test_usage_without_read_token_raises(gateway):
+    client = create_client(gateway().base_url, api_key="ab_gateway")  # no read_token
+    with pytest.raises(GatewayError, match="read token"):
+        client.usage_overview()

@@ -99,6 +99,12 @@ class ChatResponse:
     cache_hit: bool
     request_id: str
     usage: Optional[Usage] = None
+    # Why generation stopped ("stop" | "length" | "tool_calls" | "content_filter"); None if unknown.
+    # "length" means the answer was truncated by max_tokens — distinguish a short answer from a cut-off one.
+    finish_reason: Optional[str] = None
+    # Set only when a reasoning model spent the whole max_tokens budget on internal thinking and returned
+    # no text (see usage — reasoning tokens). None otherwise.
+    warning: Optional[str] = None
     raw: dict = field(repr=False, default_factory=dict)
 
     @staticmethod
@@ -125,6 +131,8 @@ class ChatResponse:
             cache_hit=bool(d.get("cacheHit")),
             request_id=d.get("requestId") or "",
             usage=usage,
+            finish_reason=d.get("finishReason"),
+            warning=d.get("warning"),
             raw=d,
         )
 
@@ -278,6 +286,7 @@ class Client:
         department: Optional[str] = None,
         user_id: Optional[str] = None,
         api_key: Optional[str] = None,
+        read_token: Optional[str] = None,
         timeout_s: float = 60.0,
         retries: int = 2,
     ) -> None:
@@ -294,6 +303,10 @@ class Client:
         # Gateway API key ("ka_…", Settings → API keys). Binds attribution server-side.
         key = api_key or os.environ.get("ARBR_API_KEY")
         self._headers = {"Authorization": f"Bearer {key}"} if key else {}
+        # Read token (an API key of kind "read") for the usage analytics API — scoped read-only,
+        # cannot run inference. Falls back to $ARBR_READ_TOKEN. None → the usage_* methods raise.
+        rt = read_token or os.environ.get("ARBR_READ_TOKEN")
+        self._read_headers = {"Authorization": f"Bearer {rt}"} if rt else None
         self._timeout_s = timeout_s
         self._retries = max(0, retries)
 
@@ -521,6 +534,75 @@ class Client:
         """Async :meth:`task_types`."""
         return await asyncio.to_thread(self.task_types)
 
+    # — usage analytics (read-only; requires a read token) —
+
+    def _usage_get(self, path: str) -> Any:
+        if self._read_headers is None:
+            raise _invalid(
+                "the usage API needs a read token — pass `read_token` (or set "
+                "ARBR_READ_TOKEN). Create one in the console under Settings → API keys. "
+                "A gateway key cannot read usage."
+            )
+        return _request_with_retries(
+            f"{self.base_url}/v1/usage/{path}",
+            method="GET",
+            body=None,
+            timeout_s=self._timeout_s,
+            retries=self._retries,
+            headers=self._read_headers,
+        )
+
+    def usage_overview(self) -> dict:
+        """Headline usage stats for this read token's scope — GET /v1/usage/overview.
+
+        Returns a dict with ``total_cost``-style keys (camelCase on the wire):
+        ``totalRequests``, ``totalCost``, ``customerCost``, ``avgCostPerRequest``,
+        ``avgLatency``, ``totalTokens``, ``failures``, ``cacheHits``,
+        ``cacheHitRate``, ``cachedReadTokens``, ``cacheSavingUsd``.
+        """
+        return self._usage_get("overview")
+
+    async def ausage_overview(self) -> dict:
+        """Async :meth:`usage_overview`."""
+        return await asyncio.to_thread(self.usage_overview)
+
+    def usage_timeseries(self, bucket: str = "day") -> list:
+        """Cost/request trend over time — GET /v1/usage/timeseries.
+
+        ``bucket`` is ``"hour"``, ``"day"``, or ``"month"``. Returns a list of
+        ``{"date", "requests", "cost", "failures"}`` points (UTC, ascending).
+        """
+        if bucket not in ("hour", "day", "month"):
+            raise _invalid('bucket must be "hour", "day", or "month"')
+        return self._usage_get(f"timeseries?bucket={bucket}")
+
+    async def ausage_timeseries(self, bucket: str = "day") -> list:
+        """Async :meth:`usage_timeseries`."""
+        return await asyncio.to_thread(self.usage_timeseries, bucket)
+
+    def usage_by_model(self) -> list:
+        """Spend + usage broken down by model — GET /v1/usage/by-model.
+
+        Returns a list of ``{"key": <model id>, "requests", "cost",
+        "avgLatency", "failures"}`` rows within this token's scope.
+        """
+        return self._usage_get("by-model")
+
+    async def ausage_by_model(self) -> list:
+        """Async :meth:`usage_by_model`."""
+        return await asyncio.to_thread(self.usage_by_model)
+
+    def usage_scope(self) -> dict:
+        """The scope this read token may see — GET /v1/usage/scope.
+
+        Returns ``{"application": ..., "userId": ...}``.
+        """
+        return self._usage_get("scope")
+
+    async def ausage_scope(self) -> dict:
+        """Async :meth:`usage_scope`."""
+        return await asyncio.to_thread(self.usage_scope)
+
 
 def create_client(
     base_url: Optional[str] = None,
@@ -530,11 +612,13 @@ def create_client(
     department: Optional[str] = None,
     user_id: Optional[str] = None,
     api_key: Optional[str] = None,
+    read_token: Optional[str] = None,
     timeout_s: float = 60.0,
     retries: int = 2,
 ) -> Client:
     """Create a gateway client. ``base_url`` falls back to $ARBR_GATEWAY_URL,
-    ``api_key`` to $ARBR_API_KEY."""
+    ``api_key`` to $ARBR_API_KEY, ``read_token`` to $ARBR_READ_TOKEN (for the
+    read-only usage analytics API)."""
     return Client(
         base_url=base_url,
         application=application,
@@ -542,6 +626,7 @@ def create_client(
         department=department,
         user_id=user_id,
         api_key=api_key,
+        read_token=read_token,
         timeout_s=timeout_s,
         retries=retries,
     )
