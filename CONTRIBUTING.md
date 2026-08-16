@@ -7,7 +7,7 @@ for the full workflow. This document covers repo-specific setup.
 ## Local development
 
 ```bash
-# Prerequisites: Node 20+, MongoDB running locally (or Docker)
+# Prerequisites: Node 18.19+ (or 20.6+), MongoDB running locally (or Docker)
 git clone https://github.com/project-arbr/arbr-control-plane.git
 cd arbr-control-plane
 cp .env.example .env          # fill in at minimum ARBR_ADMIN_KEY and MONGO_URI
