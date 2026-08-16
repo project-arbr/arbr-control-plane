@@ -4,7 +4,13 @@ export default defineConfig({
   title: 'Arbr',
   description: 'Self-hosted model optimisation and governance — discover, evaluate, approve, and verify better LLM routes.',
 
-  ignoreDeadLinks: [/localhost/],
+  // `/localhost/` — example URLs in the docs.
+  // `/\.jsx$/` — inline links to source files (e.g. web/src/components/*.jsx in
+  // routing-spec.md). VitePress skips links to files with known code extensions
+  // (.js/.ts) but not .jsx, so it wrongly reports those as dead. These are
+  // pointers to code on GitHub, not built doc pages, so treat them like the .js
+  // siblings and skip the check.
+  ignoreDeadLinks: [/localhost/, /\.jsx$/],
 
   // Internal-only — not linked from the sidebar, and excluded here so it's
   // genuinely file-only: not built, not in the local search index, not
