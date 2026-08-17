@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { api, clearAdminToken, resetCsrfToken, loadCurrency } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Overview from "./pages/Overview.jsx";
@@ -21,6 +22,7 @@ import Users from "./pages/Users.jsx";
 import Account from "./pages/Account.jsx";
 
 export default function App() {
+  const location = useLocation();
   const [status, setStatus] = useState(null);
   // null = probing, "open" = no auth needed / authed, "login" = needs to sign in
   const [authState, setAuthState] = useState(null);
@@ -71,30 +73,32 @@ export default function App() {
 
   return (
     <Layout status={status} user={user} onSignOut={signOut}>
-      <Routes>
-        <Route path="/" element={<Overview />} />
-        <Route path="/applications" element={<Applications />} />
-        <Route path="/applications/:name" element={<ApplicationDetail />} />
-        <Route path="/requests" element={<Requests />} />
-        <Route path="/internal-spend" element={<InternalSpend />} />
-        <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
-        <Route path="/recommendations" element={<Recommendations />} />
-        <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
-        <Route path="/models" element={<Models />} />
-        <Route path="/evals" element={<ModelEvals />} />
-        <Route path="/settings" element={<Settings onChange={refreshStatus} />} />
-        <Route path="/governance" element={<Governance />} />
-        <Route path="/audit" element={<Audit />} />
-        <Route path="/users" element={<Users />} />
-        {/* Hosted-only: the tenant plan/billing page. In OSS (no accountUrl) the route isn't even
-            registered, so /account never mounts the component or hits the (absent) data endpoint. */}
-        {status?.accountUrl && <Route path="/account" element={<Account />} />}
-        <Route path="/docs" element={<Docs />} />
+      <ErrorBoundary key={location.pathname + location.search}>
+        <Routes>
+          <Route path="/" element={<Overview />} />
+          <Route path="/applications" element={<Applications />} />
+          <Route path="/applications/:name" element={<ApplicationDetail />} />
+          <Route path="/requests" element={<Requests />} />
+          <Route path="/internal-spend" element={<InternalSpend />} />
+          <Route path="/routing" element={<Routing onChange={refreshStatus} />} />
+          <Route path="/recommendations" element={<Recommendations />} />
+          <Route path="/budgets" element={<Budgets onChange={refreshStatus} />} />
+          <Route path="/models" element={<Models />} />
+          <Route path="/evals" element={<ModelEvals />} />
+          <Route path="/settings" element={<Settings onChange={refreshStatus} />} />
+          <Route path="/governance" element={<Governance />} />
+          <Route path="/audit" element={<Audit />} />
+          <Route path="/users" element={<Users />} />
+          {/* Hosted-only: the tenant plan/billing page. In OSS (no accountUrl) the route isn't even
+              registered, so /account never mounts the component or hits the (absent) data endpoint. */}
+          {status?.accountUrl && <Route path="/account" element={<Account />} />}
+          <Route path="/docs" element={<Docs />} />
 
-        {/* Redirects for old / deep links. */}
-        <Route path="/rules" element={<Navigate to="/routing" replace />} />
-        <Route path="/views" element={<Navigate to="/?tab=dimensions" replace />} />
-      </Routes>
+          {/* Redirects for old / deep links. */}
+          <Route path="/rules" element={<Navigate to="/routing" replace />} />
+          <Route path="/views" element={<Navigate to="/?tab=dimensions" replace />} />
+        </Routes>
+      </ErrorBoundary>
     </Layout>
   );
 }
