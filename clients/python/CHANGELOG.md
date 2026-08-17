@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 (2026-08-17)
+
+- **Typing**: ship a `py.typed` marker (PEP 561) so downstream type checkers (mypy, pyright) honor the SDK's inline type hints in consuming projects. Packaging-only — no API changes. Thanks to @govardhanreddyg2005-byte (#304).
+
 ## 0.6.0 (2026-08-15)
 
 - **Usage analytics** — read-only, authenticated by a **read token** (an API key of kind `read`, created in the console under Settings → API keys), not the gateway key. A read token is scoped to one application (+ optional user) and cannot run inference, so it's safe to embed in a partner app or per-tenant dashboard. Configure with `create_client(read_token=...)` or `$ARBR_READ_TOKEN`.
