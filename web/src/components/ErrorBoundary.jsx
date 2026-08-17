@@ -20,7 +20,7 @@ export default class ErrorBoundary extends React.Component {
       return (
         <div className="flex h-full flex-col items-center justify-center p-8 text-center">
           <div className="mb-4 text-4xl">⚠️</div>
-          <h2 className="mb-2 text-xl font-semibold text-gray-900">
+          <h2 className="mb-2 text-xl font-semibold text-arbr-charcoal">
             Something went wrong on this page
           </h2>
           <p className="mb-6 text-sm text-gray-500">
@@ -29,7 +29,7 @@ export default class ErrorBoundary extends React.Component {
           <Link
             to="/"
             onClick={() => this.setState({ hasError: false })}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+            className="btn-secondary"
           >
             Return to Overview
           </Link>

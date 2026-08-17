@@ -73,7 +73,10 @@ export default function App() {
 
   return (
     <Layout status={status} user={user} onSignOut={signOut}>
-      <ErrorBoundary key={location.pathname + location.search}>
+      {/* Key on pathname only: reset the boundary when navigating to a different page, but NOT on
+          query-string changes (?tab=…, filters), which would otherwise remount the whole routed
+          subtree on every tab switch and drop in-page state (form edits, evidence panels, etc). */}
+      <ErrorBoundary key={location.pathname}>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/applications" element={<Applications />} />
