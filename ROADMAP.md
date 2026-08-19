@@ -10,7 +10,7 @@ Want to help? Look for [`good first issue`][gfi] and [`help wanted`][hw] labels.
 
 ### Hardening & contributor experience
 Make the project safe and easy to contribute to: reproducible Docker builds (the current
-Dockerfile floats on `node:20-alpine` and runs `apk upgrade` at build time, so images
+Dockerfile floats on `node:26-alpine` and runs `apk upgrade` at build time, so images
 aren't byte-for-byte reproducible across builds).
 
 ### Observability
