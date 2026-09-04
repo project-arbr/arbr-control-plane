@@ -84,6 +84,8 @@ server/src/
   index.js          boot: mongo → registry.init() → mount routes → listen; GET /health
                     (liveness) and GET /health/ready (readiness — see health/ below)
   config.js         env-driven config + demo-mode detection
+  db/               context.js — request-scoped Mongo context for in-process multi-tenancy
+  cloud/            entitlements.js — plan/feature entitlement gating (cloud tenancy)
   gateway/          /v1 request handling
     core.js           shared resolveRoute / fallback / headers (both entry points)
     handler.js        native /v1/chat + resolveRoute implementation
@@ -99,6 +101,7 @@ server/src/
                     canaryEngine / canaryMonitor (guarded rollout + auto-rollback) ·
                     semanticCache · errorAlertMonitor · notifier
   classify/         task-type classification (provided / keyword / AI)
+  analytics/        aggregate.js (spend/latency rollups) · savings.js (realised savings)
   recommend/        engine.js (opportunity detection) · stage.js / stageBatch.js (derived
                     lifecycle stage) · outcome.js (realised-vs-projected) ·
                     evidenceReport.js (exportable report)
@@ -120,10 +123,15 @@ server/src/
                         (classification, judging, connection/model tests) — tagged and excluded
                         from customer-facing analytics
   health/readiness.js   pure GET /health/ready decision logic (shutting-down / Mongo state)
+  logging/          logger.js (structured request logging) · piiFilter.js (PII masking)
   telemetry/        OpenTelemetry: otel.js (OTLP export) · attributes.js (span shape,
                     redaction) · runtime.js (dashboard-adjustable sample ratio / on-off) —
                     off by default, wired from the post-response log path (see below)
   maintenance/purge.js  retention purge of old request records
+  currency/         fx.js — live FX rates for display-currency conversion
+  embed/            usageChart.js — embeddable per-user usage iframe widget
+  seed/             seed.js (`npm run seed`) · promptPacks.js — demo/seed data
+  utils/            boundedTtlCache.js · csv.js — shared helpers
   api/routes.js     thin re-export of api/routes/* domain modules (master-key gated)
   api/routes/       status, caps, keys, recommendations, evals, analytics, ops
                     (config export/import, support bundle), …
