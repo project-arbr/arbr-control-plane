@@ -30,7 +30,11 @@ const requestRecordSchema = new mongoose.Schema(
     department: { type: String, index: true },
 
     // model — requested vs actually served
-    provider: { type: String, index: true }, // provider served
+    provider: { type: String, index: true },
+    // Which of the provider's keys served this request. Indexed (not tucked into
+    // routingExplain) so spend can be grouped and filtered per key — per-key cost
+    // attribution is usually the reason an operator runs more than one key at all.
+    credentialAlias: { type: String, default: null, index: true }, // provider served
     model: { type: String, index: true },     // model served
     modelRequested: { type: String, index: true },
     taskType: { type: String, index: true },

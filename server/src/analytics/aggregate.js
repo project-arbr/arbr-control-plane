@@ -20,7 +20,7 @@ function buildMatch(filter = {}) {
     if (filter.from) m.timestamp.$gte = new Date(filter.from);
     if (filter.to) m.timestamp.$lte = new Date(filter.to);
   }
-  for (const f of ["application", "workflow", "department", "model", "provider", "taskType", "userId", "status"]) {
+  for (const f of ["application", "workflow", "department", "model", "provider", "credentialAlias", "taskType", "userId", "status"]) {
     if (filter[f]) m[f] = filter[f];
   }
   if (filter.requestId) m.requestId = filter.requestId;

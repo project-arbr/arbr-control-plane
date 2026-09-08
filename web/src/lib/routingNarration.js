@@ -40,6 +40,15 @@ export function explainRouting(r) {
       : `No model was pinned and no rule or policy matched, so Arbr served the default model, ${r.model}.`);
   }
 
+  // Which provider key served it, but only when one was actually pinned — saying "used the
+  // default key" on every request would be noise. A pin that fell back is the case worth
+  // reading: the request succeeded, on a different key than the operator asked for.
+  if (x.credential) {
+    lines.push(x.credential.fellBack
+      ? `The ${x.credential.source}-pinned API key "${x.credential.requested}" no longer exists for ${r.provider}, so Arbr used the provider's default key ("${x.credential.used}") instead.`
+      : `The ${x.credential.source} pinned ${r.provider} API key "${x.credential.used}" was used for this request.`);
+  }
+
   // Overrides chain. Older records carry only the single `override`; newer ones
   // carry the whole ordered `overrides`. Narrating every step is what makes a
   // model the caller never asked for traceable back to the rule that picked it.

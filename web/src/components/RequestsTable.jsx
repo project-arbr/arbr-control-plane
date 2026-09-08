@@ -68,13 +68,13 @@ function RequestFlow({ r }) {
           : (r.model || "—")}
       />
       <FlowArrow />
-      <FlowNode label="Provider" value={r.provider || "—"} />
+      <FlowNode label="Provider" value={r.provider || "—"} sub={r.credentialAlias} />
       {r.status !== "success" && <span className="shrink-0"><Badge tone="red">{r.status}</Badge></span>}
     </div>
   );
 }
 
-const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", taskType: "", status: "", requestId: "", source: "" };
+const EMPTY_FILTER = { application: "", workflow: "", department: "", model: "", provider: "", credentialAlias: "", taskType: "", status: "", requestId: "", source: "" };
 
 const PERIODS = [
   { label: "Today",    days: 0 },
