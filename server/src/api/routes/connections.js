@@ -7,6 +7,9 @@ const { toRouterConfig, getRouter } = require("../../providers/router");
 const { internalComplete } = require("../../internal/complete");
 const secretResolver = require("../../security/secretResolver");
 const { PROVIDERS } = require("../../config");
+const { logAction } = require("../auditLogger");
+const Rule = require("../../models/Rule");
+const ApplicationConfig = require("../../models/ApplicationConfig");
 
 const router = express.Router();
 
@@ -48,15 +51,92 @@ router.put("/default-model", requireRole("administrator"), async (req, res, next
   } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
 });
 
-// Live "test" — make a tiny real call with the effective key for one provider.
+// ── individual provider keys (aliases) ──
+//
+// The four routes above are the pre-multi-key surface and keep their exact meaning:
+// PUT writes the alias "default", DELETE disconnects the provider entirely. These operate
+// on one key at a time.
+
+// Add or replace one named key. Body: { alias, makeDefault?, ...credential fields }.
+router.post("/connections/:provider/keys", requireRole("administrator"), async (req, res) => {
+  try {
+    const { alias, makeDefault, ...credential } = req.body || {};
+    // Required here, unlike setCredential's default. Silently falling back to "default"
+    // would let a request that forgot the name overwrite the provider's existing key.
+    if (alias == null || String(alias).trim() === "") {
+      return res.status(400).json({ error: "bad_request", message: "alias is required" });
+    }
+    await connections.setCredential(req.params.provider, credential, { alias, makeDefault: !!makeDefault });
+    setImmediate(() => logAction("connection.keyAdd", "providerCredential", req.params.provider,
+      { alias: String(alias || "").toLowerCase(), makeDefault: !!makeDefault }, req.user));
+    res.json(await connections.statuses());
+  } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
+});
+
+router.put("/connections/:provider/keys/:alias", requireRole("administrator"), async (req, res) => {
+  try {
+    const { makeDefault, ...credential } = req.body || {};
+    await connections.setCredential(req.params.provider, credential,
+      { alias: req.params.alias, makeDefault: !!makeDefault });
+    setImmediate(() => logAction("connection.keyUpdate", "providerCredential", req.params.provider,
+      { alias: req.params.alias }, req.user));
+    res.json(await connections.statuses());
+  } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
+});
+
+// Removing a key that a rule or an application still pins would silently redirect that
+// traffic to the default key. Refuse, name what is pinning it, and make the operator opt in.
+router.delete("/connections/:provider/keys/:alias", requireRole("administrator"), async (req, res, next) => {
+  try {
+    const { provider, alias } = req.params;
+    if (req.query.force !== "1") {
+      const [rules, apps] = await Promise.all([
+        Rule.find({ "target.provider": provider, "target.credentialAlias": alias }).lean(),
+        ApplicationConfig.find({ [`credentialAliases.${provider}`]: alias }).lean(),
+      ]);
+      if (rules.length || apps.length) {
+        return res.status(409).json({
+          error: "alias_in_use",
+          message:
+            `Key "${alias}" is pinned by ${rules.length} rule(s) and ${apps.length} application(s). ` +
+            "They will fall back to this provider's default key if you remove it.",
+          rules: rules.map((r) => ({ id: String(r._id), condition: r.condition, model: r.target?.model })),
+          applications: apps.map((a) => a.applicationName),
+        });
+      }
+    }
+    await connections.removeCredential(provider, alias);
+    setImmediate(() => logAction("connection.keyRemove", "providerCredential", provider,
+      { alias, forced: req.query.force === "1" }, req.user));
+    res.json(await connections.statuses());
+  } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
+});
+
+// Promote a key to the provider's default. An env credential still outranks it, so the
+// response says which key is actually effective rather than implying the change took hold.
+router.put("/connections/:provider/keys/:alias/default", requireRole("administrator"), async (req, res) => {
+  try {
+    const out = await connections.setDefaultCredential(req.params.provider, req.params.alias);
+    setImmediate(() => logAction("connection.keySetDefault", "providerCredential", req.params.provider,
+      { alias: out.alias, effectiveDefault: out.effectiveDefault }, req.user));
+    res.json({ ...(await connections.statuses()), effectiveDefault: out.effectiveDefault });
+  } catch (e) { res.status(400).json({ error: "bad_request", message: String(e.message || e) }); }
+});
+
+// Live "test" — make a tiny real call with one provider's key. ?alias= tests a specific
+// key, so an operator can prove a key works BEFORE pinning traffic to it.
 router.post("/connections/:provider/test", requireRole("administrator"), async (req, res) => {
   try {
     const provider = req.params.provider;
     const eff = await connections.effective();
     const p = eff.providers[provider];
     if (!p) return res.status(400).json({ ok: false, message: "provider not configured" });
+    const resolved = connections.credentialFor(eff, provider, req.query.alias || null);
+    if (req.query.alias && resolved.fellBack) {
+      return res.json({ ok: false, message: `no key "${req.query.alias}" for provider "${provider}"` });
+    }
     const r = createRouter({
-      providers: { [provider]: toRouterConfig(provider, p) },
+      providers: { [provider]: toRouterConfig(provider, { ...p, credential: resolved.credential }) },
       defaultProvider: provider,
     });
     // Generous budget so "thinking" models (e.g. Gemini 2.5) have room to answer.
