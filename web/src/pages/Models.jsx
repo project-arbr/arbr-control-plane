@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, fmt } from "../api.js";
-import { Badge, Card, Spinner } from "../components/ui.jsx";
+import { Badge, Card, Spinner, Table } from "../components/ui.jsx";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -584,10 +584,18 @@ function ModelList({ providerId, models, onRefresh }) {
 
 // ── ProviderConfigureForm ─────────────────────────────────────────────────────
 
-function ProviderConfigureForm({ provider, onSaved, onCancel }) {
+// mode "add"     — a new named key; the alias is editable.
+// mode "replace" — a new secret for an existing alias; the alias is fixed. There is no
+//                  rename, because renaming would orphan every rule and app pinning it.
+function ProviderConfigureForm({ provider, mode = "add", alias: fixedAlias, onSaved, onCancel }) {
   const isAws = provider.authType === "aws";
+  const storedKeys = (provider.keys || []).filter((k) => k.editable);
   const [form, setForm] = useState({
     apiKey: "", accessKeyId: "", secretAccessKey: "", region: provider.region || "us-east-1",
+    // The provider's first key is called "default" — an operator adding one key should not
+    // have to invent a name for it.
+    alias: fixedAlias || (storedKeys.length ? "" : "default"),
+    makeDefault: storedKeys.length === 0,
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState("");
@@ -599,7 +607,11 @@ function ProviderConfigureForm({ provider, onSaved, onCancel }) {
       const cred = isAws
         ? { accessKeyId: form.accessKeyId, secretAccessKey: form.secretAccessKey, region: form.region }
         : { apiKey: form.apiKey };
-      await api.setProviderCredential(provider.provider, cred);
+      if (mode === "replace") {
+        await api.updateProviderKey(provider.provider, fixedAlias, cred);
+      } else {
+        await api.addProviderKey(provider.provider, { ...cred, alias: form.alias, makeDefault: form.makeDefault });
+      }
       onSaved();
     } catch (e) { setErr(e.message); }
     finally { setSaving(false); }
@@ -609,6 +621,26 @@ function ProviderConfigureForm({ provider, onSaved, onCancel }) {
 
   return (
     <form onSubmit={submit} className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+      {mode === "replace" ? (
+        <p className="text-sm text-gray-500">
+          Replacing the secret for key <span className="font-medium text-arbr-charcoal">{fixedAlias}</span>.
+          Rules and applications pinning it keep working.
+        </p>
+      ) : (
+        <Field label="Key name">
+          <input
+            className={INPUT}
+            placeholder="e.g. prod-eu, staging, batch"
+            value={form.alias}
+            onChange={s("alias")}
+            required
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Lowercase letters, digits, dots, dashes and underscores. Routing rules pin a key by
+            this name, and it cannot be changed later.
+          </p>
+        </Field>
+      )}
       {isAws ? (
         <>
           <Field label="Access Key ID">
@@ -626,6 +658,13 @@ function ProviderConfigureForm({ provider, onSaved, onCancel }) {
           <input type="password" className={INPUT} placeholder="••••••••" value={form.apiKey} onChange={s("apiKey")} required />
         </Field>
       )}
+      {mode === "add" && storedKeys.length > 0 && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={form.makeDefault}
+            onChange={(e) => setForm({ ...form, makeDefault: e.target.checked })} />
+          Make this the provider&rsquo;s default key
+        </label>
+      )}
       {err && <p className="text-sm text-red-600">{err}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={saving} className={BTN_PRIMARY}>{saving ? "Saving…" : "Save"}</button>
@@ -639,20 +678,56 @@ function ProviderConfigureForm({ provider, onSaved, onCancel }) {
 
 function BuiltinProviderDetail({ provider, models, onRefresh }) {
   const [configuring, setConfiguring]     = useState(false);
+  const [replacing, setReplacing]         = useState(null); // alias being re-keyed
   const [testResult, setTestResult]       = useState(null);
-  const [testing, setTesting]             = useState(false);
+  const [testing, setTesting]             = useState(null); // alias under test
+  const [busyAlias, setBusyAlias]         = useState(null);
 
-  async function testConn() {
-    setTesting(true); setTestResult(null);
+  const keys = provider.keys || [];
+
+  async function testConn(alias) {
+    setTesting(alias || "__default__"); setTestResult(null);
     try {
-      const r = await api.testProvider(provider.provider);
-      setTestResult(r);
-    } catch { setTestResult({ ok: false, message: "Request failed" }); }
-    finally { setTesting(false); }
+      const r = await api.testProvider(provider.provider, alias);
+      setTestResult({ ...r, alias });
+    } catch { setTestResult({ ok: false, message: "Request failed", alias }); }
+    finally { setTesting(null); }
   }
 
-  async function removeKey() {
-    if (!window.confirm("Remove this credential? Requests to this provider will fail until a new key is added.")) return;
+  async function makeDefault(alias) {
+    setBusyAlias(alias);
+    try {
+      const r = await api.setDefaultProviderKey(provider.provider, alias);
+      // An env credential outranks anything stored, so saying "done" without saying this
+      // would leave the operator believing traffic moved when it did not.
+      if (r?.effectiveDefault && r.effectiveDefault !== alias) {
+        alert(`Saved, but the credential from the environment still takes precedence, so "${r.effectiveDefault}" remains the key actually in use.`);
+      }
+      onRefresh();
+    } catch (e) { alert(e.message); }
+    finally { setBusyAlias(null); }
+  }
+
+  // Two-step delete: the server refuses (409) while a rule or application still pins the
+  // key, and names them, so "delete anyway" is an informed choice rather than a surprise.
+  async function removeKeyAlias(alias) {
+    if (!window.confirm(`Remove key "${alias}"?`)) return;
+    setBusyAlias(alias);
+    try {
+      await api.removeProviderKeyAlias(provider.provider, alias);
+      onRefresh();
+    } catch (e) {
+      if (e.status === 409) {
+        if (window.confirm(`${e.message}\n\nRemove it anyway?`)) {
+          try { await api.removeProviderKeyAlias(provider.provider, alias, true); onRefresh(); }
+          catch (e2) { alert(e2.message); }
+        }
+      } else alert(e.message);
+    } finally { setBusyAlias(null); }
+  }
+
+  async function disconnect() {
+    if (!window.confirm("Remove every stored key for this provider? Requests will fail until a new key is added.")) return;
     try { await api.removeProviderKey(provider.provider); onRefresh(); }
     catch (e) { alert(e.message); }
   }
@@ -669,34 +744,82 @@ function BuiltinProviderDetail({ provider, models, onRefresh }) {
             <StatusDot live={isLive} />
             <span className="text-sm text-gray-500">
               {isLive
-                ? provider.authType === "aws"
-                  ? `AWS · ${provider.region || "us-east-1"}`
-                  : `API key ····${provider.last4}`
+                ? `${keys.length} key${keys.length === 1 ? "" : "s"}${provider.authType === "aws" ? ` · AWS ${provider.region || "us-east-1"}` : ""}`
                 : "Not configured"}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isLive && !configuring && (
-            <>
-              <button onClick={testConn} disabled={testing} className={BTN_GHOST}>
-                {testing ? "Testing…" : "Test connection"}
-              </button>
-              {provider.editable && (
-                <button onClick={removeKey} className={`${BTN} text-red-600 border border-red-200 hover:bg-red-50`}>Remove key</button>
-              )}
-            </>
+          {isLive && provider.editable && !configuring && (
+            <button onClick={disconnect} className={`${BTN} text-red-600 border border-red-200 hover:bg-red-50`}>Disconnect</button>
           )}
           {!configuring && (
-            <button onClick={() => setConfiguring(true)} className={BTN_PRIMARY}>
-              {isLive ? "Reconfigure" : "Configure"}
+            <button onClick={() => { setReplacing(null); setConfiguring(true); }} className={BTN_PRIMARY}>
+              {isLive ? "Add key" : "Configure"}
             </button>
           )}
         </div>
       </div>
 
+      {provider.shadowedByCustom && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          A custom provider is using the id <span className="font-medium">{provider.provider}</span> and takes
+          precedence, so the keys below are not in use. Remove the custom provider to restore them.
+        </div>
+      )}
+
+      {isLive && (
+        <div>
+          <div className="mb-2 flex items-baseline justify-between">
+            <h3 className="text-sm font-medium text-arbr-charcoal">Keys</h3>
+            <p className="text-xs text-gray-400">Routing rules and applications can pin any of these by name.</p>
+          </div>
+          <Table
+            columns={[
+              { key: "alias", header: "Name", render: (k) => (
+                <span className="flex items-center gap-2">
+                  <span className="font-medium">{k.alias}</span>
+                  {k.isDefault && <Badge tone="green">default</Badge>}
+                </span>
+              ) },
+              { key: "source", header: "Source", render: (k) => (
+                <Badge tone={k.editable ? "charcoal" : "gray"}>{k.source}</Badge>
+              ) },
+              { key: "last4", header: "Secret", render: (k) => (
+                <span className="font-mono text-xs text-gray-500">
+                  {k.last4 ? `····${k.last4}` : "—"}{k.region ? ` · ${k.region}` : ""}
+                </span>
+              ) },
+              { key: "actions", header: "", render: (k) => (
+                <div className="flex items-center justify-end gap-2">
+                  <button onClick={() => testConn(k.alias)} disabled={testing === k.alias} className={BTN_GHOST}>
+                    {testing === k.alias ? "Testing…" : "Test"}
+                  </button>
+                  {k.editable && !k.isDefault && (
+                    <button onClick={() => makeDefault(k.alias)} disabled={busyAlias === k.alias} className={BTN_GHOST}>
+                      Make default
+                    </button>
+                  )}
+                  {k.editable && (
+                    <>
+                      <button onClick={() => { setReplacing(k.alias); setConfiguring(true); }} className={BTN_GHOST}>Replace</button>
+                      <button onClick={() => removeKeyAlias(k.alias)} disabled={busyAlias === k.alias}
+                        className={`${BTN} text-red-600 hover:bg-red-50`}>Remove</button>
+                    </>
+                  )}
+                  {!k.editable && <span className="text-xs text-gray-400">from environment · always default</span>}
+                </div>
+              ) },
+            ]}
+            rows={keys}
+            empty="No keys yet."
+          />
+        </div>
+      )}
+
       {testResult && (
         <div className={`text-sm rounded-lg px-4 py-3 ${testResult.ok ? "bg-arbr-accent-50 text-arbr-accent-800 border border-arbr-accent-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {testResult.alias ? <span className="font-medium">{testResult.alias}: </span> : null}
           {testResult.ok ? `✓ Connected · model: ${testResult.model}${testResult.sample ? ` · "${testResult.sample}"` : ""}` : `✗ ${testResult.message}`}
         </div>
       )}
@@ -704,8 +827,10 @@ function BuiltinProviderDetail({ provider, models, onRefresh }) {
       {configuring && (
         <ProviderConfigureForm
           provider={provider}
-          onSaved={() => { setConfiguring(false); onRefresh(); }}
-          onCancel={() => setConfiguring(false)}
+          mode={replacing ? "replace" : "add"}
+          alias={replacing}
+          onSaved={() => { setConfiguring(false); setReplacing(null); onRefresh(); }}
+          onCancel={() => { setConfiguring(false); setReplacing(null); }}
         />
       )}
 

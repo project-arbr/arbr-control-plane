@@ -214,12 +214,18 @@ export const api = {
   connections: () => req("/connections"),
   setProviderCredential: (provider, credential) => req(`/connections/${provider}`, { method: "PUT", body: JSON.stringify(credential) }),
   removeProviderKey: (provider) => req(`/connections/${provider}`, { method: "DELETE" }),
+  // Named keys. A provider can hold several; routing rules and applications pin one by alias.
+  addProviderKey: (provider, body) => req(`/connections/${provider}/keys`, { method: "POST", body: JSON.stringify(body) }),
+  updateProviderKey: (provider, alias, body) => req(`/connections/${provider}/keys/${encodeURIComponent(alias)}`, { method: "PUT", body: JSON.stringify(body) }),
+  // force skips the "this key is still pinned" check (409) — the caller has seen what uses it.
+  removeProviderKeyAlias: (provider, alias, force) => req(`/connections/${provider}/keys/${encodeURIComponent(alias)}${force ? "?force=1" : ""}`, { method: "DELETE" }),
+  setDefaultProviderKey: (provider, alias) => req(`/connections/${provider}/keys/${encodeURIComponent(alias)}/default`, { method: "PUT" }),
   setDefaultProvider: (provider) => req("/default-provider", { method: "PUT", body: JSON.stringify({ provider }) }),
   setDefaultModel: (model) => req("/default-model", { method: "PUT", body: JSON.stringify({ model }) }),
   getCurrency: () => req("/currency"),
   setCurrencyCode: (currency) => req("/currency", { method: "PUT", body: JSON.stringify({ currency }) }),
   refreshCurrency: () => req("/currency/refresh", { method: "POST" }),
-  testProvider: (provider) => req(`/connections/${provider}/test`, { method: "POST" }),
+  testProvider: (provider, alias) => req(`/connections/${provider}/test${alias ? `?alias=${encodeURIComponent(alias)}` : ""}`, { method: "POST" }),
 
   customProviders: () => req("/custom-providers"),
   addCustomProvider: (body) => req("/custom-providers", { method: "POST", body: JSON.stringify(body) }),

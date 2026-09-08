@@ -142,11 +142,12 @@ function RouteTester() {
   );
 }
 
-function CreateRuleForm({ models, onCreated }) {
+function CreateRuleForm({ models, providerKeys, onCreated }) {
   const [field, setField] = useState("taskType");
   const [value, setValue] = useState("");
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
+  const [credentialAlias, setCredentialAlias] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [priority, setPriority] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -156,8 +157,12 @@ function CreateRuleForm({ models, onCreated }) {
   const providers = [...new Set(models.map((m) => m.provider))];
   const providerModels = models.filter((m) => m.provider === provider);
 
+  // Keys belong to a provider, so switching provider invalidates the chosen key.
+  const keys = providerKeys?.[provider] || [];
+
   useEffect(() => { if (!provider && providers.length) setProvider(providers[0]); }, [models]);
   useEffect(() => { if (providerModels.length) setModel(providerModels[0].id); }, [provider]);
+  useEffect(() => { setCredentialAlias(""); }, [provider]);
 
   const submit = async () => {
     setErr(null); setWarn(null);
@@ -167,7 +172,7 @@ function CreateRuleForm({ models, onCreated }) {
     try {
       const created = await api.createRule({
         condition: { [field]: value.trim() },
-        target: { provider, model },
+        target: { provider, model, credentialAlias: credentialAlias || null },
         enabled,
         priority: Number(priority) || 0,
         note: `${field}=${value.trim()} → ${model}`,
@@ -208,6 +213,15 @@ function CreateRuleForm({ models, onCreated }) {
             {providerModels.map((m) => <option key={m.id} value={m.id}>{m.id} ({m.tier})</option>)}
           </select>
         </div>
+        {keys.length > 1 && (
+          <div>
+            <div className="label mb-1" title="Which of this provider's API keys serves matching requests.">Key</div>
+            <select className="input w-40" value={credentialAlias} onChange={(e) => setCredentialAlias(e.target.value)}>
+              <option value="">(default key)</option>
+              {keys.map((k) => <option key={k.alias} value={k.alias}>{k.alias}{k.isDefault ? " (default)" : ""}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <div className="label mb-1" title="Higher wins when multiple rules match. Ties break by how specific the rule is.">Priority</div>
           <input className="input w-20" type="number" step="1" value={priority} onChange={(e) => setPriority(e.target.value)} />
@@ -644,6 +658,7 @@ export default function Routing({ onChange }) {
   const [models, setModels] = useState([]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [mode, setMode] = useState("off");
+  const [providerKeys, setProviderKeys] = useState({});
   const [cacheMsg, setCacheMsg] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -651,8 +666,13 @@ export default function Routing({ onChange }) {
     // Only connected providers' CHAT-CAPABLE models — a rule/policy targeting an unconnected
     // provider would never route, and a media/embedding model (e.g. Lyria) can't serve chat.
     // (The Models page manages the full registry; routing targets the live, routable ones.)
-    Promise.all([api.rules(), api.routingMode(), api.models({ live: true, routable: true })])
-      .then(([r, rm, m]) => { setRules(r); setMode(rm.routingMode); setModels(m); })
+    Promise.all([api.rules(), api.routingMode(), api.models({ live: true, routable: true }), api.connections()])
+      .then(([r, rm, m, c]) => {
+        setRules(r); setMode(rm.routingMode); setModels(m);
+        // { providerId: keys[] } — only providers that actually have more than one key
+        // need a picker, so the rule form stays a single row for everyone else.
+        setProviderKeys(Object.fromEntries((c.providers || []).map((p) => [p.provider, p.keys || []])));
+      })
       .catch((e) => setErr(e.message))
       .finally(() => setLoadingModels(false));
   useEffect(() => { load(); }, []);
@@ -692,7 +712,7 @@ export default function Routing({ onChange }) {
               <div className="py-4 text-sm text-gray-500">
                 No connected providers yet. Connect one under <span className="font-medium text-arbr-charcoal">Models</span> to create routing rules.
               </div>
-            ) : <CreateRuleForm models={models} onCreated={load} />}
+            ) : <CreateRuleForm models={models} providerKeys={providerKeys} onCreated={load} />}
           </Card>
 
           <Card title="Rules">
@@ -709,12 +729,18 @@ export default function Routing({ onChange }) {
                   { key: "condition", header: "When", render: (r) => cond(r.condition) },
                   { key: "target", header: "Route to", render: (r) => (
                     <div className="flex items-center gap-2">
-                      <Badge tone="charcoal">{r.target.provider} · {r.target.model}</Badge>
+                      <Badge tone="charcoal">
+                        {r.target.provider} · {r.target.model}
+                        {r.target.credentialAlias ? ` · key: ${r.target.credentialAlias}` : ""}
+                      </Badge>
                       {r.health && r.health.level === "error" && (
                         <span title={r.health.detail}><Badge tone="red">offline</Badge></span>
                       )}
                       {r.health && r.health.level === "warn" && (
-                        <span title={r.health.detail}><Badge tone="amber">{r.health.reason === "unpriced" ? "unpriced" : "unknown"}</Badge></span>
+                        <span title={r.health.detail}><Badge tone="amber">
+                          {r.health.reason === "unpriced" ? "unpriced"
+                            : r.health.reason === "alias-unknown" ? "key missing" : "unknown"}
+                        </Badge></span>
                       )}
                     </div>
                   ) },
