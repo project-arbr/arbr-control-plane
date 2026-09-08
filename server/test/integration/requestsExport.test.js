@@ -94,12 +94,13 @@ test("Content-Disposition header is set for attachment download", async () => {
   assert.match(res.headers["content-disposition"], /requests\.csv/);
 });
 
-test("header row contains the expected 21 columns", async () => {
+test("header row contains the expected 22 columns", async () => {
   const res = await agent.get("/api/requests/export");
   const header = res.text.split("\n")[0];
   const cols = header.split(",");
-  assert.equal(cols.length, 21, "21 columns in header");
+  assert.equal(cols.length, 22, "22 columns in header");
   assert.ok(cols.includes("timestamp"), "timestamp column present");
   assert.ok(cols.includes("requestId"), "requestId column present");
   assert.ok(cols.includes("totalCost"), "totalCost column present");
+  assert.ok(cols.includes("credentialAlias"), "credentialAlias column present (which provider key served the request)");
 });
