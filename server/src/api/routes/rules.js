@@ -23,8 +23,20 @@ async function withHealth(rules) {
     health: ruleEngine.ruleTargetHealth(r.target, {
       liveIds: eff.liveIds,
       modelEntry: pricing.getModel(r.target?.model),
+      aliases: Object.keys(eff.providers[r.target?.provider]?.credentials || {}),
     }),
   }));
+}
+
+// Normalize target.credentialAlias. An alias that no provider has is NOT rejected — the
+// rule still routes, on the provider's default key, and withHealth() flags it. Rejecting
+// here would make deleting a key retroactively invalidate rules that reference it.
+function normalizeTargetAlias(target) {
+  const raw = target?.credentialAlias;
+  if (raw == null || String(raw).trim() === "") return null;
+  const alias = String(raw).trim().toLowerCase();
+  if (alias === connections.ENV_ALIAS) return alias; // reserved, but a legitimate pin
+  return /^[a-z0-9][a-z0-9._-]{0,39}$/.test(alias) ? alias : null;
 }
 
 // ── rules ──
@@ -44,7 +56,15 @@ router.post("/rules", requireRole("operator"), async (req, res, next) => {
         application: condition.application || null,
         workflow: condition.workflow || null,
       },
-      target, enabled: !!enabled, note,
+      // Build the target explicitly. Passing the client's object straight through used to
+      // be safe only because Mongoose strict dropped anything unknown; credentialAlias is
+      // now a real field, so an unvalidated value would be persisted verbatim.
+      target: {
+        provider: target.provider,
+        model: target.model,
+        credentialAlias: normalizeTargetAlias(target),
+      },
+      enabled: !!enabled, note,
       priority: Number.isFinite(+priority) ? Math.trunc(+priority) : 0,
       qualityGate: "ungated", // manual rules have no eval proof
     });
@@ -61,6 +81,11 @@ router.patch("/rules/:id", requireRole("operator"), async (req, res, next) => {
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
     if (req.body.note != null) update.note = req.body.note;
     if (req.body.priority != null && Number.isFinite(+req.body.priority)) update.priority = Math.trunc(+req.body.priority);
+    // The only editable part of a target: which key it uses. Provider and model stay
+    // immutable (delete and recreate), so this does not reopen that decision.
+    if ("credentialAlias" in (req.body.target || {})) {
+      update["target.credentialAlias"] = normalizeTargetAlias(req.body.target);
+    }
     const rule = await Rule.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!rule) return res.status(404).json({ error: "not found" });
     ruleEngine.invalidate();

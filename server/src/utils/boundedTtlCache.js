@@ -52,11 +52,17 @@ function createBoundedTtlCache({ ttlMs, maxEntries }) {
     return value;
   }
 
+  // Drop one key, for an explicit invalidation (an admin edited the thing we cached).
+  // Named `del` because `delete` is a reserved word; exposed under both names.
+  function del(key) {
+    return store.delete(key);
+  }
+
   function clear() {
     store.clear();
   }
 
-  return { getEntry, get, has, set, clear, get size() { return store.size; } };
+  return { getEntry, get, has, set, del, delete: del, clear, get size() { return store.size; } };
 }
 
 module.exports = { createBoundedTtlCache };

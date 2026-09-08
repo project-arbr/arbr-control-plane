@@ -50,6 +50,7 @@ async function explainRoute(input, { eff, appConfig = {}, appDbConfig = null } =
   return {
     model: r.served.model,
     provider: r.served.provider,
+    credentialAlias: r.served.credentialAlias || null,
     routingDecision: r.routingDecision,
     taskType: r.taskType,
     classifiedBy: r.classifiedBy,
