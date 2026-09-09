@@ -104,3 +104,41 @@ test("header row contains the expected 22 columns", async () => {
   assert.ok(cols.includes("totalCost"), "totalCost column present");
   assert.ok(cols.includes("credentialAlias"), "credentialAlias column present (which provider key served the request)");
 });
+
+// ── filtering by provider key ────────────────────────────────────────────────
+//
+// Which of a provider's API keys served a request is a filterable dimension, so per-key
+// spend can be isolated in the dashboard and the CSV.
+
+test("facets list the provider keys seen in traffic, without a null entry", async () => {
+  await seedRecord({ application: "app-a", credentialAlias: "prod-eu" });
+  await seedRecord({ application: "app-a", credentialAlias: "batch" });
+  await seedRecord({ application: "app-a", credentialAlias: null }); // unpinned / cache hit
+
+  const facets = (await agent.get("/api/analytics/facets").expect(200)).body;
+  assert.deepEqual(facets.credentialAliases, ["batch", "prod-eu"], "sorted, deduped");
+  // A null would render as a blank option in the filter dropdown and read as a bug.
+  assert.ok(!facets.credentialAliases.includes(null));
+  assert.ok(!facets.credentialAliases.includes(""));
+});
+
+test("requests can be filtered to one provider key", async () => {
+  await seedRecord({ application: "app-a", credentialAlias: "prod-eu", totalCost: 0.5 });
+  await seedRecord({ application: "app-a", credentialAlias: "batch", totalCost: 0.25 });
+  await seedRecord({ application: "app-a", credentialAlias: null, totalCost: 0.1 });
+
+  const res = await agent.get("/api/requests?credentialAlias=prod-eu").expect(200);
+  assert.equal(res.body.items.length, 1);
+  assert.equal(res.body.items[0].credentialAlias, "prod-eu");
+});
+
+test("the CSV export honours the provider-key filter", async () => {
+  await seedRecord({ application: "app-a", credentialAlias: "prod-eu" });
+  await seedRecord({ application: "app-a", credentialAlias: "batch" });
+
+  const res = await agent.get("/api/requests/export?credentialAlias=batch").expect(200);
+  const lines = res.text.trim().split("\n");
+  assert.equal(lines.length, 2, "header + the one matching row");
+  assert.ok(lines[1].includes("batch"));
+  assert.ok(!lines[1].includes("prod-eu"));
+});

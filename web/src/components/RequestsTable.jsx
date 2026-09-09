@@ -156,6 +156,9 @@ export default function RequestsTable({ fixedFilters = {}, hiddenFilterKeys = []
     ["model",       "Model",       facets?.models],
     ["provider",    "Provider",    facets?.providers],
     ["taskType",    "Task type",   facets?.taskTypes],
+    // "Provider key", not "Key": this product also has inbound gateway API keys, and a bare
+    // "Key" here would be read as those.
+    ["credentialAlias", "Provider key", facets?.credentialAliases],
   ];
   const visibleFilters = ALL_FILTERS.filter(([key]) => !hiddenFilterKeys.includes(key));
 

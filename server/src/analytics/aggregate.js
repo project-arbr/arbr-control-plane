@@ -233,7 +233,7 @@ async function spend({ dimension, value, from, to, includeInternal = false } = {
 // value, or the console offers "filter by Arbr's overhead" as if it were an application.
 async function facets() {
   const customer = RequestRecord.CUSTOMER_ONLY;
-  const [applications, workflows, departments, models, providers, taskTypes, users, keyApps] = await Promise.all([
+  const [applications, workflows, departments, models, providers, taskTypes, users, credentialAliases, keyApps] = await Promise.all([
     RequestRecord.distinct("application", customer),
     RequestRecord.distinct("workflow", customer),
     RequestRecord.distinct("department", customer),
@@ -241,12 +241,19 @@ async function facets() {
     RequestRecord.distinct("provider", customer),
     RequestRecord.distinct("taskType", customer),
     RequestRecord.distinct("userId", customer),
+    // Which provider key served the request. Null on records written before multi-key,
+    // and on cache hits (no key was exercised) — dropped, since "All" already covers them
+    // and a blank dropdown entry reads as a bug.
+    RequestRecord.distinct("credentialAlias", customer),
     ApiKey.distinct("application", { enabled: true, revokedAt: null }),
   ]);
   // Apps that have a key but have never made a request — shown as "newly added".
   const appSet = new Set(applications);
   const newApplications = keyApps.filter((a) => a && !appSet.has(a));
-  return { applications, newApplications, workflows, departments, models, providers, taskTypes, users };
+  return {
+    applications, newApplications, workflows, departments, models, providers, taskTypes, users,
+    credentialAliases: credentialAliases.filter(Boolean).sort(),
+  };
 }
 
 // Per-provider health over the last 24h: error rate and average latency.
