@@ -27,7 +27,7 @@ router.get("/requests/export", async (req, res, next) => {
     const match = analytics.buildMatch(req.query);
     const COLS = [
       "timestamp", "requestId", "application", "workflow", "department", "userId",
-      "taskType", "model", "modelRequested", "provider", "routingDecision", "classifiedBy",
+      "taskType", "model", "modelRequested", "provider", "credentialAlias", "routingDecision", "classifiedBy",
       "promptTokens", "completionTokens", "totalTokens", "totalCost",
       "latencyMs", "status", "cacheHit", "difficulty", "difficultyScore",
     ];

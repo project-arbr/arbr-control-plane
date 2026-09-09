@@ -7,13 +7,33 @@ const { toRouterConfig, getRouter } = require("../../providers/router");
 const Settings = require("../../models/Settings");
 const { config, KNOWN_PROVIDERS } = require("../../config");
 const { requireFeature } = require("../../cloud/entitlements");
+const { invalidateAppConfig } = require("../../gateway/handler");
 
 const router = express.Router();
 
 // ── Per-application config (kill switch, model opt-out, AI policy override) ──
 const ApplicationConfig = require("../../models/ApplicationConfig");
 
-const DEFAULT_APP_CONFIG = { killSwitchEnabled: false, killSwitchMessage: null, modelOptOut: [], aiPolicyAssignments: null };
+const DEFAULT_APP_CONFIG = { killSwitchEnabled: false, killSwitchMessage: null, modelOptOut: [], aiPolicyAssignments: null, credentialAliases: null };
+
+// { providerId: alias } for this application's provider keys.
+//
+// This value ends up in a $set on a Mixed field, so it is sanitized rather than trusted:
+// only known provider ids, only non-empty string aliases, and no key that could be read as
+// an operator or a dotted path. An empty result becomes null, which is what "inherit the
+// global default" means everywhere else in this document.
+function sanitizeCredentialAliases(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out = {};
+  for (const [provider, alias] of Object.entries(raw)) {
+    if (!KNOWN_PROVIDERS.includes(provider)) continue;
+    if (provider.includes("$") || provider.includes(".")) continue;
+    const v = String(alias ?? "").trim().toLowerCase();
+    if (!v || !/^[a-z0-9][a-z0-9._-]{0,39}$/.test(v)) continue;
+    out[provider] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 router.get("/app-configs", async (_req, res, next) => {
   try {
@@ -37,11 +57,15 @@ router.put("/app-configs/:app", requireRole("operator"), async (req, res, next) 
     if ("killSwitchMessage" in req.body) update.killSwitchMessage = killSwitchMessage ? String(killSwitchMessage).trim() : null;
     if (Array.isArray(modelOptOut)) update.modelOptOut = modelOptOut.filter(Boolean);
     if ("aiPolicyAssignments" in req.body) update.aiPolicyAssignments = aiPolicyAssignments || null;
+    if ("credentialAliases" in req.body) update.credentialAliases = sanitizeCredentialAliases(req.body.credentialAliases);
     const cfg = await ApplicationConfig.findOneAndUpdate(
       { applicationName: req.params.app },
       { $set: update },
       { new: true, upsert: true }
     ).lean();
+    // getAppConfig caches for 30s. Leaving a key change to expire on its own means up to
+    // half a minute of traffic still on the old key, which is too long for this control.
+    invalidateAppConfig(req.params.app);
     setImmediate(() => logAction("appConfig.update", "appConfig", req.params.app, update, req.user));
     res.json(cfg);
   } catch (e) { next(e); }

@@ -7,6 +7,10 @@ const schema = new mongoose.Schema({
   killSwitchMessage: { type: String, default: null },
   modelOptOut: { type: [String], default: [] },
   aiPolicyAssignments: { type: mongoose.Schema.Types.Mixed, default: null }, // null = use global
+  // { [providerId]: alias } — which provider key this application's traffic uses when no
+  // routing rule pins one. null (or a missing provider) = the provider's default key.
+  // Mixed, like aiPolicyAssignments above, because the keys are dynamic provider ids.
+  credentialAliases: { type: mongoose.Schema.Types.Mixed, default: null },
 }, { collection: "applicationconfigs", timestamps: true });
 
 module.exports = defineModel("ApplicationConfig", schema);

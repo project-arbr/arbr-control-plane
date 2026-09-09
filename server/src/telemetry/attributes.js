@@ -90,6 +90,7 @@ function attributesFor(record, { captureContent = false, contentMaxChars = 8192 
   // status has three values (success|failure|blocked); OTel status has two, so keep it.
   set(a, "arbr.status", record.status);
   set(a, "arbr.internal_kind", record.internalKind);
+  set(a, "arbr.credential_alias", record.credentialAlias);
   set(a, "arbr.source", record.source);
 
   // routingExplain (a Mixed field) flattened to scalars.
@@ -98,6 +99,7 @@ function attributesFor(record, { captureContent = false, contentMaxChars = 8192 
     set(a, "arbr.routing.basis", ex.basis);
     if (ex.rule && ex.rule.note) set(a, "arbr.routing.rule", ex.rule.note);
     if (ex.override && ex.override.type) set(a, "arbr.routing.override_type", ex.override.type);
+    if (ex.credential) set(a, "arbr.routing.credential_source", ex.credential.source);
   }
 
   // Content — opt-in, clamped small. Collectors drop oversized spans, so one long

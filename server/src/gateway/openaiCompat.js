@@ -3,17 +3,17 @@
 // Routing uses the same precedence logic as /v1/chat; response format is OpenAI-shaped.
 // Streaming (stream: true) uses SSE: "data: {...}\n\n" chunks, ending with "data: [DONE]\n\n".
 const { v4: uuidv4 } = require("uuid");
-const { getRouter } = require("../providers/router");
+const { getRouter, credentialOverrideFor } = require("../providers/router");
 const { extractFinishReason } = require("../providers/llm-router");
 const { normalizeMessages } = require("./normalizeMessages");
 const {
-  resolveRoute, invokeWithFallback, getAppConfig, setGatewayHeaders,
+  resolveRoute, invokeWithFallback, getAppConfig, setGatewayHeaders, applyCredentialAlias,
 } = require("./core");
 const capEngine = require("../routing/capEngine");
 const pricing = require("../pricing/registry");
 const logger = require("../logging/logger");
 const { maybeShadowEval } = require("../eval/shadow");
-const { resolveBaseURL } = require("../providers/connections");
+const { resolveBaseURL, credentialFor } = require("../providers/connections");
 const Settings = require("../models/Settings");
 const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
@@ -66,6 +66,14 @@ function openAICompatBaseURL(providerId, eff) {
     return base ? base.replace(/\/+$/, "") : null;
   }
   return null;
+}
+
+// The key actually exercised by an invocation. invokeWithFallback can end up on a DIFFERENT
+// provider than the one routing chose, and the pinned key belongs to the original provider
+// only — a fallback ran on the new provider's default key. Attributing the pinned alias to
+// it would put spend against a key that never served the request.
+function servedAlias(served, resultProviderId) {
+  return resultProviderId === served.provider ? (served.credentialAlias || null) : null;
 }
 
 const DEMO_503 = {
@@ -159,7 +167,10 @@ async function proxyOpenAICompat(ctx) {
     settings, _reqStart,
   } = ctx;
 
-  const apiKey = eff.providers[served.provider]?.credential?.apiKey || "none";
+  // Honors a rule- or application-pinned key; falls back to the provider default when the
+  // pinned alias no longer exists (resolveRoute has already recorded that it fell back).
+  const apiKey =
+    credentialFor(eff, served.provider, served.credentialAlias)?.credential?.apiKey || "none";
   const url = `${baseURL}/chat/completions`;
   const upstreamBody = { ...body, model: served.model };
   const start = Date.now();
@@ -169,7 +180,7 @@ async function proxyOpenAICompat(ctx) {
     setImmediate(() =>
       logger.write({
         requestId, timestamp, ...meta,
-        provider: served.provider, model: served.model, modelRequested,
+        provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
         taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, qualityGate: qualityGate || null, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages,
@@ -423,7 +434,11 @@ async function handleOpenAICompat(req, res) {
     if (target && checkModel(target.model, governanceFor({ appConfig, appDbConfig: appCfg, messages: body.messages })).ok) {
       pushOverride(explain, { type: "budget", action: "downgrade", from: served.model, to: target.model,
         cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
+      const prevProvider = served.provider, prevAlias = served.credentialAlias;
       served = { provider: target.provider, model: target.model }; routingDecision = "budget";
+      // Same provider: the pinned key still applies. Crossed providers: it does not.
+      if (target.provider === prevProvider) served.credentialAlias = prevAlias;
+      else applyCredentialAlias(served, { eff, explain, rulePin: null, appDbConfig: appCfg });
       qualityGate = null;
     }
   }
@@ -501,6 +516,9 @@ async function handleOpenAICompat(req, res) {
         modelOverride: served.model,
         temperature: body.temperature,
         maxTokens: body.max_tokens,
+        // Native tool calling bypasses invokeWithFallback entirely, so without this the
+        // pinned key would be silently ignored for every tool-using request.
+        credentialOverride: credentialOverrideFor(eff, served.provider, served.credentialAlias),
       });
       // Turn 1: bind tools. Turn 2 (tool result history, no new tools): plain invoke.
       const boundModel = hasTurnTools ? buildBoundModel(model, body) : model;
@@ -552,7 +570,7 @@ async function handleOpenAICompat(req, res) {
             if (blocked) {
               setImmediate(() => logger.write({
                 requestId, timestamp, ...meta,
-                provider: served.provider, model: served.model, modelRequested,
+                provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
                 taskType, classifiedBy, latencyMs: Date.now() - start,
                 status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
                 errorMessage: `guardrail_violation: ${ruleName}`,
@@ -592,7 +610,7 @@ async function handleOpenAICompat(req, res) {
           if (blocked) {
             setImmediate(() => logger.write({
               requestId, timestamp, ...meta,
-              provider: served.provider, model: served.model, modelRequested,
+              provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
               taskType, classifiedBy, latencyMs: Date.now() - start,
               status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
               errorMessage: `guardrail_violation: ${ruleName}`,
@@ -622,7 +640,7 @@ async function handleOpenAICompat(req, res) {
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
-          provider: served.provider, model: served.model, modelRequested,
+          provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
           taskType, classifiedBy, difficulty, difficultyScore, confidence,
           promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
           latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
@@ -635,7 +653,7 @@ async function handleOpenAICompat(req, res) {
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
-          provider: served.provider, model: served.model, modelRequested,
+          provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
           status: "failure", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false, errorMessage,
         })
@@ -681,6 +699,7 @@ async function handleOpenAICompat(req, res) {
       invocation = await invokeWithFallback(router, eff, {
         provider: served.provider,
         model: served.model,
+        credentialAlias: served.credentialAlias,
         messages: body.messages,
         temperature: body.temperature,
         maxTokens: body.max_tokens,
@@ -692,7 +711,7 @@ async function handleOpenAICompat(req, res) {
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
-          provider: served.provider, model: served.model, modelRequested,
+          provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
           status: "failure", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false, errorMessage,
         })
@@ -715,7 +734,7 @@ async function handleOpenAICompat(req, res) {
       if (blocked) {
         setImmediate(() => logger.write({
           requestId, timestamp, ...meta,
-          provider: result.providerId, model: result.modelId, modelRequested,
+          provider: result.providerId, credentialAlias: servedAlias(served, result.providerId), model: result.modelId, modelRequested,
           taskType, classifiedBy, latencyMs: Date.now() - start,
           status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
           errorMessage: `guardrail_violation: ${ruleName}`,
@@ -759,7 +778,7 @@ async function handleOpenAICompat(req, res) {
     setImmediate(() =>
       logger.write({
         requestId, timestamp, ...meta,
-        provider: result.providerId, model: result.modelId, modelRequested,
+        provider: result.providerId, credentialAlias: servedAlias(served, result.providerId), model: result.modelId, modelRequested,
         taskType, classifiedBy, difficulty, difficultyScore, confidence,
         promptTokens, completionTokens, totalTokens, cachedReadTokens, cacheWriteTokens,
         latencyMs: Date.now() - start, gatewayOverheadMs: start - _reqStart, status: "success", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
@@ -779,6 +798,7 @@ async function handleOpenAICompat(req, res) {
     invocation = await invokeWithFallback(router, eff, {
       provider: served.provider,
       model: served.model,
+      credentialAlias: served.credentialAlias,
       messages: body.messages,
       temperature: body.temperature,
       maxTokens: body.max_tokens,
@@ -788,7 +808,7 @@ async function handleOpenAICompat(req, res) {
     setImmediate(() =>
       logger.write({
         requestId, timestamp, ...meta,
-        provider: served.provider, model: served.model, modelRequested,
+        provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
         taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision, qualityGate: qualityGate || null,
         errorMessage, routingExplain: explain, qualityGate: qualityGate || null,
       })
@@ -806,7 +826,7 @@ async function handleOpenAICompat(req, res) {
     if (blocked) {
       setImmediate(() => logger.write({
         requestId, timestamp, ...meta,
-        provider: result.providerId, model: result.modelId, modelRequested,
+        provider: result.providerId, credentialAlias: servedAlias(served, result.providerId), model: result.modelId, modelRequested,
         taskType, classifiedBy, latencyMs: result.latencyMs,
         status: "blocked", routingDecision, routingExplain: explain, qualityGate: qualityGate || null, cacheHit: false,
         errorMessage: `guardrail_violation: ${ruleName}`,
@@ -836,7 +856,7 @@ async function handleOpenAICompat(req, res) {
   setImmediate(() => {
     logger.write({
       requestId, timestamp, ...meta,
-      provider: result.providerId, model: result.modelId, modelRequested,
+      provider: result.providerId, credentialAlias: servedAlias(served, result.providerId), model: result.modelId, modelRequested,
       taskType, classifiedBy, difficulty, difficultyScore, confidence,
       promptTokens:     result.usage?.inputTokens  || 0,
       completionTokens: result.usage?.outputTokens || 0,

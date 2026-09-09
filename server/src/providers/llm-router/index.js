@@ -43,13 +43,20 @@ function createRouter(options) {
     }
   }
 
-  function getModel({ providerOverride, modelOverride, temperature, maxTokens } = {}) {
+  // credentialOverride swaps in a different key for the SAME provider (a routing rule or an
+  // application pinning one of several keys). It is a partial provider config — {apiKey} or
+  // {region, credentials} — built by providers/router.js so the shape logic lives in one place.
+  function getModel({ providerOverride, modelOverride, temperature, maxTokens, credentialOverride } = {}) {
     const providerId = providerOverride || defaultProvider;
     const cfg = providers[providerId];
     if (!cfg) {
       throw new Error(`getModel: provider "${providerId}" is not configured`);
     }
-    const effectiveCfg = modelOverride ? { ...cfg, model: modelOverride } : cfg;
+    const effectiveCfg = {
+      ...cfg,
+      ...(modelOverride ? { model: modelOverride } : {}),
+      ...(credentialOverride || {}),
+    };
     return loadProviderModel(providerId, effectiveCfg, { temperature, maxTokens });
   }
 
@@ -65,7 +72,15 @@ function createRouter(options) {
     for (const providerId of order) {
       if (!providers[providerId]) continue;
       const baseCfg = providers[providerId];
-      const cfg = args.modelOverride ? { ...baseCfg, model: args.modelOverride } : baseCfg;
+      // A pinned credential belongs to ONE provider. Carrying it down the fallback chain
+      // would post an OpenAI key to Anthropic, so it applies only to the provider the
+      // caller explicitly asked for.
+      const useCredential = args.credentialOverride && providerId === args.providerOverride;
+      const cfg = {
+        ...baseCfg,
+        ...(args.modelOverride ? { model: args.modelOverride } : {}),
+        ...(useCredential ? args.credentialOverride : {}),
+      };
       const start = Date.now();
       try {
         const model = loadProviderModel(providerId, cfg, {

@@ -86,3 +86,43 @@ test("ruleTargetHealth: live + priced target is ok", () => {
   const h = ruleTargetHealth({ provider: "openai", model: "gpt-4o" }, { liveIds: ["openai"], modelEntry: { id: "gpt-4o", inputPer1M: 2.5 } });
   assert.equal(h.level, "ok");
 });
+
+// ── credential alias health (multi-key) ──────────────────────────────────────
+
+test("ruleTargetHealth warns when a rule pins a key the provider does not have", () => {
+  // A warn, not an error: the rule still routes, on the provider's default key. Silently
+  // doing that is the part worth surfacing in the console.
+  const h = ruleTargetHealth(
+    { provider: "openai", model: "gpt-4o", credentialAlias: "deleted-key" },
+    { liveIds: ["openai"], modelEntry: { inputPer1M: 1 }, aliases: ["default", "batch"] }
+  );
+  assert.equal(h.level, "warn");
+  assert.equal(h.reason, "alias-unknown");
+});
+
+test("ruleTargetHealth is ok when the pinned key exists", () => {
+  const h = ruleTargetHealth(
+    { provider: "openai", model: "gpt-4o", credentialAlias: "batch" },
+    { liveIds: ["openai"], modelEntry: { inputPer1M: 1 }, aliases: ["default", "batch"] }
+  );
+  assert.equal(h.level, "ok");
+});
+
+test("ruleTargetHealth ignores aliases when the rule pins none", () => {
+  const h = ruleTargetHealth(
+    { provider: "openai", model: "gpt-4o" },
+    { liveIds: ["openai"], modelEntry: { inputPer1M: 1 }, aliases: ["default"] }
+  );
+  assert.equal(h.level, "ok");
+});
+
+test("an offline provider still outranks an unknown alias", () => {
+  // Provider-offline is an error (the rule is skipped entirely); reporting the alias
+  // instead would bury the reason the rule never fires.
+  const h = ruleTargetHealth(
+    { provider: "openai", model: "gpt-4o", credentialAlias: "nope" },
+    { liveIds: [], modelEntry: { inputPer1M: 1 }, aliases: [] }
+  );
+  assert.equal(h.level, "error");
+  assert.equal(h.reason, "provider-offline");
+});

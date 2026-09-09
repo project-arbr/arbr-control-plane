@@ -39,7 +39,9 @@ async function handleRealtimeSession(req, clientWs) {
   let cred;
   try {
     const eff = await connections.effective();
-    cred = eff.providers[provider]?.credential;
+    // Default key: the realtime path resolves its provider from the model, not resolveRoute,
+    // so there is no pin to apply (same known gap as /v1/embeddings).
+    cred = connections.credentialFor(eff, provider, null)?.credential;
   } catch (err) {
     clientWs.close(1013, "Gateway error resolving provider credentials.");
     return;

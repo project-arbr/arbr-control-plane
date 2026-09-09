@@ -8,9 +8,13 @@ let _router = null;
 let _signature = "";
 
 // A signature of the live provider set + creds, so we rebuild only on change.
+//
+// defaultAlias is part of the signature because the credential tail alone is not enough:
+// promote a different key to default and, if the two keys happen to share their last 12
+// serialized characters, the memoized router keeps serving the old one.
 function signatureOf(eff) {
   return eff.liveIds
-    .map((id) => `${id}:${JSON.stringify(eff.providers[id].credential).slice(-12)}`)
+    .map((id) => `${id}:${eff.providers[id].defaultAlias}:${JSON.stringify(eff.providers[id].credential).slice(-12)}`)
     .sort()
     .join("|") + `#default=${eff.defaultProvider}`;
 }
@@ -28,6 +32,25 @@ function toRouterConfig(id, p) {
     };
   }
   return { apiKey: p.credential.apiKey, model: p.defaultModel, baseURL: connections.resolveBaseURL(id, p) };
+}
+
+// The partial router config that swaps in a pinned key for `providerId`, or null when the
+// pin resolves to the key the router already holds — so unpinned traffic passes undefined
+// and takes a code path identical to before multi-key.
+//
+// Reuses toRouterConfig so the apiKey-vs-aws shape is decided in exactly one place; a second
+// copy of that branching is how a pinned AWS key ends up sent as a bearer token.
+function credentialOverrideFor(eff, providerId, alias) {
+  if (!alias) return null;
+  const entry = eff?.providers?.[providerId];
+  if (!entry) return null;
+  const resolved = connections.credentialFor(eff, providerId, alias);
+  if (!resolved || resolved.alias === entry.defaultAlias) return null;
+  const cfg = toRouterConfig(providerId, { ...entry, credential: resolved.credential });
+  // Only the credential fields — model and baseURL still come from the router's own config.
+  return entry.authType === "aws"
+    ? { region: cfg.region, credentials: cfg.credentials }
+    : { apiKey: cfg.apiKey };
 }
 
 // Returns { router, eff } or { router: null, eff } in demo mode.
@@ -52,4 +75,4 @@ async function getRouter() {
   return { router: _router, eff };
 }
 
-module.exports = { getRouter, toRouterConfig };
+module.exports = { getRouter, toRouterConfig, credentialOverrideFor, signatureOf };

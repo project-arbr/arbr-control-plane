@@ -114,8 +114,11 @@ function ModelPicker({ models, excluded, onChange }) {
 // ── Combined routing policy tab ────────────────────────────────────────────────
 // modelOptOut drives both gateway enforcement AND AI generation exclusions.
 
-function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, models, onSaved }) {
+function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, initialCredentialAliases, models, onSaved }) {
   const [globalPol, setGlobalPol]     = useState(null);
+  const [connections, setConnections] = useState(null);
+  const [aliases, setAliases]         = useState(initialCredentialAliases || {});
+  const [aliasMsg, setAliasMsg]       = useState(null);
   const [assignments, setAssignments] = useState(initialAssignments || null);
   // excluded = opted-out models: blocked at gateway + excluded from AI generation
   const [excluded, setExcluded]       = useState(initialModelOptOut || []);
@@ -131,6 +134,7 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
   const [generatorModel, setGeneratorModel] = useState(null);
 
   useEffect(() => { api.aiPolicy().then(setGlobalPol).catch((e) => setMsg(e.message)); }, []);
+  useEffect(() => { api.connections().then(setConnections).catch(() => setConnections({ providers: [] })); }, []);
 
   if (!globalPol) return <Spinner />;
 
@@ -191,6 +195,29 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
     finally { setBusy(false); }
   };
 
+  const aliasesDirty =
+    JSON.stringify(aliases) !== JSON.stringify(initialCredentialAliases || {});
+
+  const saveAliases = async () => {
+    setBusy(true); setAliasMsg(null);
+    try {
+      await api.setAppConfig(appName, { credentialAliases: aliases });
+      setAliasMsg("Saved"); setTimeout(() => setAliasMsg(null), 1500);
+      onSaved?.();
+    } catch (e) { setAliasMsg(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const setAlias = (provider, alias) => setAliases((a) => {
+    const next = { ...a };
+    if (alias) next[provider] = alias; else delete next[provider];
+    return next;
+  });
+
+  // Only providers holding more than one key are worth showing — everyone else has no choice
+  // to make, and listing them would be a column of disabled dropdowns.
+  const multiKeyProviders = (connections?.providers || []).filter((p) => (p.keys || []).length > 1);
+
   // Generate uses excluded as the exclusion list automatically, optimizing for the chosen goal.
   const generate = async () => {
     setConfirmGen(false);
@@ -244,6 +271,40 @@ function RoutingPolicyTab({ appName, initialAssignments, initialModelOptOut, mod
           {allowedMsg && <span className="text-xs text-gray-500">{allowedMsg}</span>}
         </div>
       </Card>
+
+      {/* ── Section 1b: Provider keys ── */}
+      {multiKeyProviders.length > 0 && (
+        <Card title="Provider keys">
+          <p className="mb-3 text-sm text-gray-500">
+            Which API key this application&rsquo;s traffic uses for each provider. A routing rule that
+            pins a key overrides this; anything left on the default follows the provider&rsquo;s own default key.
+          </p>
+          <div className="space-y-2">
+            {multiKeyProviders.map((p) => (
+              <div key={p.provider} className="flex items-center gap-3">
+                <span className="w-32 shrink-0 text-sm text-arbr-charcoal">{p.label || p.provider}</span>
+                <select
+                  className="input w-64"
+                  value={aliases[p.provider] || ""}
+                  onChange={(e) => setAlias(p.provider, e.target.value)}
+                >
+                  <option value="">(use default)</option>
+                  {(p.keys || []).map((k) => (
+                    <option key={k.alias} value={k.alias}>{k.alias}{k.isDefault ? " (default)" : ""}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button className="btn-secondary text-xs" disabled={busy || !aliasesDirty} onClick={saveAliases}>
+              {busy ? "Saving…" : "Save provider keys"}
+            </button>
+            {aliasesDirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
+            {aliasMsg && <span className="text-xs text-gray-500">{aliasMsg}</span>}
+          </div>
+        </Card>
+      )}
 
       {/* ── Section 2: Routing policy ── */}
       <Card title="Routing policy">
@@ -595,6 +656,7 @@ export default function ApplicationDetail() {
             appName={appName}
             initialAssignments={config.aiPolicyAssignments}
             initialModelOptOut={config.modelOptOut || []}
+            initialCredentialAliases={config.credentialAliases || {}}
             models={models}
             onSaved={loadConfig}
           />

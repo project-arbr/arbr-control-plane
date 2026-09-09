@@ -7,7 +7,8 @@
 //      → the router decides: cache → rules → automated routing → default
 //   + fallback to another live provider on a provider error.
 const { v4: uuidv4 } = require("uuid");
-const { getRouter } = require("../providers/router");
+const { getRouter, credentialOverrideFor } = require("../providers/router");
+const { credentialFor } = require("../providers/connections");
 const { config } = require("../config");
 const pricing = require("../pricing/registry");
 const { classifyTask } = require("../classify/classifier");
@@ -56,6 +57,22 @@ async function getAppConfig(appName) {
   // map is bounded, doing so no longer trades a DB problem for a memory one.
   _appConfigCache.set(key, cfg);
   return cfg;
+}
+
+// Drop one application's cached config so an admin edit takes effect on the next request
+// instead of up to 30s later. Scoped to the current connection's database, matching how
+// getAppConfig builds its key.
+function invalidateAppConfig(appName) {
+  if (!appName) return;
+  _appConfigCache.delete(`${currentConnection().name}:${String(appName)}`);
+}
+
+// The key actually exercised by an invocation. invokeWithFallback can end up on a DIFFERENT
+// provider than the one routing chose, and the pinned key belongs to the original provider
+// only — a fallback ran on the new provider's default key. Attributing the pinned alias to
+// it would put spend against a key that never served the request.
+function servedAlias(served, resultProviderId) {
+  return resultProviderId === served.provider ? (served.credentialAlias || null) : null;
 }
 
 // Interpret the client's model field. Returns one of:
@@ -138,7 +155,7 @@ function buildFallbackOrder(provider, model, liveIds, defaultModels, scope = "sa
 // can never serve a model the app is restricted from, a text model for an image
 // request, or an unpriced model. The primary (index 0) is kept as-is — it was already
 // validated by resolveRoute.
-async function invokeWithFallback(router, eff, { provider, model, messages, temperature, maxTokens }, governance = null) {
+async function invokeWithFallback(router, eff, { provider, model, messages, temperature, maxTokens, credentialAlias }, governance = null) {
   const full = buildFallbackOrder(
     provider,
     model,
@@ -149,6 +166,9 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
   const order = governance
     ? [full[0], ...full.slice(1).filter((c) => checkModel(c.model, { ...governance, requirePriced: true }).ok)]
     : full;
+  // A pinned key was chosen for THIS provider. buildFallbackOrder can cross providers, so
+  // the override is computed per candidate and comes back null for anything but the pinned
+  // provider — belt and braces with the same guard inside router.complete().
   let lastErr;
   for (let i = 0; i < order.length; i++) {
     const { provider: p, model: m } = order[i];
@@ -159,6 +179,7 @@ async function invokeWithFallback(router, eff, { provider, model, messages, temp
         modelOverride: m,
         temperature,
         maxTokens,
+        credentialOverride: p === provider ? credentialOverrideFor(eff, p, credentialAlias) : null,
       });
       return { result, usedFallback: i > 0 };
     } catch (err) {
@@ -236,6 +257,9 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
   const explain = { basis: null, classificationUsed: false };
 
   let served, routingDecision;
+  // A key pinned by the matched rule, and the provider it was pinned for. Resolved at the
+  // very end, once every override has had its say about which provider actually serves.
+  let ruleCredentialAlias = null, ruleProvider = null;
   if (explicit) {
     served = explicit;
     routingDecision = "explicit";
@@ -256,6 +280,10 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
     const route = await ruleEngine.findRoute({ taskType, application, workflow, eff });
     if (route) {
       served = { provider: route.provider, model: route.model };
+      // Remembered, not applied yet. A later override (canary, opt-out, budget) can move
+      // us to a different provider, and this key belongs to route.provider alone.
+      ruleCredentialAlias = route.credentialAlias || null;
+      ruleProvider = route.provider;
       routingDecision = "rule";
       explain.basis = "rule";
       explain.rule = {
@@ -378,10 +406,44 @@ async function resolveRoute(body, { router, eff, application, workflow, userId =
     qualityGate = "passed"; // canaries require a passed offline eval before activation
   }
 
+  // Credential pin, resolved LAST — canary, allowed-models and opt-out above can all move
+  // `served` to a different provider, and a key is only meaningful for the provider that
+  // actually ends up serving. Rule beats application; neither can outrank an explicit pin,
+  // which never consulted a rule in the first place.
+  applyCredentialAlias(served, {
+    eff, explain,
+    rulePin: (routingDecision === "rule" && served.provider === ruleProvider) ? ruleCredentialAlias : null,
+    appDbConfig,
+  });
+
   return {
     served, routingDecision, taskType, classifiedBy,
     difficulty, difficultyScore, confidence, explain, qualityGate,
   };
+}
+
+// Choose which of the provider's keys serves this request and record the choice on `served`
+// (for dispatch) and `explain` (for the request drawer). Mutates both.
+//
+// Also called again after a budget downgrade, which can change served.provider AFTER
+// resolveRoute has returned — otherwise a key pinned for one provider follows the
+// downgraded model to another.
+function applyCredentialAlias(served, { eff, explain, rulePin, appDbConfig }) {
+  const appPin = appDbConfig?.credentialAliases?.[served.provider] || null;
+  const pinned = rulePin || appPin;
+  const resolved = credentialFor(eff, served.provider, pinned);
+  served.credentialAlias = resolved ? resolved.alias : null;
+  if (pinned && explain) {
+    explain.credential = {
+      requested: pinned,
+      used: served.credentialAlias,
+      source: rulePin ? "rule" : "app",
+      fellBack: !!resolved?.fellBack,
+    };
+  } else if (explain) {
+    delete explain.credential; // a downgrade may have moved us off the pinned provider
+  }
+  return served.credentialAlias;
 }
 
 async function handleChat(req, res) {
@@ -502,7 +564,7 @@ async function handleChat(req, res) {
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
-          provider: served.provider, model: served.model, modelRequested,
+          provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
           taskType, classifiedBy, latencyMs: 0, status: "blocked",
           routingDecision: "budget", cacheHit: false, routingExplain: explain,
         })
@@ -522,7 +584,12 @@ async function handleChat(req, res) {
     if (target && checkModel(target.model, gov).ok) {
       pushOverride(explain, { type: "budget", action: "downgrade", from: served.model, to: target.model,
         cap: { scope: capEngine.describeScope(enf.cap), period: enf.cap.period, limit: enf.cap.limit } });
+      const prevProvider = served.provider, prevAlias = served.credentialAlias;
       served = { provider: target.provider, model: target.model };
+      // The downgrade can cross providers. Same provider: keep the key that was pinned.
+      // Different provider: that key does not belong there, so re-resolve from scratch.
+      if (target.provider === prevProvider) served.credentialAlias = prevAlias;
+      else applyCredentialAlias(served, { eff, explain, rulePin: null, appDbConfig: appCfg });
       routingDecision = "budget";
       qualityGate = null; // budget override is not eval-gated
     }
@@ -647,6 +714,7 @@ async function handleChat(req, res) {
     invocation = await invokeWithFallback(router, eff, {
       provider: served.provider,
       model: served.model,
+      credentialAlias: served.credentialAlias,
       messages: body.messages,
       temperature: body.temperature,
       maxTokens: body.maxTokens,
@@ -656,7 +724,7 @@ async function handleChat(req, res) {
     setImmediate(() =>
       logger.write({
         requestId, timestamp, ...meta,
-        provider: served.provider, model: served.model, modelRequested,
+        provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
         taskType, classifiedBy, latencyMs: 0, status: "failure", routingDecision,
         errorMessage, routingExplain: explain,
       })
@@ -678,7 +746,7 @@ async function handleChat(req, res) {
       setImmediate(() =>
         logger.write({
           requestId, timestamp, ...meta,
-          provider: result.providerId, model: result.modelId, modelRequested,
+          provider: result.providerId, credentialAlias: servedAlias(served, result.providerId), model: result.modelId, modelRequested,
           taskType, classifiedBy, latencyMs: result.latencyMs,
           status: "blocked", routingDecision, cacheHit: false,
           errorMessage: `guardrail_violation: ${ruleName}`,
@@ -735,7 +803,7 @@ async function handleChat(req, res) {
     }
     logger.write({
       requestId, timestamp, ...meta,
-      provider: result.providerId, model: result.modelId, modelRequested,
+      provider: result.providerId, credentialAlias: servedAlias(served, result.providerId), model: result.modelId, modelRequested,
       taskType, classifiedBy, difficulty, difficultyScore, confidence, routingExplain: explain,
       promptTokens: result.usage?.inputTokens || 0,
       completionTokens: result.usage?.outputTokens || 0,
@@ -759,9 +827,11 @@ module.exports = {
   handleChat,
   resolveRoute,
   resolveExplicit, // pure, exported for tests
+  applyCredentialAlias,
   invokeWithFallback,
   buildFallbackOrder,
   getAppConfig,
+  invalidateAppConfig,
   hasVisionContent, // re-exported from routing/guards for existing tests
   isVisionCapable,
 };

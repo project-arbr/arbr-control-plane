@@ -9,6 +9,7 @@ const {
   invokeWithFallback,
   buildFallbackOrder,
   getAppConfig,
+  applyCredentialAlias,
 } = require("./handler");
 
 // Standard gateway tracing headers (set before JSON or SSE responses).
@@ -25,5 +26,6 @@ module.exports = {
   invokeWithFallback,
   buildFallbackOrder,
   getAppConfig,
+  applyCredentialAlias,
   setGatewayHeaders,
 };

@@ -22,6 +22,7 @@ const { handleIngest } = require("./gateway/ingest");
 const { handleUpgrade, closeAll: closeRealtimeSessions } = require("./gateway/wsAuth");
 const { purgeOldRecords } = require("./maintenance/purge");
 const { backfillInternalKind } = require("./maintenance/backfillInternalKind");
+const { migrateCredentialAliases } = require("./maintenance/migrateCredentialAliases");
 const errorAlertMonitor = require("./routing/errorAlertMonitor");
 const canaryMonitor = require("./routing/canaryMonitor");
 const evalWorker = require("./eval/worker");
@@ -73,6 +74,7 @@ async function start() {
   await mongoose.connect(config.mongoUri);
   await registry.init(); // seed ModelEntry if empty + warm in-memory cache
   await backfillInternalKind(); // idempotent; no-op after the first run
+  await migrateCredentialAliases(); // idempotent; drops the pre-multi-key unique provider index
   telemetry.init(); // OTLP trace export — a no-op unless ARBR_OTEL_ENABLED is set
   require("./currency/fx").startAutoRefresh(); // live USD→display-currency rate (no-op for USD)
 

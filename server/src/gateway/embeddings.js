@@ -171,7 +171,10 @@ async function handleEmbeddings(req, res) {
     });
   }
 
-  const cred      = eff.providers[provider].credential;
+  // The provider's default key. This endpoint infers its provider from the model-id prefix
+  // rather than running resolveRoute, so there is no rule or application pin to honor here
+  // — a per-application embedding key would need the pin resolved from req.apiKey.application.
+  const cred      = connections.credentialFor(eff, provider, null).credential;
   const _llmStart = Date.now();
   let embeddings, promptTokens;
 

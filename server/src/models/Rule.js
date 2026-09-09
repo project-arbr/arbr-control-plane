@@ -15,6 +15,10 @@ const ruleSchema = new mongoose.Schema(
     target: {
       provider: { type: String, required: true },
       model: { type: String, required: true },
+      // Which of the provider's keys to use. null = the provider's default key.
+      // A pin naming a key that has since been deleted is NOT an error: the gateway
+      // falls back to the default key and records that it did.
+      credentialAlias: { type: String, default: null },
     },
     enabled: { type: Boolean, default: false, index: true },
     // Higher priority wins when more than one enabled rule matches a request. Ties

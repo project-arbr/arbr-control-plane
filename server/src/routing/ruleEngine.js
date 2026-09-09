@@ -66,10 +66,15 @@ function targetServable(rule, eff) {
 //   warn  — model unknown to the registry (served as pass-through, cost logs $0) or
 //           unpriced (same); works, but attribution/enforcement is blind.
 //   ok    — target is live and priced.
-function ruleTargetHealth(target, { liveIds = [], modelEntry = null } = {}) {
-  const { provider, model } = target || {};
+function ruleTargetHealth(target, { liveIds = [], modelEntry = null, aliases = null } = {}) {
+  const { provider, model, credentialAlias } = target || {};
   if (!liveIds.includes(provider)) {
     return { level: "error", reason: "provider-offline", detail: `Provider "${provider}" is not connected; this rule is skipped at request time.` };
+  }
+  // A pinned key that no longer exists is a warning, not an error: the rule still routes,
+  // just on the provider's default key. Silently doing that is the part worth surfacing.
+  if (credentialAlias && aliases && !aliases.includes(credentialAlias)) {
+    return { level: "warn", reason: "alias-unknown", detail: `Provider "${provider}" has no key "${credentialAlias}"; this rule routes on the provider's default key instead.` };
   }
   if (!modelEntry) {
     return { level: "warn", reason: "model-unknown", detail: `Model "${model}" is not in the registry; it is served as a pass-through and its cost logs as $0.` };
@@ -115,6 +120,9 @@ async function findRoute(ctx) {
     return {
       provider: rule.target.provider,
       model: rule.target.model,
+      // An unknown alias deliberately does NOT make the rule unservable — the gateway
+      // falls back to the provider's default key rather than dead-ending the request.
+      credentialAlias: rule.target.credentialAlias || null,
       ruleId: rule._id,
       condition: rule.condition,
       note: rule.note,
