@@ -23,14 +23,14 @@ export default function ByDimension({ embedded = false }) {
   }, [dim]);
 
   const columns = [
-    { key: "key", header: DIMENSIONS.find((d) => d.key === dim)?.label || dim,
+    { key: "key", header: DIMENSIONS.find((d) => d.key === dim)?.label || dim, sortable: true,
       render: (r) => r.key || (dim === "user" ? "(unattributed)" : "—") },
-    { key: "requests", header: "Requests", render: (r) => fmt.num(r.requests) },
-    { key: "cost", header: "Cost", render: (r) => fmt.usd(r.cost) },
-    { key: "avgLatency", header: "Avg latency", render: (r) => fmt.ms(r.avgLatency) },
+    { key: "requests", header: "Requests", sortable: true, render: (r) => fmt.num(r.requests) },
+    { key: "cost", header: "Cost", sortable: true, render: (r) => fmt.usd(r.cost) },
+    { key: "avgLatency", header: "Avg latency", sortable: true, render: (r) => fmt.ms(r.avgLatency) },
   ];
   if (dim === "provider") {
-    columns.push({ key: "tokens", header: "Tokens", render: (r) => fmt.num(r.tokens) });
+    columns.push({ key: "tokens", header: "Tokens", sortable: true, render: (r) => fmt.num(r.tokens) });
   }
 
   return (

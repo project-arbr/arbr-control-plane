@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, fmt } from "../api.js";
-import { Spinner, Toggle } from "../components/ui.jsx";
+import { Spinner, Toggle, SortIcon, compareForSort } from "../components/ui.jsx";
 
 // ── icons ─────────────────────────────────────────────────────────────────────
 
@@ -211,7 +211,58 @@ function AppRow({ app, stats, config, onToggleKill }) {
   );
 }
 
+// Urgent-first ranking, matching the priority order used for card view (see
+// sortedByPriority below): disconnected sorts before waiting-for-first-request,
+// which sorts before active.
+function statusRank(isKilled, neverUsed) {
+  if (isKilled) return 0;
+  if (neverUsed) return 1;
+  return 2;
+}
+
+const APP_TABLE_COLUMNS = [
+  { key: "app", label: "Application", className: "py-2.5 pl-4 pr-3" },
+  { key: "status", label: "Status", className: "py-2.5 px-3" },
+  { key: "requests", label: "Requests", className: "py-2.5 px-3" },
+  { key: "cost", label: "Cost", className: "py-2.5 px-3" },
+  { key: "success", label: "Success", className: "py-2.5 px-3" },
+  { key: "avgLatency", label: "Avg latency", className: "py-2.5 px-3" },
+];
+
+// Raw (unformatted) value for a column, used both for display fallback and sorting.
+function appSortValue(app, key, statsMap, configMap) {
+  const stats = statsMap[app] || null;
+  const config = configMap[app] || null;
+  const isKilled = config?.killSwitchEnabled ?? false;
+  const neverUsed = !stats || stats.requests === 0;
+  switch (key) {
+    case "app": return app;
+    case "status": return statusRank(isKilled, neverUsed);
+    case "requests": return stats ? stats.requests : null;
+    case "cost": return stats ? stats.cost : null;
+    case "success": return stats && stats.requests > 0 ? ((stats.requests - (stats.failures || 0)) / stats.requests) * 100 : null;
+    case "avgLatency": return stats ? stats.avgLatency : null;
+    default: return null;
+  }
+}
+
 function AppTable({ apps, statsMap, configMap, onToggleKill, label }) {
+  const [sort, setSort] = useState(null); // { key, dir } | null
+
+  const toggleSort = (key) => {
+    setSort((s) => (!s || s.key !== key ? { key, dir: "asc" } : { key, dir: s.dir === "asc" ? "desc" : "asc" }));
+  };
+
+  const sortedApps = sort
+    ? [...apps].sort((a, b) => {
+        const cmp = compareForSort(
+          appSortValue(a, sort.key, statsMap, configMap),
+          appSortValue(b, sort.key, statsMap, configMap)
+        );
+        return sort.dir === "desc" ? -cmp : cmp;
+      })
+    : apps;
+
   return (
     <div className="space-y-2">
       {label && (
@@ -224,17 +275,26 @@ function AppTable({ apps, statsMap, configMap, onToggleKill, label }) {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/60">
-              <th className="py-2.5 pl-4 pr-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Application</th>
-              <th className="py-2.5 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-              <th className="py-2.5 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Requests</th>
-              <th className="py-2.5 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Cost</th>
-              <th className="py-2.5 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Success</th>
-              <th className="py-2.5 px-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Avg latency</th>
+              {APP_TABLE_COLUMNS.map((c) => {
+                const active = sort?.key === c.key;
+                return (
+                  <th
+                    key={c.key}
+                    onClick={() => toggleSort(c.key)}
+                    className={`${c.className} text-xs font-medium uppercase tracking-wide select-none cursor-pointer hover:text-gray-700 ${
+                      active ? "text-gray-700" : "text-gray-500"
+                    }`}
+                  >
+                    {c.label}
+                    {active && <SortIcon dir={sort.dir} />}
+                  </th>
+                );
+              })}
               <th className="py-2.5 pl-3 pr-4" />
             </tr>
           </thead>
           <tbody>
-            {apps.map((app) => (
+            {sortedApps.map((app) => (
               <AppRow
                 key={app}
                 app={app}
