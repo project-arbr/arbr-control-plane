@@ -124,16 +124,16 @@ Every `RequestRecord` includes a `routingExplain` object that captures the non-d
 
 ## AI routing policy
 
-When AI routing mode is on, Arbr uses an AI-generated `{taskType → model}` map. To regenerate it:
+When AI routing mode is on, Arbr routes each request through a `{taskType → model}` map. To regenerate it:
 
 1. Go to **Settings → Routing → AI routing policy**
-2. Click **Regenerate** — uses the default model to produce the map
-3. Review and edit the map
+2. Click **Regenerate** — a **deterministic evidence-based engine** builds the map: for each task type it gates candidate models on capability, then scores them on quality against expected cost (from your live traffic) relative to the active goal's quality bar. No LLM chooses the assignments, so regeneration is reproducible and explainable, with deterministic tie-breaks.
+3. Review the per-task evidence and edit any pick
 4. Enable AI routing mode to activate it
 
-::: warning Gemini thinking models
-`gemini-2.5-flash` with thinking mode can fail JSON generation. Use `gpt-4o-mini` or another model as your default when generating the AI routing policy.
-:::
+Only the policy *generation* is deterministic — per-request task **classification** still uses the AI classifier when AI routing mode is on (see [Task classification](#task-classification) above).
+
+For a full walk-through of the engine — the classifier, capability gating, how benchmarks become model capabilities, and where cost enters the decision — see [How Arbr generates and applies an AI routing policy](ai-routing.md).
 
 ## The developer's pin in practice
 
