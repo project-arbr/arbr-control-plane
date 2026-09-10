@@ -72,11 +72,11 @@ export default function InternalSpend() {
           <Card title="By kind">
             <Table
               columns={[
-                { key: "kind", header: "Kind", render: (r) => labelFor(r.key) },
-                { key: "requests", header: "Requests", render: (r) => fmt.num(r.requests) },
-                { key: "cost", header: "Cost", render: (r) => fmt.usd(r.cost) },
-                { key: "avgLatency", header: "Avg latency", render: (r) => fmt.ms(r.avgLatency) },
-                { key: "failures", header: "Failures", render: (r) => fmt.num(r.failures) },
+                { key: "kind", header: "Kind", render: (r) => labelFor(r.key), sortValue: (r) => labelFor(r.key) },
+                { key: "requests", header: "Requests", sortable: true, render: (r) => fmt.num(r.requests) },
+                { key: "cost", header: "Cost", sortable: true, render: (r) => fmt.usd(r.cost) },
+                { key: "avgLatency", header: "Avg latency", sortable: true, render: (r) => fmt.ms(r.avgLatency) },
+                { key: "failures", header: "Failures", sortable: true, render: (r) => fmt.num(r.failures) },
               ]}
               rows={data.byKind}
               empty="No internal spend by kind."
@@ -90,9 +90,9 @@ export default function InternalSpend() {
             </p>
             <Table
               columns={[
-                { key: "model", header: "Model", render: (r) => r.key || "—" },
-                { key: "requests", header: "Requests", render: (r) => fmt.num(r.requests) },
-                { key: "cost", header: "Cost", render: (r) => fmt.usd(r.cost) },
+                { key: "model", header: "Model", render: (r) => r.key || "—", sortValue: (r) => r.key || "—" },
+                { key: "requests", header: "Requests", sortable: true, render: (r) => fmt.num(r.requests) },
+                { key: "cost", header: "Cost", sortable: true, render: (r) => fmt.usd(r.cost) },
               ]}
               rows={data.byModel}
               empty="No internal spend by model."

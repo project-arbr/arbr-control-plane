@@ -599,14 +599,14 @@ function ProviderHealthCard() {
       ) : (
         <Table
           columns={[
-            { key: "provider", header: "Provider", render: (r) => <span className="font-mono text-xs">{r.provider}</span> },
-            { key: "total",    header: "Requests",  render: (r) => fmt.num(r.total) },
-            { key: "errorRate", header: "Error rate", render: (r) => {
+            { key: "provider", header: "Provider", sortable: true, render: (r) => <span className="font-mono text-xs">{r.provider}</span> },
+            { key: "total",    header: "Requests",  sortable: true, render: (r) => fmt.num(r.total) },
+            { key: "errorRate", header: "Error rate", sortable: true, render: (r) => {
               const pct = ((r.errorRate || 0) * 100).toFixed(1);
               return <Badge tone={ALERT_TONE(parseFloat(pct))}>{pct}%</Badge>;
             }},
-            { key: "avgLatencyMs", header: "Avg latency", render: (r) => fmt.ms(r.avgLatencyMs) },
-            { key: "p50LatencyMs", header: "p50 latency", render: (r) => fmt.ms(r.p50LatencyMs) },
+            { key: "avgLatencyMs", header: "Avg latency", sortable: true, render: (r) => fmt.ms(r.avgLatencyMs) },
+            { key: "p50LatencyMs", header: "p50 latency", sortable: true, render: (r) => fmt.ms(r.p50LatencyMs) },
           ]}
           rows={rows}
         />

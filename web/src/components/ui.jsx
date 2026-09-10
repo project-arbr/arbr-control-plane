@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 // Underline sub-navigation. `tabs` is an array of [key, label]. Controlled.
@@ -79,24 +79,74 @@ export function Badge({ tone = "gray", children }) {
   );
 }
 
-export function Table({ columns, rows, empty = "No data.", onRowClick }) {
+// Generic ascending comparator: numbers compare numerically, everything else as
+// locale-aware text, and empty-ish values ("—", null, undefined, "") always sort last
+// regardless of direction so blank cells don't clutter the top of a desc sort.
+export function compareForSort(a, b) {
+  const aEmpty = a === null || a === undefined || a === "" || a === "—";
+  const bEmpty = b === null || b === undefined || b === "" || b === "—";
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
+export function SortIcon({ dir }) {
+  return (
+    <svg width="9" height="9" viewBox="0 0 10 10" className="ml-1 inline-block shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {dir === "asc" ? <path d="M2 6l3-3 3 3" /> : <path d="M2 4l3 3 3-3" />}
+    </svg>
+  );
+}
+
+export function Table({ columns, rows, empty = "No data.", onRowClick, defaultSort = null }) {
+  const [sort, setSort] = useState(defaultSort);
+
+  const sortedRows = useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    const getValue = (col && col.sortValue) || ((r) => r[sort.key]);
+    const sorted = [...rows].sort((a, b) => compareForSort(getValue(a), getValue(b)));
+    if (sort.dir === "desc") sorted.reverse();
+    return sorted;
+  }, [rows, sort, columns]);
+
+  const toggleSort = (col) => {
+    setSort((s) => (!s || s.key !== col.key ? { key: col.key, dir: "asc" } : { key: col.key, dir: s.dir === "asc" ? "desc" : "asc" }));
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr>
-            {columns.map((c) => (
-              <th key={c.key} className="border-b border-gray-200 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {c.header}
-              </th>
-            ))}
+            {columns.map((c) => {
+              // Opt-in, not opt-out: a column only sorts once a page explicitly marks it
+              // `sortable: true` (or supplies `sortValue`), since the default `row[key]`
+              // lookup is wrong for columns whose `render` reads a different/nested field.
+              const sortable = c.sortable === true || typeof c.sortValue === "function";
+              const active = sortable && sort?.key === c.key;
+              return (
+                <th
+                  key={c.key}
+                  onClick={sortable ? () => toggleSort(c) : undefined}
+                  className={`border-b border-gray-200 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide select-none ${
+                    active ? "text-gray-600" : "text-gray-400"
+                  }${sortable ? " cursor-pointer hover:text-gray-600" : ""}`}
+                >
+                  {c.header}
+                  {active && <SortIcon dir={sort.dir} />}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 ? (
+          {sortedRows.length === 0 ? (
             <tr><td colSpan={columns.length} className="px-3 py-10 text-center text-sm text-gray-400">{empty}</td></tr>
           ) : (
-            rows.map((row, i) => (
+            sortedRows.map((row, i) => (
               <tr key={i}
                 className={`border-b border-gray-100 hover:bg-gray-50${onRowClick ? " cursor-pointer" : ""}`}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}>
