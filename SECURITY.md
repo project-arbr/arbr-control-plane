@@ -24,6 +24,9 @@ This project is an LLM gateway and control plane. Areas of particular interest:
 
 - The admin API and dashboard authentication (`ARBR_ADMIN_KEY`, and per-user OIDC /
   trusted-header identity and role-based access control)
+- The gateway (data-plane) API keys that authenticate applications to the endpoints
+  above (`ab_…` gateway keys and read-only `ab_read_…` usage tokens), including key
+  rotation and expiry
 - Encryption of provider credentials at rest (`ARBR_ENCRYPTION_KEY`), and resolution of
   credentials held in a cloud secret manager (`gcp-sm://...` references)
 - The OpenAI-compatible and native gateway endpoints
