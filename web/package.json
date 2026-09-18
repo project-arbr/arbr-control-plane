@@ -9,17 +9,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.3",
     "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
-    "autoprefixer": "^10.5.4",
-    "postcss": "^8.5.26",
+    "autoprefixer": "^10.6.0",
+    "postcss": "^8.5.28",
     "tailwindcss": "^4.3.2",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   }
 }
