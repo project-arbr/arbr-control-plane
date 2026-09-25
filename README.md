@@ -457,8 +457,9 @@ Applications ─▶ POST /v1/chat              ─▶ ingress ─▶ match ─�
 - **Recommendations** — costed suggestions (e.g. *premium-model overuse* on cheap task
   types) with projected savings. Advisory until a human accepts.
 - **Controlled routing** — human rules first; then the automated mode a human enabled:
-  the heuristic **cost guardrail** or the **AI routing policy** (editable AI-generated
-  task→model map, with AI per-call task classification, **difficulty-aware** — easy
+  the heuristic **cost guardrail** or the **AI routing policy** (editable task→model
+  map built by a deterministic evidence-based engine, with AI per-call task
+  classification, **difficulty-aware** — easy
   instances of a task route to a cheaper model within the tier, hard instances to a
   stronger one). Plus response caching for exact duplicates and provider fallback.
 - **Governance** — per-application **gateway API keys** (trusted attribution + rate limits)
