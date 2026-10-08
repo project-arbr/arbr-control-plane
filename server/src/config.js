@@ -148,6 +148,16 @@ const FALLBACK_SCOPES = new Set(["same-provider", "cross-provider", "none"]);
 const rawFallback = (process.env.ARBR_FALLBACK_SCOPE || "same-provider").trim().toLowerCase();
 const fallbackScope = FALLBACK_SCOPES.has(rawFallback) ? rawFallback : "same-provider";
 
+// Replica pools (gateway/replicaPool.js): a pooled custom provider that fails this many times
+// in a row is skipped for the cooldown, so requests stop waiting on a host that has gone.
+function positiveInt(raw, dflt) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : dflt;
+}
+const replicaFailThreshold = positiveInt(process.env.ARBR_REPLICA_FAIL_THRESHOLD, 1);
+const replicaCooldownMs = positiveInt(process.env.ARBR_REPLICA_COOLDOWN_MS, 30000);
+const replicaConnectTimeoutMs = positiveInt(process.env.ARBR_REPLICA_CONNECT_TIMEOUT_MS, 3000);
+
 const isProduction = process.env.NODE_ENV === "production";
 
 // Admin identity mode. "adminkey" (default) is today's single-shared-secret
@@ -205,6 +215,9 @@ const config = {
   isProduction,
   // Provider-error fallback policy (see invokeWithFallback).
   fallbackScope,
+  replicaFailThreshold,
+  replicaCooldownMs,
+  replicaConnectTimeoutMs,
 
   // Env snapshot at boot. The RUNTIME source of truth for which providers are
   // live is connections.effective() (env creds + dashboard-stored creds merged).

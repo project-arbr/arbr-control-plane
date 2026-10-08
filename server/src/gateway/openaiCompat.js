@@ -19,6 +19,7 @@ const outputGuardrail = require("./outputGuardrail");
 const promptInjection = require("./promptInjection");
 const { pushOverride } = require("./explain");
 const { governanceFor, checkModel } = require("../routing/guards");
+const replicaPool = require("./replicaPool");
 
 // Providers whose wire protocol IS the OpenAI chat API. For these we transparently proxy the
 // raw request/response (preserving tools, tool_calls, vision content, response_format, and
@@ -167,20 +168,26 @@ async function proxyOpenAICompat(ctx) {
     settings, _reqStart,
   } = ctx;
 
-  // Honors a rule- or application-pinned key; falls back to the provider default when the
-  // pinned alias no longer exists (resolveRoute has already recorded that it fell back).
-  const apiKey =
-    credentialFor(eff, served.provider, served.credentialAlias)?.credential?.apiKey || "none";
-  const url = `${baseURL}/chat/completions`;
   const upstreamBody = { ...body, model: served.model };
   const start = Date.now();
   const gatewayOverheadMs = _reqStart != null ? start - _reqStart : null;
+
+  // Replica pools: the members of the routed provider's pool, in the order to try them. A
+  // provider without a pool yields only itself, so the loop below is one plain attempt.
+  const pooled = replicaPool.members(served.provider, eff).length > 1;
+  const candidates = replicaPool.order(served.provider, eff);
+  let member = served.provider; // the provider actually serving this request
+  let attempts = 0;
 
   const logRecord = (extra) =>
     setImmediate(() =>
       logger.write({
         requestId, timestamp, ...meta,
-        provider: served.provider, credentialAlias: served.credentialAlias, model: served.model, modelRequested,
+        // A pinned key belongs to the routed provider only; another member served on its own key.
+        provider: member, credentialAlias: member === served.provider ? served.credentialAlias : null,
+        model: served.model, modelRequested,
+        replicaOf: member !== served.provider ? served.provider : null,
+        replicaAttempts: pooled ? attempts : null,
         taskType, classifiedBy, difficulty, difficultyScore, confidence, routingDecision, routingExplain, qualityGate: qualityGate || null, cacheHit: false,
         knownPricing: served.knownPricing,
         messages: body.messages,
@@ -188,18 +195,68 @@ async function proxyOpenAICompat(ctx) {
       })
     );
 
-  let upstream;
-  try {
-    upstream = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(upstreamBody),
-    });
-  } catch (err) {
-    logRecord({ latencyMs: Date.now() - start, status: "failure", errorMessage: String(err.message || err) });
+  if (!candidates.length) {
+    const msg = `No member of the "${served.provider}" replica pool is accepting requests (all draining).`;
+    logRecord({ latencyMs: 0, status: "failure", errorMessage: msg });
+    return res.status(503).json({ error: { message: msg, type: "server_error", code: "no_replica_available" } });
+  }
+
+  // Try members in order. Move on when a member cannot be reached, or answers with a status
+  // meaning it is overloaded or going away; the last member's answer is relayed whatever it is.
+  // Nothing has reached the client yet, so a retry is invisible to it.
+  let upstream = null, lastErr = null;
+  for (let i = 0; i < candidates.length; i++) {
+    member = candidates[i];
+    attempts += 1;
+    const base = member === served.provider ? baseURL : openAICompatBaseURL(member, eff);
+    // Honors a rule- or application-pinned key; falls back to the provider default when the
+    // pinned alias no longer exists (resolveRoute has already recorded that it fell back).
+    const apiKey = credentialFor(eff, member, member === served.provider ? served.credentialAlias : null)
+      ?.credential?.apiKey || "none";
+    if (pooled && !(await replicaPool.reachable(member, base))) {
+      replicaPool.reportFailure(member);
+      lastErr = new Error(`replica ${member} unreachable (no TCP connection)`);
+      continue;
+    }
+    replicaPool.acquire(member);
+    try {
+      upstream = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(upstreamBody),
+      });
+    } catch (err) {
+      replicaPool.release(member);
+      replicaPool.reportFailure(member);
+      lastErr = err;
+      continue;
+    }
+    if (i < candidates.length - 1 && replicaPool.retryableStatus(upstream.status)) {
+      await upstream.body?.cancel().catch(() => {});
+      replicaPool.release(member);
+      replicaPool.reportFailure(member);
+      lastErr = new Error(`upstream ${upstream.status}`);
+      upstream = null;
+      continue;
+    }
+    break;
+  }
+  if (!upstream) {
+    logRecord({ latencyMs: Date.now() - start, status: "failure", errorMessage: String(lastErr?.message || lastErr) });
     return res.status(502).json({
-      error: { message: String(err.message || err), type: "server_error", code: "provider_error" },
+      error: { message: String(lastErr?.message || lastErr), type: "server_error", code: "provider_error" },
     });
+  }
+  // The serving member holds an in-flight slot until the client's response is over, whether it
+  // completed or the client went away.
+  const servingMember = member;
+  let released = false;
+  const releaseSlot = () => { if (!released) { released = true; replicaPool.release(servingMember); } };
+  res.once("finish", releaseSlot);
+  res.once("close", releaseSlot);
+  if (member !== served.provider) {
+    res.setHeader("X-Arbr-Provider", member);
+    res.setHeader("X-Arbr-Replica-Of", served.provider);
   }
 
   // — Non-streaming: relay the JSON body and status verbatim ————————————————————
@@ -208,11 +265,15 @@ async function proxyOpenAICompat(ctx) {
     const latencyMs = Date.now() - start;
     if (!upstream.ok || !data) {
       const errMsg = data?.error?.message || `upstream ${upstream.status}`;
+      // A server error counts against the member's health; a client error (4xx other than
+      // 429) is the request's own fault and does not.
+      if (upstream.ok || upstream.status >= 500 || upstream.status === 429) replicaPool.reportFailure(member);
       logRecord({ latencyMs, status: "failure", errorMessage: errMsg });
       return res
         .status(upstream.status || 502)
         .json(data || { error: { message: "Upstream error", type: "server_error" } });
     }
+    replicaPool.reportSuccess(member);
     const responseContent = data.choices?.[0]?.message?.content || "";
     if (settings?.outputGuardrailsEnabled && settings.outputGuardrailRules?.length) {
       const { blocked, ruleName } = outputGuardrail.check(responseContent, settings.outputGuardrailRules, meta.application);
@@ -239,7 +300,7 @@ async function proxyOpenAICompat(ctx) {
     maybeShadowEval({
       application: meta.application, workflow: meta.workflow, taskType, messages: body.messages, hasTools: !!(body.tools && body.tools.length),
       requestId, router, eff,
-      prod: { model: served.model, provider: served.provider, latencyMs, text: data.choices?.[0]?.message?.content || "",
+      prod: { model: served.model, provider: member, latencyMs, text: data.choices?.[0]?.message?.content || "",
               usage: { inputTokens: u.prompt_tokens || 0, outputTokens: u.completion_tokens || 0 } },
     });
     return;
@@ -292,6 +353,7 @@ async function proxyOpenAICompat(ctx) {
       }
     }
     res.end();
+    replicaPool.reportSuccess(member);
     logRecord({
       promptTokens, completionTokens, totalTokens: promptTokens + completionTokens,
       cachedReadTokens,
@@ -299,6 +361,8 @@ async function proxyOpenAICompat(ctx) {
       latencyMs: Date.now() - start, ttftMs, gatewayOverheadMs, status: "success",
     });
   } catch (err) {
+    // A stream cut mid-way or a server error counts against the member; a 4xx does not.
+    if (upstream.ok || upstream.status >= 500 || upstream.status === 429) replicaPool.reportFailure(member);
     try { res.write(`data: ${JSON.stringify({ error: String(err.message || err) })}\n\n`); } catch { /* client gone */ }
     res.end();
     logRecord({ latencyMs: Date.now() - start, ttftMs, status: "failure", errorMessage: String(err.message || err) });

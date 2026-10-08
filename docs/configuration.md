@@ -60,6 +60,9 @@ Environment variables take **precedence** over dashboard-stored keys.
 |---|---|---|
 | `DEFAULT_PROVIDER` | first live provider | Initial default-provider preference. Runtime-selectable in Settings → General → Default gateway (takes precedence). |
 | `ARBR_DEFAULT_MAX_TOKENS` | `4096` | Completion token ceiling applied when the caller omits `max_tokens`. The gateway also clamps this value to each model's known output ceiling (e.g. 8192 for `nova-lite`), so setting a higher value is safe — it is capped per-model automatically. |
+| `ARBR_REPLICA_FAIL_THRESHOLD` | `1` | Consecutive failures after which a [replica pool](routing-spec.md#7-replica-pools) member is put in cooldown. |
+| `ARBR_REPLICA_COOLDOWN_MS` | `30000` | How long a failed replica pool member is skipped before it is tried again. |
+| `ARBR_REPLICA_CONNECT_TIMEOUT_MS` | `3000` | A replica pool member that has not answered in the last 2 s must accept a TCP connection within this time, or it is treated as failed. Catches hosts that silently drop packets (paused or firewalled). |
 | `ARBR_FALLBACK_SCOPE` | `same-provider` | Retry scope when a provider call fails: `same-provider` (retry the provider's own default model only), `cross-provider` (walk every other live provider's default model), or `none` (no automatic fallback). |
 
 ## Docker / seeding

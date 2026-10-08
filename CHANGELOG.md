@@ -8,6 +8,13 @@ changelogs under `clients/`.
 ## [Unreleased]
 
 ### Added
+- Replica pools for custom providers: OpenAI-compatible custom providers that share a `pool`
+  name serve the same models and share `/v1/chat/completions` traffic, least-in-flight first.
+  A member that is unreachable or answers `429`/`5xx` is retried on another member before the
+  client sees anything, then cooled down; `draining` (admin API, audit-logged) stops new
+  requests while in-flight ones finish. Request records attribute each request and its tokens
+  to the member that served it (`provider`, `replicaOf`, `replicaAttempts`), and
+  `GET /api/replica-pools` reports live member health. See `docs/routing-spec.md` §7.
 - Mistral AI provider (`mistral`): OpenAI-compatible adapter routed at
   `https://api.mistral.ai/v1`, configured via `MISTRAL_API_KEY`, defaulting to
   `mistral-small-latest`. Streaming, tools, and `response_format` proxy raw like the other

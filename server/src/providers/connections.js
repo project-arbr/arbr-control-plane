@@ -244,6 +244,8 @@ async function compute() {
           default: { credential, source: "stored", last4: cp.last4 || "", region: null, isDefault: true, createdAt: cp.createdAt || null },
         },
         shadowsBuiltin: KNOWN_PROVIDERS.includes(cp.id),
+        pool: cp.pool || null,
+        draining: !!cp.draining,
       };
     } catch { /* skip undecodable */ }
   }
