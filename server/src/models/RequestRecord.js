@@ -36,6 +36,10 @@ const requestRecordSchema = new mongoose.Schema(
     // attribution is usually the reason an operator runs more than one key at all.
     credentialAlias: { type: String, default: null, index: true }, // provider served
     model: { type: String, index: true },     // model served
+    // Replica pools: when a pool member other than the routed provider served the request,
+    // `provider` is that member and `replicaOf` is the provider routing chose.
+    replicaOf: { type: String, default: null },
+    replicaAttempts: { type: Number, default: null }, // members tried, including the one that served
     modelRequested: { type: String, index: true },
     taskType: { type: String, index: true },
 

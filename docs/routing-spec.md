@@ -189,6 +189,38 @@ bedrock-nova + anthropic:
 
 ---
 
+## 7. Replica pools
+
+Several OpenAI-compatible custom providers can serve the **same model ids** from different
+endpoints, for example one self-hosted vLLM server per GPU host. Give them the same `pool`
+name (`POST`/`PATCH /api/custom-providers`, field `pool`). Routing is unchanged: the registry
+still resolves a model to one provider. Dispatch (`gateway/replicaPool.js`, used by
+`/v1/chat/completions`) then serves the request from that provider's pool:
+
+- **Spread:** the healthy member with the fewest requests in flight goes first; ties rotate.
+- **Failover:** a member that cannot be reached, or answers `429` or `5xx`, is retried on the
+  next member before any byte reaches the client. The last member's answer is relayed as is.
+  A `4xx` other than `429` is the request's own fault: relayed, not retried, not counted
+  against the member. A stream that breaks after bytes were sent cannot be retried.
+- **Silent hosts:** a member that has not answered in the last 2 s must accept a TCP
+  connection within `ARBR_REPLICA_CONNECT_TIMEOUT_MS` (default 3 s) first, so a paused or
+  firewalled host that drops packets costs seconds, not a fetch timeout.
+- **Cooldown:** after `ARBR_REPLICA_FAIL_THRESHOLD` consecutive failures a member is skipped
+  for `ARBR_REPLICA_COOLDOWN_MS`. A cooling member is still tried last, so a request is not
+  refused while any member might answer. One success clears the streak.
+- **Drain:** `PATCH /api/custom-providers/:id {"draining": true}` stops new requests to a
+  member; requests already in flight finish. It is audit-logged. When every member is
+  draining the gateway answers `503 no_replica_available`.
+- **Attribution:** the request record's `provider` is the member that served; `replicaOf`
+  is the provider routing chose (when different) and `replicaAttempts` counts members tried.
+  The response carries `X-Arbr-Provider` (the member) and `X-Arbr-Replica-Of`.
+
+Health is kept per gateway process; draining is stored and reaches every process within the
+connections cache TTL (3 s). `GET /api/replica-pools` shows each member's live state.
+Pools apply to `/v1/chat/completions`; `/v1/chat` (LangChain path) is unchanged.
+
+---
+
 ## Known gaps → target behavior (Phase 2 hardening)
 
 These are current defects the hardening phase closes. Documented here so the spec

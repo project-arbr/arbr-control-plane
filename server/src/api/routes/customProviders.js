@@ -10,13 +10,27 @@ const CustomProvider = require("../../models/CustomProvider");
 const secrets = require("../../security/secrets");
 const { config, KNOWN_PROVIDERS } = require("../../config");
 const { classifyModelImport, isChatLikelyModelId } = require("../../providers/importLogic");
+const replicaPool = require("../../gateway/replicaPool");
 
 const router = express.Router();
 
 // ── custom providers ──
 function cpView(d) {
-  return { id: d.id, label: d.label, baseURL: d.baseURL, last4: d.last4, enabled: d.enabled, createdAt: d.createdAt };
+  return { id: d.id, label: d.label, baseURL: d.baseURL, last4: d.last4, enabled: d.enabled,
+    pool: d.pool || "", draining: !!d.draining, createdAt: d.createdAt };
 }
+
+// Replica pool names share the id alphabet so they are safe in URLs and logs.
+function cleanPool(v) {
+  return String(v || "").trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-");
+}
+
+// Live health of every pooled custom provider in this gateway process (see gateway/replicaPool.js).
+router.get("/replica-pools", async (_req, res, next) => {
+  try {
+    res.json(replicaPool.snapshot(await connections.effective()));
+  } catch (e) { next(e); }
+});
 
 router.get("/custom-providers", async (_req, res, next) => {
   try {
@@ -27,7 +41,7 @@ router.get("/custom-providers", async (_req, res, next) => {
 
 router.post("/custom-providers", requireRole("administrator"), async (req, res, next) => {
   try {
-    const { id, label, baseURL, apiKey } = req.body || {};
+    const { id, label, baseURL, apiKey, pool } = req.body || {};
     if (!id || !String(id).trim()) return res.status(400).json({ error: "id is required" });
     if (!label || !String(label).trim()) return res.status(400).json({ error: "label is required" });
     if (!baseURL || !String(baseURL).trim()) return res.status(400).json({ error: "baseURL is required" });
@@ -41,6 +55,7 @@ router.post("/custom-providers", requireRole("administrator"), async (req, res, 
       ...enc,
       last4: cleanKey.slice(-4),
       enabled: true,
+      pool: cleanPool(pool),
     });
     connections.invalidate();
     res.status(201).json(cpView(doc.toObject()));
@@ -63,8 +78,15 @@ router.patch("/custom-providers/:id", requireRole("administrator"), async (req, 
       update.last4 = cleanKey.slice(-4);
     }
     if (typeof req.body.enabled === "boolean") update.enabled = req.body.enabled;
+    if (typeof req.body.pool === "string") update.pool = cleanPool(req.body.pool);
+    // Draining is how a GPU owner's reclaim reaches the gateway: no new requests, in-flight finish.
+    if (typeof req.body.draining === "boolean") update.draining = req.body.draining;
     await CustomProvider.updateOne({ id: req.params.id }, { $set: update });
     connections.invalidate();
+    if ("draining" in update && update.draining !== !!doc.draining) {
+      setImmediate(() => logAction(update.draining ? "customProvider.drain" : "customProvider.undrain",
+        "customProvider", doc.id, { pool: update.pool ?? doc.pool ?? "" }, req.user));
+    }
     res.json(cpView(await CustomProvider.findOne({ id: req.params.id }).lean()));
   } catch (e) { next(e); }
 });
