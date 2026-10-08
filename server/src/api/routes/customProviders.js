@@ -20,6 +20,13 @@ function cpView(d) {
     pool: d.pool || "", draining: !!d.draining, createdAt: d.createdAt };
 }
 
+// Trailing "/" removed with a loop, not /\/+$/, which backtracks polynomially on long runs of "/".
+function stripTrailingSlashes(v) {
+  let end = v.length;
+  while (end > 0 && v[end - 1] === "/") end--;
+  return v.slice(0, end);
+}
+
 // Replica pool names share the id alphabet so they are safe in URLs and logs.
 function cleanPool(v) {
   return String(v || "").trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-");
@@ -51,7 +58,7 @@ router.post("/custom-providers", requireRole("administrator"), async (req, res, 
     const doc = await CustomProvider.create({
       id: String(id).trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-"),
       label: String(label).trim(),
-      baseURL: String(baseURL).trim().replace(/\/+$/, ""),
+      baseURL: stripTrailingSlashes(String(baseURL).trim()),
       ...enc,
       last4: cleanKey.slice(-4),
       enabled: true,
@@ -71,7 +78,7 @@ router.patch("/custom-providers/:id", requireRole("administrator"), async (req, 
     if (!doc) return res.status(404).json({ error: "not_found" });
     const update = {};
     if (req.body.label) update.label = String(req.body.label).trim();
-    if (req.body.baseURL) update.baseURL = String(req.body.baseURL).trim().replace(/\/+$/, "");
+    if (req.body.baseURL) update.baseURL = stripTrailingSlashes(String(req.body.baseURL).trim());
     if (req.body.apiKey && String(req.body.apiKey).trim()) {
       const cleanKey = String(req.body.apiKey).trim();
       Object.assign(update, secrets.encrypt(cleanKey));
