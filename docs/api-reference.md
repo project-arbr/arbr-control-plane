@@ -160,7 +160,7 @@ Create a budget cap.
 }
 ```
 
-`dimension` options: `application`, `provider`, `department`, `workflow`, `model`. Omit for a global cap.
+`dimension` options: `application`, `provider`, `department`, `workflow`, `model`, `user`. Omit for a global cap.
 `action` options: `alert`, `downgrade`, `block`.
 
 ### `PATCH /api/caps/:id`
