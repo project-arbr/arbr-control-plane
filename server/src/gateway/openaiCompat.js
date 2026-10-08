@@ -219,17 +219,24 @@ async function proxyOpenAICompat(ctx) {
       continue;
     }
     replicaPool.acquire(member);
+    // A pooled member is watched until its response headers arrive; if it vanishes mid-request
+    // the request is aborted here, before any byte reached the client, and retried below.
+    const controller = pooled ? new AbortController() : null;
+    const stopWatch = pooled ? replicaPool.watchInFlight(member, base, controller) : () => {};
     try {
       upstream = await fetch(`${base}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify(upstreamBody),
+        ...(controller ? { signal: controller.signal } : {}),
       });
     } catch (err) {
       replicaPool.release(member);
       replicaPool.reportFailure(member);
-      lastErr = err;
+      lastErr = controller?.signal.aborted ? controller.signal.reason : err;
       continue;
+    } finally {
+      stopWatch();
     }
     if (i < candidates.length - 1 && replicaPool.retryableStatus(upstream.status)) {
       await upstream.body?.cancel().catch(() => {});

@@ -157,6 +157,7 @@ function positiveInt(raw, dflt) {
 const replicaFailThreshold = positiveInt(process.env.ARBR_REPLICA_FAIL_THRESHOLD, 1);
 const replicaCooldownMs = positiveInt(process.env.ARBR_REPLICA_COOLDOWN_MS, 30000);
 const replicaConnectTimeoutMs = positiveInt(process.env.ARBR_REPLICA_CONNECT_TIMEOUT_MS, 3000);
+const replicaInflightProbeMs = positiveInt(process.env.ARBR_REPLICA_INFLIGHT_PROBE_MS, 5000);
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -218,6 +219,7 @@ const config = {
   replicaFailThreshold,
   replicaCooldownMs,
   replicaConnectTimeoutMs,
+  replicaInflightProbeMs,
 
   // Env snapshot at boot. The RUNTIME source of truth for which providers are
   // live is connections.effective() (env creds + dashboard-stored creds merged).

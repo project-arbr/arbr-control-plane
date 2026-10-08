@@ -63,6 +63,7 @@ Environment variables take **precedence** over dashboard-stored keys.
 | `ARBR_REPLICA_FAIL_THRESHOLD` | `1` | Consecutive failures after which a [replica pool](routing-spec.md#7-replica-pools) member is put in cooldown. |
 | `ARBR_REPLICA_COOLDOWN_MS` | `30000` | How long a failed replica pool member is skipped before it is tried again. |
 | `ARBR_REPLICA_CONNECT_TIMEOUT_MS` | `3000` | A replica pool member that has not answered in the last 2 s must accept a TCP connection within this time, or it is treated as failed. Catches hosts that silently drop packets (paused or firewalled). |
+| `ARBR_REPLICA_INFLIGHT_PROBE_MS` | `5000` | While a request to a replica pool member waits for its response, how often to check that the member still accepts TCP connections. A failed check aborts the request and retries it on another member before any byte reaches the client. |
 | `ARBR_FALLBACK_SCOPE` | `same-provider` | Retry scope when a provider call fails: `same-provider` (retry the provider's own default model only), `cross-provider` (walk every other live provider's default model), or `none` (no automatic fallback). |
 
 ## Docker / seeding

@@ -105,6 +105,28 @@ function reportFailure(id, now = Date.now()) {
   if (s.fails >= config.replicaFailThreshold) s.downUntil = now + config.replicaCooldownMs;
 }
 
+// While a request to a pool member waits for its response, check every `replicaInflightProbeMs`
+// that the member still accepts TCP connections. A host that was paused or cut off mid-request
+// otherwise leaves the request hanging until the OS gives up (minutes). A slow but healthy member
+// is never interrupted: only a failed probe aborts. Returns a function that stops the watch; call
+// it as soon as the response headers arrive, so a body already streaming is never aborted.
+function watchInFlight(id, baseURL, controller) {
+  let busy = false;
+  const timer = setInterval(async () => {
+    if (busy || controller.signal.aborted) return;
+    busy = true;
+    try {
+      if (!(await reachable(id, baseURL))) {
+        controller.abort(new Error(`replica ${id} stopped answering mid-request (no TCP connection)`));
+      }
+    } finally {
+      busy = false;
+    }
+  }, config.replicaInflightProbeMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 // Upstream statuses worth retrying on another member: the replica errored, is overloaded,
 // restarting or gone (a vLLM engine that has died answers 500). Other 4xx are the request's
 // own fault and would fail the same way everywhere.
@@ -136,5 +158,5 @@ function snapshot(eff, now = Date.now()) {
 function _reset() { state.clear(); rotation.clear(); }
 
 module.exports = {
-  members, order, acquire, release, reportSuccess, reportFailure, reachable, retryableStatus, snapshot, _reset,
+  members, order, acquire, release, reportSuccess, reportFailure, reachable, watchInFlight, retryableStatus, snapshot, _reset,
 };
