@@ -23,7 +23,7 @@ const rotation = new Map(); // pool -> counter used to break ties between equall
 function entry(id) {
   let s = state.get(id);
   if (!s) {
-    s = { inFlight: 0, fails: 0, downUntil: 0, served: 0, failed: 0, lastOk: 0 };
+    s = { inFlight: 0, fails: 0, downUntil: 0, served: 0, failed: 0, lastOk: 0, trialUntil: 0 };
     state.set(id, s);
   }
   return s;
@@ -42,11 +42,23 @@ function members(providerId, eff) {
   return Object.keys(eff.providers).filter((id) => poolOf(id, eff) === pool).sort();
 }
 
+// How long one request holds the single trial of a recovering member. It is cleared as soon as that
+// request reports success or failure; the expiry only covers a request that never reports back.
+const TRIAL_MS = 60000;
+
+// A member is recovering when its cooldown has ended but it has not answered since it failed.
+function recovering(s, now) {
+  return s.downUntil > 0 && s.downUntil <= now && s.fails >= config.replicaFailThreshold;
+}
+
 // The order in which dispatch should try members for one request.
 //   - draining members are never tried
-//   - healthy members first, fewest in flight first; ties rotate so load spreads evenly
-//   - members in cooldown come last, soonest-to-recover first, so a request still has a
-//     chance when every member has recently failed (better than refusing outright)
+//   - a recovering member gets exactly ONE trial request at a time (half-open): the request that
+//     claims it tries it first; every other request skips it until the trial reports back. Without
+//     this, every request arriving as a frozen member's cooldown ends paid its connect timeout.
+//   - healthy members next, fewest in flight first; ties rotate so load spreads evenly
+//   - members in cooldown (and recovering members whose trial is taken) come last, soonest-to-recover
+//     first, so a request still has a chance when every member has recently failed
 // Returns [] only when every member is draining.
 function order(providerId, eff, now = Date.now()) {
   const pool = poolOf(providerId, eff);
@@ -55,11 +67,24 @@ function order(providerId, eff, now = Date.now()) {
   const turn = rotation.get(pool) || 0;
   rotation.set(pool, turn + 1);
   const rank = (id) => (live.indexOf(id) - (turn % live.length) + live.length) % live.length;
-  const healthy = live.filter((id) => entry(id).downUntil <= now)
+  const trial = [], waiting = [];
+  for (const id of live) {
+    const s = entry(id);
+    if (!recovering(s, now)) continue;
+    if (s.trialUntil > now) {
+      waiting.push(id);
+    } else if (!trial.length) {
+      s.trialUntil = now + TRIAL_MS; // this request claims the trial
+      trial.push(id);
+    } else {
+      waiting.push(id); // one trial per request; the next request takes the next recovering member
+    }
+  }
+  const healthy = live.filter((id) => entry(id).downUntil <= now && !recovering(entry(id), now))
     .sort((a, b) => entry(a).inFlight - entry(b).inFlight || rank(a) - rank(b));
-  const cooling = live.filter((id) => entry(id).downUntil > now)
+  const cooling = live.filter((id) => entry(id).downUntil > now || waiting.includes(id))
     .sort((a, b) => entry(a).downUntil - entry(b).downUntil);
-  return [...healthy, ...cooling];
+  return [...trial, ...healthy, ...cooling];
 }
 
 function acquire(id) { entry(id).inFlight += 1; }
@@ -69,6 +94,7 @@ function reportSuccess(id) {
   const s = entry(id);
   s.fails = 0;
   s.downUntil = 0;
+  s.trialUntil = 0;
   s.served += 1;
   s.lastOk = Date.now();
 }
@@ -102,6 +128,7 @@ function reportFailure(id, now = Date.now()) {
   const s = entry(id);
   s.fails += 1;
   s.failed += 1;
+  s.trialUntil = 0;
   if (s.fails >= config.replicaFailThreshold) s.downUntil = now + config.replicaCooldownMs;
 }
 
@@ -145,7 +172,8 @@ function snapshot(eff, now = Date.now()) {
         provider: id,
         pool: poolOf(id, eff),
         draining: !!eff.providers[id].draining,
-        healthy: s.downUntil <= now,
+        healthy: s.downUntil <= now && !recovering(s, now),
+        recovering: recovering(s, now),
         cooldownRemainingMs: Math.max(0, s.downUntil - now),
         inFlight: s.inFlight,
         consecutiveFailures: s.fails,

@@ -53,7 +53,45 @@ test("a failed member cools down and goes last, then returns after the cooldown"
   assert.equal(during[during.length - 1], "a");
   assert.equal(during.length, 3, "a cooling member is still tried as a last resort");
   const snap = pool.snapshot(eff(), now + config.replicaCooldownMs + 1).find((r) => r.provider === "a");
-  assert.equal(snap.healthy, true);
+  assert.equal(snap.healthy, false, "after the cooldown it is recovering, not yet healthy");
+  assert.equal(snap.recovering, true);
+});
+
+test("a recovering member gets exactly one trial request at a time", () => {
+  const now = 1_000_000;
+  const after = now + config.replicaCooldownMs + 1;
+  pool.reportFailure("a", now);
+  const first = pool.order("a", eff(), after);
+  assert.equal(first[0], "a", "the first request after the cooldown tries the recovering member first");
+  for (let i = 0; i < 5; i++) {
+    const next = pool.order("a", eff(), after + 10 + i);
+    assert.equal(next[next.length - 1], "a", "while the trial is out, others try it only as a last resort");
+    assert.notEqual(next[0], "a");
+  }
+});
+
+test("a successful trial makes the member healthy again; a failed one cools it down again", () => {
+  const now = 1_000_000;
+  const after = now + config.replicaCooldownMs + 1;
+  pool.reportFailure("a", now);
+  pool.order("a", eff(), after);              // claims the trial
+  pool.reportSuccess("a");
+  assert.equal(pool.snapshot(eff(), after + 1).find((r) => r.provider === "a").healthy, true);
+  pool.reportFailure("b", now);
+  pool.order("a", eff(), after);              // claims b's trial (a is healthy now)
+  pool.reportFailure("b", after + 5);
+  const b = pool.snapshot(eff(), after + 6).find((r) => r.provider === "b");
+  assert.equal(b.recovering, false);
+  assert.ok(b.cooldownRemainingMs > 0, "a failed trial starts a fresh cooldown");
+});
+
+test("a trial whose request never reports back is released after its expiry", () => {
+  const now = 1_000_000;
+  const after = now + config.replicaCooldownMs + 1;
+  pool.reportFailure("a", now);
+  pool.order("a", eff(), after);              // trial claimed, never reported
+  const later = pool.order("a", eff(), after + 60_001);
+  assert.equal(later[0], "a", "the trial is offered again once the claim expires");
 });
 
 test("success clears a member's failure streak", () => {
