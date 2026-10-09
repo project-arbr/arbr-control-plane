@@ -12,13 +12,14 @@ const mongoose = require("mongoose");
 
 process.env.ARBR_ADMIN_KEY = "";
 process.env.ARBR_REPLICA_COOLDOWN_MS = "60000";
+process.env.ARBR_REPLICA_INFLIGHT_PROBE_MS = "300";
 
 let agent, skip = false, RequestRecord, replicaPool;
 const MODEL = "pool-test-model";
 
 // A fake vLLM: answers chat completions in the mode it is set to, counting requests.
 function fakeUpstream(name) {
-  const u = { name, mode: "ok", hits: 0, server: null, port: 0 };
+  const u = { name, mode: "ok", hits: 0, server: null, port: 0, held: [] };
   u.server = http.createServer((req, res) => {
     let raw = "";
     req.on("data", (c) => { raw += c; });
@@ -27,6 +28,7 @@ function fakeUpstream(name) {
       if (u.mode === "503") { res.writeHead(503, { "Content-Type": "application/json" }); return res.end('{"error":{"message":"busy"}}'); }
       if (u.mode === "400") { res.writeHead(400, { "Content-Type": "application/json" }); return res.end('{"error":{"message":"bad request"}}'); }
       const body = JSON.parse(raw || "{}");
+      if (u.mode === "freeze") { u.held.push(res); return; } // accept, then never answer
       if (u.mode === "slow") return setTimeout(() => { u.mode = "ok"; respond(body); }, 400);
       respond(body);
     });
@@ -46,7 +48,8 @@ function fakeUpstream(name) {
   return u;
 }
 const listen = (u) => new Promise((r) => u.server.listen(0, "127.0.0.1", () => { u.port = u.server.address().port; r(); }));
-const ups = { a: fakeUpstream("a"), b: fakeUpstream("b") };
+const ups = { a: fakeUpstream("a"), b: fakeUpstream("b"), solo: fakeUpstream("solo") };
+const SOLO_MODEL = "solo-test-model";
 
 before(async () => {
   try {
@@ -60,6 +63,7 @@ before(async () => {
   }
   await listen(ups.a);
   await listen(ups.b);
+  await listen(ups.solo);
   const supertest = require("supertest");
   const { mountCore } = require("../../src/cloud");
   const ModelEntry = require("../../src/models/ModelEntry");
@@ -76,6 +80,13 @@ before(async () => {
     assert.equal(r.body.pool, "qwen-pool");
   }
   await ModelEntry.create({ id: MODEL, provider: "pool-a", label: MODEL, tier: "mid", inputPer1M: 0, outputPer1M: 0 });
+  // A custom provider with no pool: must behave exactly as before replica pools existed.
+  const r = await agent.post("/api/custom-providers").send({
+    id: "solo", label: "Solo", baseURL: `http://127.0.0.1:${ups.solo.port}/v1`, apiKey: "k",
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.pool, "");
+  await ModelEntry.create({ id: SOLO_MODEL, provider: "solo", label: SOLO_MODEL, tier: "mid", inputPer1M: 0, outputPer1M: 0 });
   await pricing.reload();
 });
 
@@ -97,6 +108,43 @@ beforeEach(async () => {
 const maybeSkip = (t) => { if (skip) { t.skip("no Mongo"); return true; } return false; };
 const chat = (extra = {}) => agent.post("/v1/chat/completions")
   .send({ model: MODEL, messages: [{ role: "user", content: "hello" }], ...extra });
+
+test("a provider without a pool behaves as before: one attempt, status relayed, no replica fields", async (t) => {
+  if (maybeSkip(t)) return;
+  const solo = (extra = {}) => agent.post("/v1/chat/completions")
+    .send({ model: SOLO_MODEL, messages: [{ role: "user", content: "hello" }], ...extra });
+  await RequestRecord.deleteMany({ model: SOLO_MODEL });
+  ups.solo.mode = "ok";
+  const ok = await solo();
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers["x-arbr-provider"], "solo");
+  assert.equal(ok.headers["x-arbr-replica-of"], undefined);
+  ups.solo.mode = "503";
+  const before = ups.solo.hits;
+  const busy = await solo();
+  assert.equal(busy.status, 503, "an upstream 503 is relayed, not retried or rewritten");
+  assert.equal(ups.solo.hits - before, 1, "exactly one attempt");
+  const port = ups.solo.port;
+  await new Promise((r) => ups.solo.server.close(r));
+  try {
+    const gone = await solo();
+    assert.equal(gone.status, 502);
+    assert.equal(gone.body.error.code, "provider_error");
+  } finally {
+    await new Promise((r) => ups.solo.server.listen(port, "127.0.0.1", r));
+    ups.solo.mode = "ok";
+  }
+  await new Promise((r) => setTimeout(r, 300));
+  const recs = await RequestRecord.find({ model: SOLO_MODEL }).lean();
+  assert.equal(recs.length, 3);
+  for (const rec of recs) {
+    assert.equal(rec.provider, "solo");
+    assert.equal(rec.replicaOf, null);
+    assert.equal(rec.replicaAttempts, null);
+  }
+  const pools = (await agent.get("/api/replica-pools")).body;
+  assert.ok(!pools.some((p) => p.provider === "solo"), "a provider without a pool is not listed as a pool member");
+});
 
 test("requests spread across both members of the pool", async (t) => {
   if (maybeSkip(t)) return;
@@ -203,6 +251,38 @@ test("a streaming request is retried on another member before any byte reaches t
   assert.match(r.body, /hi from b/);
   assert.doesNotMatch(r.body, /busy/);
   assert.equal(ups.a.hits, 1);
+});
+
+test("a member that freezes mid-request is detected and the request retried elsewhere", async (t) => {
+  if (maybeSkip(t)) return;
+  ups.a.mode = "freeze";
+  replicaPool.acquire("pool-b"); // make sure the request lands on a first
+  const port = ups.a.port;
+  const t0 = Date.now();
+  const pending = chat().then((r) => r);
+  await new Promise((r) => setTimeout(r, 200));
+  replicaPool.release("pool-b");
+  ups.a.server.close(); // the host stops accepting connections; the held request never answers
+  try {
+    const r = await pending;
+    assert.equal(r.status, 200);
+    assert.match(r.body.choices[0].message.content, /from b/);
+    assert.ok(Date.now() - t0 < 3000, `failed over in ${Date.now() - t0} ms`);
+  } finally {
+    for (const res of ups.a.held.splice(0)) res.destroy();
+    await new Promise((r) => ups.a.server.listen(port, "127.0.0.1", r));
+  }
+});
+
+test("a slow but healthy member is not interrupted by the in-flight watch", async (t) => {
+  if (maybeSkip(t)) return;
+  ups.a.mode = "slow"; // answers after 400 ms, longer than the 300 ms watch interval
+  replicaPool.acquire("pool-b");
+  const r = await chat();
+  replicaPool.release("pool-b");
+  assert.equal(r.status, 200);
+  assert.match(r.body.choices[0].message.content, /from a/);
+  assert.equal(ups.b.hits, 0);
 });
 
 test("a client error is relayed, not retried, and does not mark the member unhealthy", async (t) => {

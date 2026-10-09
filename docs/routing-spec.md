@@ -205,6 +205,11 @@ still resolves a model to one provider. Dispatch (`gateway/replicaPool.js`, used
 - **Silent hosts:** a member that has not answered in the last 2 s must accept a TCP
   connection within `ARBR_REPLICA_CONNECT_TIMEOUT_MS` (default 3 s) first, so a paused or
   firewalled host that drops packets costs seconds, not a fetch timeout.
+- **Frozen hosts:** while a request waits for a member's response headers, the member is
+  re-checked for a TCP connection every `ARBR_REPLICA_INFLIGHT_PROBE_MS` (default 5 s). A failed
+  check aborts that request and retries it on the next member, so a host paused or cut off
+  mid-request costs seconds instead of minutes. A slow but reachable member is never interrupted,
+  and once response bytes flow the watch stops.
 - **Cooldown:** after `ARBR_REPLICA_FAIL_THRESHOLD` consecutive failures a member is skipped
   for `ARBR_REPLICA_COOLDOWN_MS`. A cooling member is still tried last, so a request is not
   refused while any member might answer. One success clears the streak.

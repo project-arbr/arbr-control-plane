@@ -8,6 +8,9 @@ changelogs under `clients/`.
 ## [Unreleased]
 
 ### Added
+- Replica pools: requests in flight to a member that freezes (paused or cut off) are detected by
+  a periodic TCP check (`ARBR_REPLICA_INFLIGHT_PROBE_MS`, default 5 s) and retried on another
+  member before the client receives anything; slow but reachable members are not interrupted.
 - Replica pools for custom providers: OpenAI-compatible custom providers that share a `pool`
   name serve the same models and share `/v1/chat/completions` traffic, least-in-flight first.
   A member that is unreachable or answers `429`/`5xx` is retried on another member before the
