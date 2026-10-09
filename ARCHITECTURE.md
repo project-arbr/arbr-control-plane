@@ -97,6 +97,7 @@ server/src/
     embeddings.js     POST /v1/embeddings (Gemini + OpenAI-compat backends)
     ingest.js         POST /v1/ingest — observe-only bulk metadata ingestion
     realtimeProxy.js / wsAuth.js   POST /v1/realtime — OpenAI Realtime WebSocket proxy
+    replicaPool.js    least-in-flight dispatch + failover across pooled custom providers (docs/routing-spec.md §7)
   routing/          ruleEngine · autoRouter · aiPolicy (scoring engine) · capEngine · cache ·
                     canaryEngine / canaryMonitor (guarded rollout + auto-rollback) ·
                     semanticCache · errorAlertMonitor · notifier
