@@ -8,6 +8,9 @@ changelogs under `clients/`.
 ## [Unreleased]
 
 ### Added
+- Replica pools: half-open recovery. When a failed member's cooldown ends, only one request at a
+  time tries it; the rest skip it until that trial succeeds or fails. `GET /api/replica-pools`
+  reports `recovering`.
 - Replica pools: requests in flight to a member that freezes (paused or cut off) are detected by
   a periodic TCP check (`ARBR_REPLICA_INFLIGHT_PROBE_MS`, default 5 s) and retried on another
   member before the client receives anything; slow but reachable members are not interrupted.

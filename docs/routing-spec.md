@@ -213,6 +213,11 @@ still resolves a model to one provider. Dispatch (`gateway/replicaPool.js`, used
 - **Cooldown:** after `ARBR_REPLICA_FAIL_THRESHOLD` consecutive failures a member is skipped
   for `ARBR_REPLICA_COOLDOWN_MS`. A cooling member is still tried last, so a request is not
   refused while any member might answer. One success clears the streak.
+- **Recovery (half-open):** when a member's cooldown ends it is *recovering*, not healthy. Exactly one
+  request at a time tries it first; every other request skips it until that trial succeeds (the
+  member is healthy again) or fails (a fresh cooldown). A trial that never reports back is released
+  after 60 s. Without this, every request arriving as a frozen member's cooldown ended paid the
+  connect check.
 - **Drain:** `PATCH /api/custom-providers/:id {"draining": true}` stops new requests to a
   member; requests already in flight finish. It is audit-logged. When every member is
   draining the gateway answers `503 no_replica_available`.
