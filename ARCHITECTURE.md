@@ -226,9 +226,10 @@ traffic.
   priced calls call `recordSpend` after logging. Soft overshoot of at most one in-flight
   request is still possible (cost is known only after the provider responds). Cap *document*
   lists are cached ~5s; spend is not. `POST /api/caps/reconcile` realigns counters from
-  analytics aggregations if they drift. Only the `global`, `application`, and `provider`
-  dimensions are enforced at the gateway; other dimensions surface in the UI but are not
-  enforced.
+  analytics aggregations if they drift. All cap dimensions are enforced at the gateway —
+  `global` (no dimension) plus `application`, `provider`, `user`, `department`, `workflow`,
+  and `model` — so a `block`/`downgrade` cap on any of them takes effect on the next
+  in-scope request (`routing/capEngine.js` `_matches`/`enforcement`).
 - **RPM limits are multi-replica safe.** `routing/rateLimit.js` uses fixed 60s Mongo
   windows (`RateBucket` + atomic `$inc`). Falls back to in-process counters only if Mongo
   is unavailable.
