@@ -37,7 +37,8 @@ Fields:
 | `dimension` | `application` \| `provider` \| `department` \| `workflow` \| `model` \| `user` \| (omit for global) | What to scope the cap to |
 | `value` | string | The specific application/provider/department/workflow/model, or the end-user id, to cap |
 | `period` | `day` \| `month` | Rolling window |
-| `limit` | number (USD) | Spend threshold |
+| `metric` | `spend` \| `requests` (default `spend`) | What the cap counts: USD spend, or raw request count |
+| `limit` | number | Threshold the cap breaches at: USD when `metric` is `spend`, a request quota when `metric` is `requests` |
 | `action` | `alert` \| `downgrade` \| `block` | What to do when breached |
 | `warningThreshold` | number, 0–1 (default `0.8`) | Fraction of `limit` at which a `cap_warning` webhook fires, ahead of the breach. Applies to every action, including `alert`. |
 
@@ -65,6 +66,12 @@ The `user` dimension caps an individual end user's spend. Attribution comes from
 { "dimension": "user", "value": "user_1a2b3c", "period": "month", "limit": 10, "action": "alert", "warningThreshold": 0.8 }
 ```
 This fires `cap_warning` at $8 and `cap_breach` at $10 without changing routing — a downstream app turns those webhooks into an in-product "80% of your monthly usage" notice.
+
+**Cap the "free-tier" app at 1,000 requests/month, block over quota:**
+```json
+{ "dimension": "application", "value": "free-tier", "period": "month", "metric": "requests", "limit": 1000, "action": "block" }
+```
+With `metric: "requests"`, `limit` is a raw request count rather than a USD amount. Omit `metric` (or set it to `spend`) for the default USD-budget behaviour.
 
 ## Alert webhooks
 
