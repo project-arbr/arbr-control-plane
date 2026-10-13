@@ -33,6 +33,19 @@ updates:
       js-sdk-deps:
         patterns: ["*"]
 
+  # CLI (arbr-audit) npm dependencies — all bumps in one PR. Zero runtime
+  # dependencies today, but covered so base-image/dev-dep bumps get a PR if
+  # that changes, matching the other client manifests.
+  - package-ecosystem: "npm"
+    directory: "/clients/cli"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 1
+    labels: ["dependencies"]
+    groups:
+      cli-deps:
+        patterns: ["*"]
+
   # Python SDK dependencies — all bumps in one PR
   - package-ecosystem: "pip"
     directory: "/clients/python"
