@@ -17,6 +17,15 @@ export default defineConfig({
   // reachable by a direct /competitive-analysis-portkey URL.
   srcExclude: ['competitive-analysis-portkey.md'],
 
+  // `env` isn't a Shiki grammar; our .env snippets are KEY=value with # comments,
+  // so highlight them as `ini` instead of falling back to plaintext (and emitting a
+  // build warning per fence).
+  markdown: {
+    languageAlias: {
+      env: 'ini',
+    },
+  },
+
   themeConfig: {
     siteTitle: 'ARBR',
 
