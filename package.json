@@ -68,7 +68,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.0",
     "jose": "^6.2.4",
-    "mongoose": "^9.8.0",
+    "mongoose": "^9.11.4",
     "openid-client": "^6.8.4",
     "uuid": "^14.0.1",
     "ws": "^8.21.1"
