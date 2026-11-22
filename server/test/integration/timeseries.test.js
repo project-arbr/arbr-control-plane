@@ -110,3 +110,19 @@ test("failure status records are counted in failures field", async () => {
   assert.equal(res.body[0].requests, 3);
   assert.equal(res.body[0].failures, 2);
 });
+
+test("input and output tokens are summed per bucket and per model", async () => {
+  await seedRecord({ timestamp: new Date("2024-03-01T12:00:00Z"), promptTokens: 100, completionTokens: 20 });
+  await seedRecord({ timestamp: new Date("2024-03-01T13:00:00Z"), promptTokens: 50, completionTokens: 5 });
+  await seedRecord({ timestamp: new Date("2024-03-02T12:00:00Z") }); // no token counts recorded
+  const ts = await agent.get("/api/analytics/timeseries");
+  assert.equal(ts.status, 200);
+  assert.equal(ts.body[0].inputTokens, 150);
+  assert.equal(ts.body[0].outputTokens, 25);
+  assert.equal(ts.body[1].inputTokens, 0);
+  assert.equal(ts.body[1].outputTokens, 0);
+  const by = await agent.get("/api/analytics/by/model");
+  assert.equal(by.status, 200);
+  assert.equal(by.body[0].inputTokens, 150);
+  assert.equal(by.body[0].outputTokens, 25);
+});

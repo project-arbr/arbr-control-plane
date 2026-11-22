@@ -130,6 +130,8 @@ async function groupBy(dimension, filter, extra = {}) {
     cost: 1,
     avgLatency: 1,
     failures: 1,
+    inputTokens: 1,
+    outputTokens: 1,
     ...extra.project,
   };
   return RequestRecord.aggregate([
@@ -141,6 +143,8 @@ async function groupBy(dimension, filter, extra = {}) {
         cost: { $sum: "$totalCost" },
         avgLatency: { $avg: "$latencyMs" },
         failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
+        inputTokens: { $sum: { $ifNull: ["$promptTokens", 0] } },
+        outputTokens: { $sum: { $ifNull: ["$completionTokens", 0] } },
         ...extra.group,
       },
     },
@@ -295,10 +299,12 @@ async function timeseries(filter, bucket = "day") {
         requests: { $sum: 1 },
         cost: { $sum: "$totalCost" },
         failures: { $sum: { $cond: [{ $eq: ["$status", "failure"] }, 1, 0] } },
+        inputTokens: { $sum: { $ifNull: ["$promptTokens", 0] } },
+        outputTokens: { $sum: { $ifNull: ["$completionTokens", 0] } },
       },
     },
     { $sort: { _id: 1 } },
-    { $project: { _id: 0, date: "$_id", requests: 1, cost: 1, failures: 1 } },
+    { $project: { _id: 0, date: "$_id", requests: 1, cost: 1, failures: 1, inputTokens: 1, outputTokens: 1 } },
   ]);
   return rows;
 }
