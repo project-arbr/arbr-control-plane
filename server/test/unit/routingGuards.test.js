@@ -6,7 +6,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { hasVisionContent, checkModel, governanceFor } = require("../../src/routing/guards");
-const { buildFallbackOrder } = require("../../src/gateway/handler");
+const { buildFallbackOrder, pinOutsideAllowed } = require("../../src/gateway/handler");
 
 test("hasVisionContent detects the multimodal image shape only", () => {
   assert.equal(hasVisionContent([{ role: "user", content: [{ type: "image_url", image_url: { url: "x" } }] }]), true);
@@ -68,4 +68,24 @@ test("fallback order drops governance-violating candidates, keeps the primary", 
   const filtered = [order[0], ...order.slice(1).filter((c) => checkModel(c.model, governance).ok)];
   assert.equal(filtered[0].model, "gpt-4o", "primary is always kept");
   assert.ok(!filtered.some((c) => c.model === "us.amazon.nova-lite-v1:0"), "disallowed cross-provider candidate is dropped");
+});
+
+test("a pin outside the key's allowed set gets the same 403 whatever the pinned model's state", () => {
+  const key = { allowedModels: ["tenant-a-model"] };
+  for (const model of ["other-model", "removed-model", "tenant-a"]) {
+    const err = pinOutsideAllowed({ model }, key);
+    assert.equal(err.code, "model_not_allowed");
+    assert.equal(err.status, 403);
+    assert.equal(err.message, `Model "${model}" is not in the allowed set for this API key.`);
+  }
+  assert.equal(pinOutsideAllowed({ model: "tenant-a-model" }, key), null);
+  assert.equal(pinOutsideAllowed({ model: " tenant-a-model " }, key), null);
+});
+
+test("pinOutsideAllowed leaves auto, unrestricted keys and keys with a default to the existing flow", () => {
+  assert.equal(pinOutsideAllowed({ model: "auto" }, { allowedModels: ["x"] }), null);
+  assert.equal(pinOutsideAllowed({}, { allowedModels: ["x"] }), null);
+  assert.equal(pinOutsideAllowed({ model: "y" }, {}), null);
+  assert.equal(pinOutsideAllowed({ model: "y" }, { allowedModels: [] }), null);
+  assert.equal(pinOutsideAllowed({ model: "y" }, { allowedModels: ["x"], defaultModel: "x" }), null);
 });

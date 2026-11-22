@@ -226,7 +226,24 @@ function unresolvedModelError(pin, eff) {
 // dryRun (default false) makes this a pure preview: the classifier never makes a
 // billable LLM call (keyword-only), so the decision can be computed for a
 // hypothetical request without touching a provider. Real traffic is unaffected.
+// A key restricted to a set of models that pins a model outside it, with no key default to fall
+// back to, gets the 403 up front: the allowed set is the key's contract, so check it before any
+// routing work, and answer the same way whatever state the pinned model is in. Returns the error,
+// or null when the pin is allowed.
+function pinOutsideAllowed(body, appConfig = {}) {
+  const requested = (body.model || "").trim();
+  if (!requested || requested.toLowerCase() === "auto") return null;
+  if (!(appConfig.allowedModels?.length > 0) || appConfig.allowedModels.includes(requested)) return null;
+  if (appConfig.defaultModel) return null; // existing behaviour: route, then fall back to the key default
+  return Object.assign(
+    new Error(`Model "${requested}" is not in the allowed set for this API key.`),
+    { code: "model_not_allowed", status: 403 }
+  );
+}
+
 async function resolveRoute(body, { router, eff, application, workflow, userId = null, appConfig = {}, appDbConfig = null, dryRun = false }) {
+  const notAllowed = pinOutsideAllowed(body, appConfig);
+  if (notAllowed) throw notAllowed;
   const routingMode = await ruleEngine.getRoutingMode();
   const pin = resolveExplicit(body, eff);
   // A model the client pinned but Arbr cannot honor is rejected, not silently
@@ -827,6 +844,7 @@ module.exports = {
   handleChat,
   resolveRoute,
   resolveExplicit, // pure, exported for tests
+  pinOutsideAllowed, // pure, exported for tests
   applyCredentialAlias,
   invokeWithFallback,
   buildFallbackOrder,
